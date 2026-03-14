@@ -1,0 +1,5 @@
+configs/config.local.toml
+data/
+*.log
+*.sqlite
+*.db

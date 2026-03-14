@@ -1,0 +1,112 @@
+[server]
+address = ":8080"
+log_level = "info"
+log_file = "data/rm-ai-agent.log"
+
+[storage]
+path = "data/rm-ai-agent.sqlite"
+
+[channel.feishu]
+enabled = true
+mode = "longconn"
+app_id = ""
+app_secret = ""
+verification_token = ""
+encrypt_key = ""
+base_url = "https://open.feishu.cn"
+reply_mode = "reply"
+webhook_path = "/webhook/feishu/event"
+
+[models]
+default_provider = "deepseek"
+default_model = "deepseek-reasoner"
+
+[models.model_settings."deepseek/deepseek-reasoner"]
+temperature = 0.6
+max_tokens = 8192
+
+[models.model_settings."deepseek/deepseek-chat"]
+temperature = 0.2
+max_tokens = 4096
+
+[models.providers.deepseek]
+type = "deepseek"
+base_url = "https://api.deepseek.com"
+api_key_env = "DEEPSEEK_API_KEY"
+model = "deepseek-reasoner"
+max_tokens = 4096
+
+[models.providers.stub]
+type = "stub"
+model = "bootstrap"
+
+[session]
+require_mention_in_group = true
+use_thread_in_group = true
+max_recent_turns = 12
+
+[routing]
+enabled = true
+model = "deepseek/deepseek-chat"
+min_confidence = 0.6
+allow_write_actions = false
+
+[memory]
+enabled = true
+max_entries = 32
+context_entries = 12
+
+[compression]
+enabled = true
+max_turns_before_run = 30
+summary_max_bytes = 4000
+model = "deepseek/deepseek-chat"
+context_window_tokens = 128000
+trigger_ratio = 0.8
+recent_turns_to_keep = 24
+
+[progress]
+enabled = true
+model = "deepseek/deepseek-chat"
+max_updates = 6
+max_tool_updates = 4
+
+[detail_agent]
+enabled = true
+model = "deepseek/deepseek-chat"
+direct_max_bytes = 12288
+max_input_bytes = 65536
+
+[scheduler]
+enabled = true
+poll_seconds = 30
+model = "deepseek/deepseek-chat"
+default_interval_minutes = 5
+
+[knowledge_base]
+enabled = true
+# 可以填相对路径，也可以直接指向外部绝对路径，比如 D:/sec-kb 或 /data/sec-kb
+path = "knowledge_base"
+search_limit = 5
+snippet_length = 240
+
+[edr]
+base_url = "https://alpha-openapi.rongma.tech/open_api/rm/v1"
+timeout_seconds = 15
+auth_token = ""
+default_connect_ip = ""
+default_page_size = 10
+allow_actions = ["hosts", "isolate", "release", "incidents", "detections", "logs", "incident-view", "detection-view"]
+
+[edr.platform]
+enabled = false
+base_url = "https://alpha-openapi.rongma.tech/open_api/rm/v1"
+app_key_env = "EDR_PLATFORM_APP_KEY"
+app_secret_env = "EDR_PLATFORM_APP_SECRET"
+
+[edr.headers]
+# X-API-Key = "replace-me"
+
+[policy]
+dangerous_action_keywords = ["isolate", "release", "kill", "quarantine"]
+approved_users = []
