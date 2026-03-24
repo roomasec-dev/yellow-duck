@@ -13,44 +13,54 @@ import (
 )
 
 type ToolCall struct {
-	Name                string `json:"name"`
-	Hostname            string `json:"hostname,omitempty"`
-	ClientID            string `json:"client_id,omitempty"`
-	ClientIP            string `json:"client_ip,omitempty"`
-	OSType              string `json:"os_type,omitempty"`
-	Operation           string `json:"operation,omitempty"`
-	StartTime           string `json:"start_time,omitempty"`
-	EndTime             string `json:"end_time,omitempty"`
-	FilterField         string `json:"filter_field,omitempty"`
-	FilterOp            string `json:"filter_operator,omitempty"`
-	FilterValue         string `json:"filter_value,omitempty"`
-	Page                int    `json:"page,omitempty"`
-	PageSize            int    `json:"page_size,omitempty"`
-	IncidentID          string `json:"incident_id,omitempty"`
-	DetectionID         string `json:"detection_id,omitempty"`
-	ViewType            string `json:"view_type,omitempty"`
-	ProcessUUID         string `json:"process_uuid,omitempty"`
-	ArtifactID          string `json:"artifact_id,omitempty"`
-	Query               string `json:"query,omitempty"`
-	StartLine           int    `json:"start_line,omitempty"`
-	LineCount           int    `json:"line_count,omitempty"`
-	MemoryKey           string `json:"memory_key,omitempty"`
-	MemoryValue         string `json:"memory_value,omitempty"`
-	TaskID              string `json:"task_id,omitempty"`
-	TaskTitle           string `json:"task_title,omitempty"`
-	TaskPrompt          string `json:"task_prompt,omitempty"`
-	TaskAction          string `json:"task_action,omitempty"`
-	TaskStatus          string `json:"task_status,omitempty"`
-	TaskFeedback        string `json:"task_feedback,omitempty"`
-	TaskIntervalMinutes int    `json:"task_interval_minutes,omitempty"`
-	KBTitle             string `json:"kb_title,omitempty"`
-	KBQuery             string `json:"kb_query,omitempty"`
-	KBContent           string `json:"kb_content,omitempty"`
-	KBMode              string `json:"kb_mode,omitempty"`
-	KBOldText           string `json:"kb_old_text,omitempty"`
-	KBNewText           string `json:"kb_new_text,omitempty"`
-	Reason              string `json:"reason,omitempty"`
-	Critical            bool   `json:"critical,omitempty"`
+	Name                  string `json:"name"`
+	Hostname              string `json:"hostname,omitempty"`
+	ClientID              string `json:"client_id,omitempty"`
+	ClientIP              string `json:"client_ip,omitempty"`
+	OSType                string `json:"os_type,omitempty"`
+	Operation             string `json:"operation,omitempty"`
+	StartTime             string `json:"start_time,omitempty"`
+	EndTime               string `json:"end_time,omitempty"`
+	FilterField           string `json:"filter_field,omitempty"`
+	FilterOp              string `json:"filter_operator,omitempty"`
+	FilterValue           string `json:"filter_value,omitempty"`
+	Page                  int    `json:"page,omitempty"`
+	PageSize              int    `json:"page_size,omitempty"`
+	IncidentID            string `json:"incident_id,omitempty"`
+	DetectionID           string `json:"detection_id,omitempty"`
+	ViewType              string `json:"view_type,omitempty"`
+	ProcessUUID           string `json:"process_uuid,omitempty"`
+	ArtifactID            string `json:"artifact_id,omitempty"`
+	Query                 string `json:"query,omitempty"`
+	StartLine             int    `json:"start_line,omitempty"`
+	LineCount             int    `json:"line_count,omitempty"`
+	MemoryKey             string `json:"memory_key,omitempty"`
+	MemoryValue           string `json:"memory_value,omitempty"`
+	TaskID                string `json:"task_id,omitempty"`
+	TaskTitle             string `json:"task_title,omitempty"`
+	TaskPrompt            string `json:"task_prompt,omitempty"`
+	TaskAction            string `json:"task_action,omitempty"`
+	TaskStatus            string `json:"task_status,omitempty"`
+	TaskFeedback          string `json:"task_feedback,omitempty"`
+	TaskIntervalMinutes   int    `json:"task_interval_minutes,omitempty"`
+	KBTitle               string `json:"kb_title,omitempty"`
+	KBQuery               string `json:"kb_query,omitempty"`
+	KBContent             string `json:"kb_content,omitempty"`
+	KBMode                string `json:"kb_mode,omitempty"`
+	KBOldText             string `json:"kb_old_text,omitempty"`
+	KBNewText             string `json:"kb_new_text,omitempty"`
+	Reason                string `json:"reason,omitempty"`
+	Critical              bool   `json:"critical,omitempty"`
+	IOCAction             string `json:"ioc_action,omitempty"`
+	IOCID                 string `json:"ioc_id,omitempty"`
+	IOCHash               string `json:"ioc_hash,omitempty"`
+	IOCDescription        string `json:"ioc_description,omitempty"`
+	IOCExpirationDate     string `json:"ioc_expiration_date,omitempty"`
+	IOCFileName           string `json:"ioc_file_name,omitempty"`
+	IOCHostType           string `json:"ioc_host_type,omitempty"`
+	IsolateFileGUIDs      string `json:"isolate_file_guids,omitempty"`
+	IsolateFileAddExcl    bool   `json:"isolate_file_add_exclusion,omitempty"`
+	IsolateFileReleaseAll bool   `json:"isolate_file_release_all,omitempty"`
 }
 
 type Plan struct {
@@ -142,6 +152,14 @@ func (s *Service) BuildPlan(ctx context.Context, modelRef string, userText strin
 		plan.ToolCalls[i].KBMode = strings.TrimSpace(plan.ToolCalls[i].KBMode)
 		plan.ToolCalls[i].KBOldText = strings.TrimSpace(plan.ToolCalls[i].KBOldText)
 		plan.ToolCalls[i].KBNewText = strings.TrimSpace(plan.ToolCalls[i].KBNewText)
+		plan.ToolCalls[i].IOCAction = strings.TrimSpace(plan.ToolCalls[i].IOCAction)
+		plan.ToolCalls[i].IOCHash = strings.TrimSpace(plan.ToolCalls[i].IOCHash)
+		plan.ToolCalls[i].IOCID = strings.TrimSpace(plan.ToolCalls[i].IOCID)
+		plan.ToolCalls[i].IOCDescription = strings.TrimSpace(plan.ToolCalls[i].IOCDescription)
+		plan.ToolCalls[i].IOCExpirationDate = strings.TrimSpace(plan.ToolCalls[i].IOCExpirationDate)
+		plan.ToolCalls[i].IOCFileName = strings.TrimSpace(plan.ToolCalls[i].IOCFileName)
+		plan.ToolCalls[i].IOCHostType = strings.TrimSpace(plan.ToolCalls[i].IOCHostType)
+		plan.ToolCalls[i].IsolateFileGUIDs = strings.TrimSpace(plan.ToolCalls[i].IsolateFileGUIDs)
 	}
 	plan.DirectReply = strings.TrimSpace(plan.DirectReply)
 	s.logger.Info("planner parsed", "tool_count", len(plan.ToolCalls), "direct_reply_preview", preview(plan.DirectReply))
@@ -170,8 +188,8 @@ func buildPlannerUserInput(userText string, toolContext string, summary string, 
 
 func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protocol.Artifact) string {
 	base := "你是一个工具规划器，只负责判断是否要调用工具，并输出 JSON。\n" +
-		"可用工具：current_time, edr_hosts, edr_incidents, edr_detections, edr_logs, edr_incident_view, edr_detection_view, artifact_search, artifact_read, edr_isolate, edr_release, memory_upsert, memory_delete, scheduled_task_create, scheduled_task_list, scheduled_task_update, scheduled_task_delete, scheduled_task_feedback, knowledge_base_search, knowledge_base_write, knowledge_base_delete。\n" +
-		"其中 edr_isolate / edr_release 属于 critical=true。\n" +
+		"可用工具：current_time, edr_hosts, edr_incidents, edr_detections, edr_logs, edr_incident_view, edr_detection_view, edr_isolate, edr_release, edr_iocs, edr_ioc_add, edr_ioc_update, edr_ioc_delete, edr_isolate_files, edr_release_isolate_files, edr_tasks, artifact_search, artifact_read, memory_upsert, memory_delete, scheduled_task_create, scheduled_task_list, scheduled_task_update, scheduled_task_delete, scheduled_task_feedback, knowledge_base_search, knowledge_base_write, knowledge_base_delete。\n" +
+		"edr_isolate / edr_release / edr_ioc_add / edr_ioc_update / edr_ioc_delete / edr_release_isolate_files 属于 critical=true。\n" +
 		"优先原则：\n" +
 		"1. 如果用户在问当前时间、现在几点、today/now/current time，就优先规划 current_time。\n" +
 		"1.1 如果用户在创建、查看、修改、暂停、恢复、删除定时任务，优先规划 scheduled_task_* 工具。没有明确时间要求时，scheduled_task_create 默认 task_interval_minutes=5。\n" +
@@ -196,8 +214,16 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"9. 如果用户提供了稳定的长期偏好、资产映射、身份信息、主机别名、工作偏好，可以规划 memory_upsert。\n" +
 		"10. 如果用户要求更正或删除旧记忆，可以规划 memory_delete。\n" +
 		"11. 如果最近几轮里已经在查某个 incident、detection 或 artifact，而用户只说“再来一次”“继续”“retry”“again”，优先延续那条工具链。\n" +
-		"12. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
-		"只输出 JSON，不要 markdown。结构：{\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false}]}"
+		"12. 如果用户在查看、列表、搜索 IOC（威胁指标/hash/哈希），优先规划 edr_iocs；如果用户需要查某条 IOC 的详情，优先规划 edr_ioc_detail。\n" +
+		"12.1 对 edr_iocs，用户说第几页、每页多少条时要把 page 和 page_size 填进 tool_calls。在回复 IOC 列表结果时，优先引用每条记录的 id 字段（而不是 hash 字段），格式如“id=xxx”。\n" +
+		"12.2 如果用户想新增 IOC（加黑名单/加白名单），优先规划 edr_ioc_add，ioc_action 填 block 或 allow，ioc_hash 填 MD5/SHA1，ioc_host_type 填 ALL 或具体客户端 ID，ioc_file_name 填文件名（如有）。\n" +
+		"12.3 如果用户想修改已有 IOC，优先规划 edr_ioc_update，需要同时填 ioc_id 和要改的字段（ioc_action、ioc_hash、ioc_host_type 等）。\n" +
+		"12.4 如果用户想删除 IOC，优先规划 edr_ioc_delete，需要填 ioc_id。\n" +
+		"13. 如果用户在查看隔离文件列表，优先规划 edr_isolate_files。\n" +
+		"14. 如果用户在放行隔离文件（解除隔离/恢复文件），优先规划 edr_release_isolate_files，需要填 isolate_file_guids（多个用英文逗号分隔）；如果同时要把 hash 加排除名单，isolate_file_add_exclusion=true。\n" +
+		"15. 如果用户在查看指令任务列表或任务结果，优先规划 edr_tasks。\n" +
+		"16. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
+		"只输出 JSON，不要 markdown。结构：{\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"ioc_description\":\"\",\"ioc_expiration_date\":\"\",\"ioc_file_name\":\"\",\"ioc_host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false}]}"
 	if memoryText != "" {
 		base += "\n\n当前已有记忆：\n" + memoryText
 	}

@@ -768,8 +768,10 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 
 func callNeedsGroundedEDRAnswer(name string) bool {
 	switch name {
-	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read":
+	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks":
 		return true
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_release_isolate_files":
+		return false
 	default:
 		return false
 	}
@@ -909,6 +911,59 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return s.formatArtifactRead(ctx, locale, item, call.StartLine, call.LineCount, chunk, reporter), nil
+	case "edr_iocs":
+		reporter.Step(ctx, "我在拉取 IOC 列表。")
+		result, err := s.edr.ListIOCs(ctx, edr.ListIOCsRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		if err != nil {
+			return "", err
+		}
+		return s.formatIOCs(ctx, result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_ioc_add":
+		reporter.Step(ctx, "我在添加 IOC。")
+		if err := s.edr.AddIOC(ctx, edr.AddIOCRequest{Action: call.IOCAction, Hash: call.IOCHash, Description: call.IOCDescription, ExpirationDate: call.IOCExpirationDate, FileName: call.IOCFileName, HostType: call.IOCHostType}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("IOC %s 已添加完成。", call.IOCHash), nil
+	case "edr_ioc_update":
+		reporter.Step(ctx, "我在更新 IOC。")
+		if err := s.edr.UpdateIOC(ctx, edr.UpdateIOCRequest{ID: call.IOCID, Action: call.IOCAction, Description: call.IOCDescription, ExpirationDate: call.IOCExpirationDate}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("IOC %s 已更新完成。", call.IOCID), nil
+	case "edr_ioc_delete":
+		reporter.Step(ctx, "我在删除 IOC。")
+		if err := s.edr.DeleteIOC(ctx, call.IOCID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("IOC %s 已删除。", call.IOCID), nil
+	case "edr_isolate_files":
+		reporter.Step(ctx, "我在拉取隔离文件列表。")
+		result, err := s.edr.ListIsolateFiles(ctx, edr.ListIsolateFilesRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		if err != nil {
+			return "", err
+		}
+		return s.formatIsolateFiles(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_release_isolate_files":
+		reporter.Step(ctx, "我在放行隔离文件。")
+		guids := strings.Split(strings.TrimSpace(call.IsolateFileGUIDs), ",")
+		cleaned := make([]string, 0, len(guids))
+		for _, g := range guids {
+			g = strings.TrimSpace(g)
+			if g != "" {
+				cleaned = append(cleaned, g)
+			}
+		}
+		if err := s.edr.ReleaseIsolateFiles(ctx, edr.ReleaseIsolateFilesRequest{GUIDs: cleaned, IsAddExclusion: call.IsolateFileAddExcl, ReleaseAllHash: call.IsolateFileReleaseAll}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("已放行 %d 个隔离文件。", len(cleaned)), nil
+	case "edr_tasks":
+		reporter.Step(ctx, "我在拉取指令任务列表。")
+		result, err := s.edr.ListTasks(ctx, edr.ListTasksRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		if err != nil {
+			return "", err
+		}
+		return s.formatTasks(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	default:
 		return "", nil
 	}
@@ -942,6 +997,24 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 			return "", err
 		}
 		return s.msg(locale, "confirm_release_done", map[string]string{"task_id": result.TaskID, "host": result.HostName, "repeat": result.Repeat}), nil
+	case "edr_ioc_add":
+		reporter.Step(ctx, "我在添加 IOC。")
+		if err := s.edr.AddIOC(ctx, edr.AddIOCRequest{Action: call.IOCAction, Hash: call.IOCHash, Description: call.IOCDescription, ExpirationDate: call.IOCExpirationDate, FileName: call.IOCFileName, HostType: call.IOCHostType}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("IOC %s 已添加完成。", call.IOCHash), nil
+	case "edr_ioc_update":
+		reporter.Step(ctx, "我在更新 IOC。")
+		if err := s.edr.UpdateIOC(ctx, edr.UpdateIOCRequest{ID: call.IOCID, Action: call.IOCAction, Hash: call.IOCHash, Description: call.IOCDescription, ExpirationDate: call.IOCExpirationDate, HostType: call.IOCHostType}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("IOC %s 已更新完成。", call.IOCID), nil
+	case "edr_ioc_delete":
+		reporter.Step(ctx, "我在删除 IOC。")
+		if err := s.edr.DeleteIOC(ctx, call.IOCID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("IOC %s 已删除。", call.IOCID), nil
 	default:
 		return "", fmt.Errorf("unsupported confirmed action: %s", call.Name)
 	}
@@ -949,7 +1022,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 
 func isCriticalTool(name string) bool {
 	switch name {
-	case "edr_isolate", "edr_release":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete":
 		return true
 	default:
 		return false
@@ -1271,6 +1344,90 @@ func formatDetections(result edr.ListDetectionsResponse, page int, pageSize int)
 	}
 	if totalPages > 1 {
 		lines = append(lines, fmt.Sprintf("翻页示例：/edr detections %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (*Service) formatIOCs(ctx context.Context, result edr.ListIOCsResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到 IOC。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 条 IOC，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
+	for _, ioc := range result.Results {
+		lines = append(lines, fmt.Sprintf("- id=%s action=%s filename=%s desc=%s", ioc.ExclusionID, ioc.Action, ioc.FileName, ioc.Description))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr iocs %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (*Service) formatIsolateFiles(result edr.ListIsolateFilesResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到隔离文件。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 条隔离文件，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
+	for _, f := range result.Results {
+		status := "未知"
+		if f.RecoverStatus == 0 {
+			status = "隔离中"
+		} else if f.RecoverStatus == 1 {
+			status = "已申请恢复"
+		} else if f.RecoverStatus == 2 {
+			status = "已恢复"
+		}
+		lines = append(lines, fmt.Sprintf("- guid=%s hostname=%s filename=%s md5=%s status=%s", f.GUID, f.Hostname, f.FileName, f.MD5, status))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr isolate_files %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (*Service) formatTasks(result edr.ListTasksResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到指令任务。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 条指令任务，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
+	for _, task := range result.Results {
+		statusStr := "未知"
+		switch task.Status {
+		case 0:
+			statusStr = "下发中"
+		case 1:
+			statusStr = "执行中"
+		case 2:
+			statusStr = "已完成"
+		case 3:
+			statusStr = "失败"
+		case 4:
+			statusStr = "超时"
+		}
+		lines = append(lines, fmt.Sprintf("- id=%s hostname=%s instruction=%s status=%d(%s) user=%s", task.ID, task.HostName, task.InstructionName, task.Status, statusStr, task.OperationUser))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr tasks %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
