@@ -39,6 +39,7 @@ type Client interface {
 
 	ListTasks(ctx context.Context, req ListTasksRequest) (ListTasksResponse, error)
 	GetTaskResult(ctx context.Context, taskID string) (TaskResult, error)
+	SendInstruction(ctx context.Context, clientID string, instructionName string, taskName string) (InstructionResult, error)
 }
 
 type OpenAPIClient struct {
@@ -947,6 +948,10 @@ func (c *OpenAPIClient) GetTaskResult(ctx context.Context, taskID string) (TaskR
 		return TaskResult{}, fmt.Errorf("task result failed: %s", envelope.Message)
 	}
 	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) SendInstruction(ctx context.Context, clientID string, instructionName string, taskName string) (InstructionResult, error) {
+	return c.sendInstruction(ctx, clientID, instructionName, taskName)
 }
 
 func (c *OpenAPIClient) ViewIncident(ctx context.Context, req IncidentViewRequest) (map[string]any, error) {

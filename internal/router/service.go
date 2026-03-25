@@ -25,6 +25,7 @@ type Decision struct {
 	Reason            string  `json:"reason"`
 	NeedsConfirmation bool    `json:"needs_confirmation"`
 	TaskID            string  `json:"task_id"`
+	InstructionName   string  `json:"instruction_name"`
 }
 
 type Service struct {
@@ -59,13 +60,13 @@ func (s *Service) analyzeByModel(ctx context.Context, text string) (Decision, er
 	}
 
 	systemPrompt := "你是 EDR 意图路由器。请把用户输入路由成结构化 JSON。\n" +
-		"可选 action 只有：none, hosts, incidents, detections, logs, isolate, release, iocs, tasks, task_result。\n" +
+		"可选 action 只有：none, hosts, incidents, detections, logs, isolate, release, iocs, tasks, task_result, send_instruction。\n" +
 		"如果是查询主机，尽量提取 hostname 或 client_ip。\n" +
 		"如果是查事件、检出、日志，按最接近的 action 返回。\n" +
 		"如果用户提到第几页、page、每页多少条，也尽量提取 page 和 page_size。\n" +
 		"如果是高危写操作（隔离/恢复），needs_confirmation=true。\n" +
 		"只输出 JSON，不要 markdown，不要解释。JSON 结构：{" +
-		"\"action\":\"none|hosts|incidents|detections|logs|isolate|release|iocs|tasks|task_result\"," +
+		"\"action\":\"none|hosts|incidents|detections|logs|isolate|release|iocs|tasks|task_result|send_instruction\"," +
 		"\"confidence\":0.0," +
 		"\"hostname\":\"\"," +
 		"\"client_id\":\"\"," +
@@ -74,7 +75,8 @@ func (s *Service) analyzeByModel(ctx context.Context, text string) (Decision, er
 		"\"page_size\":0," +
 		"\"task_id\":\"\"," +
 		"\"reason\":\"\"," +
-		"\"needs_confirmation\":false}"
+		"\"needs_confirmation\":false," +
+		"\"instruction_name\":\"\"}"
 	if s.prompt != nil {
 		systemPrompt = s.prompt.ComposeSystemPrompt(systemPrompt)
 	}
@@ -121,6 +123,7 @@ func normalizeDecision(d Decision) Decision {
 	d.ClientID = strings.TrimSpace(d.ClientID)
 	d.ClientIP = strings.TrimSpace(d.ClientIP)
 	d.TaskID = strings.TrimSpace(d.TaskID)
+	d.InstructionName = strings.TrimSpace(d.InstructionName)
 	if d.Page < 0 {
 		d.Page = 0
 	}
@@ -177,6 +180,10 @@ func heuristicDecision(text string) Decision {
 	case containsAny(plain, "任务结果", "task_result", "任务详情"):
 		decision.Action = "task_result"
 		decision.Confidence = 0.7
+	case containsAny(plain, "发送指令", "下发指令"):
+		decision.Action = "send_instruction"
+		decision.Confidence = 0.9
+		decision.InstructionName = extractInstructionName(text)
 	case containsAny(plain, "任务", "tasks", "指令任务", "查询任务"):
 		decision.Action = "tasks"
 		decision.Confidence = 0.7
@@ -212,6 +219,23 @@ func extractTaskID(text string) string {
 			taskID := strings.TrimSpace(match[1])
 			if taskID != "" {
 				return taskID
+			}
+		}
+	}
+	return ""
+}
+
+func extractInstructionName(text string) string {
+	patterns := []string{
+		`(?:发送指令|下发指令)\s+([a-zA-Z_][a-zA-Z0-9_]*)`,
+	}
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		match := re.FindStringSubmatch(text)
+		if len(match) >= 2 {
+			name := strings.TrimSpace(match[1])
+			if name != "" {
+				return name
 			}
 		}
 	}

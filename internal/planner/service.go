@@ -43,6 +43,7 @@ type ToolCall struct {
 	TaskStatus            string `json:"task_status,omitempty"`
 	TaskFeedback          string `json:"task_feedback,omitempty"`
 	TaskIntervalMinutes   int    `json:"task_interval_minutes,omitempty"`
+	InstructionName       string `json:"instruction_name,omitempty"`
 	KBTitle               string `json:"kb_title,omitempty"`
 	KBQuery               string `json:"kb_query,omitempty"`
 	KBContent             string `json:"kb_content,omitempty"`
@@ -188,8 +189,8 @@ func buildPlannerUserInput(userText string, toolContext string, summary string, 
 
 func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protocol.Artifact) string {
 	base := "你是一个工具规划器，只负责判断是否要调用工具，并输出 JSON。\n" +
-		"可用工具：current_time, edr_hosts, edr_incidents, edr_detections, edr_logs, edr_incident_view, edr_detection_view, edr_isolate, edr_release, edr_iocs, edr_ioc_add, edr_ioc_update, edr_ioc_delete, edr_isolate_files, edr_release_isolate_files, edr_tasks, edr_task_result, artifact_search, artifact_read, memory_upsert, memory_delete, scheduled_task_create, scheduled_task_list, scheduled_task_update, scheduled_task_delete, scheduled_task_feedback, knowledge_base_search, knowledge_base_write, knowledge_base_delete。\n" +
-		"edr_isolate / edr_release / edr_ioc_add / edr_ioc_update / edr_ioc_delete / edr_delete_isolate_files / edr_release_isolate_files 属于 critical=true。\n" +
+		"可用工具：current_time, edr_hosts, edr_incidents, edr_detections, edr_logs, edr_incident_view, edr_detection_view, edr_isolate, edr_release, edr_iocs, edr_ioc_add, edr_ioc_update, edr_ioc_delete, edr_isolate_files, edr_release_isolate_files, edr_tasks, edr_task_result, edr_send_instruction, artifact_search, artifact_read, memory_upsert, memory_delete, scheduled_task_create, scheduled_task_list, scheduled_task_update, scheduled_task_delete, scheduled_task_feedback, knowledge_base_search, knowledge_base_write, knowledge_base_delete。\n" +
+		"edr_isolate / edr_release / edr_ioc_add / edr_ioc_update / edr_ioc_delete / edr_delete_isolate_files / edr_release_isolate_files / edr_send_instruction 属于 critical=true。\n" +
 		"优先原则：\n" +
 		"1. 如果用户在问当前时间、现在几点、today/now/current time，就优先规划 current_time。\n" +
 		"1.1 如果用户在创建、查看、修改、暂停、恢复、删除定时任务，优先规划 scheduled_task_* 工具。没有明确时间要求时，scheduled_task_create 默认 task_interval_minutes=5。\n" +
@@ -224,8 +225,9 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"14.1 如果用户在删除隔离文件记录（彻底删除），优先规划 edr_delete_isolate_files，需要填 isolate_file_guids。注意：删除是彻底移除记录，放行是解除隔离让文件恢复正常使用，两者完全不同。\n" +
 		"15. 如果用户在查看指令任务列表，优先规划 edr_tasks。\n" +
 		"16. 如果用户在查看任务结果/详情，优先规划 edr_task_result，需要提取 task_id。\n" +
-		"17. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
-		"只输出 JSON，不要 markdown。结构：{\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"ioc_description\":\"\",\"ioc_expiration_date\":\"\",\"ioc_file_name\":\"\",\"ioc_host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false}]}"
+		"17. 如果用户要求发送指令到主机（如 list_ps、kill_ps 等），优先规划 edr_send_instruction，需要同时填 client_id（或 hostname/client_ip 定位）和 instruction_name。\n" +
+		"18. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
+		"只输出 JSON，不要 markdown。结构：{\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"instruction_name\":\"\",\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"ioc_description\":\"\",\"ioc_expiration_date\":\"\",\"ioc_file_name\":\"\",\"ioc_host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false}]}"
 	if memoryText != "" {
 		base += "\n\n当前已有记忆：\n" + memoryText
 	}

@@ -218,12 +218,44 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 	t.Run("instructions_tasks", func(t *testing.T) {
 		result, err := client.ListTasks(ctx, ListTasksRequest{Page: 1, Limit: 1})
+		// t.Logf("tasks result %+v", result)
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("instructions_tasks raw json:\n%s", string(raw))
 		if err != nil {
 			t.Fatalf("instructions tasks failed: %v", err)
 		}
 		if result.Total < 0 {
 			t.Fatalf("unexpected total: %+v", result)
 		}
+	})
+
+	t.Run("send_instruction", func(t *testing.T) {
+		// 先获取一台在线主机的 client_id
+		hosts, err := client.ListHosts(ctx, ListHostsRequest{Page: 1, Limit: 10})
+		if err != nil {
+			t.Fatalf("list hosts failed: %v", err)
+		}
+		var clientID string
+		for _, h := range hosts.Hosts {
+			if h.Status == "online" {
+				clientID = h.ClientID
+				break
+			}
+		}
+		if clientID == "" {
+			t.Skip("no online host to send instruction")
+		}
+		t.Logf("sending instruction to client_id=%s", clientID)
+
+		result, err := client.SendInstruction(ctx, clientID, "quarantine_network", "integration test 隔离网络")
+		t.Logf("send_instruction result %+v", result)
+		if err != nil {
+			t.Fatalf("send instruction failed: %v", err)
+		}
+		if result.TaskID == "" {
+			t.Fatalf("empty task_id in result: %+v", result)
+		}
+		t.Logf("send_instruction done: task_id=%s host_name=%s", result.TaskID, result.HostName)
 	})
 
 	t.Run("incident_view", func(t *testing.T) {

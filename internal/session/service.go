@@ -770,7 +770,7 @@ func callNeedsGroundedEDRAnswer(name string) bool {
 	switch name {
 	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result":
 		return true
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction":
 		return false
 	default:
 		return false
@@ -985,6 +985,19 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return formatTaskResult(result), nil
+	case "edr_send_instruction":
+		if call.ClientID == "" {
+			return "", fmt.Errorf("发送指令需要提供 client_id")
+		}
+		if call.InstructionName == "" {
+			return "", fmt.Errorf("发送指令需要提供 instruction_name")
+		}
+		reporter.Step(ctx, "我正在下发指令到目标主机。")
+		result, err := s.edr.SendInstruction(ctx, call.ClientID, call.InstructionName, "AI 助手下发指令")
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("指令已下发成功，任务ID: %s", result.TaskID), nil
 	default:
 		return "", nil
 	}
@@ -1064,6 +1077,19 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 			return "", err
 		}
 		return fmt.Sprintf("已放行 %d 个隔离文件。", len(cleaned)), nil
+	case "edr_send_instruction":
+		if call.ClientID == "" {
+			return "", fmt.Errorf("发送指令需要提供 client_id")
+		}
+		if call.InstructionName == "" {
+			return "", fmt.Errorf("发送指令需要提供 instruction_name")
+		}
+		reporter.Step(ctx, "我正在下发指令到目标主机。")
+		result, err := s.edr.SendInstruction(ctx, call.ClientID, call.InstructionName, "AI 助手下发指令")
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("指令已下发成功，任务ID: %s", result.TaskID), nil
 	default:
 		return "", fmt.Errorf("unsupported confirmed action: %s", call.Name)
 	}
@@ -1071,7 +1097,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 
 func isCriticalTool(name string) bool {
 	switch name {
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction":
 		return true
 	default:
 		return false
@@ -1277,6 +1303,19 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		err = callErr
 		if err == nil {
 			toolResult = formatTaskResult(result)
+		}
+	case "send_instruction":
+		if decision.ClientID == "" {
+			return "", fmt.Errorf("发送指令需要提供 client_id，请使用类似「发送指令 list_ps client_id=xxx」或「发送到 hostname=xxx」的格式")
+		}
+		if decision.InstructionName == "" {
+			return "", fmt.Errorf("发送指令需要提供指令名称，如「发送指令 list_ps」")
+		}
+		reporter.Step(ctx, "我正在下发指令到目标主机。")
+		result, callErr := s.edr.SendInstruction(ctx, decision.ClientID, decision.InstructionName, "AI 助手下发指令")
+		err = callErr
+		if err == nil {
+			toolResult = fmt.Sprintf("指令已下发成功，任务ID: %s", result.TaskID)
 		}
 	default:
 		return "", fmt.Errorf("unsupported routed edr action: %s", decision.Action)
