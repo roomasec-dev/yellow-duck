@@ -770,7 +770,7 @@ func callNeedsGroundedEDRAnswer(name string) bool {
 	switch name {
 	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result":
 		return true
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_release_isolate_files":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files":
 		return false
 	default:
 		return false
@@ -943,6 +943,20 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return s.formatIsolateFiles(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_delete_isolate_files":
+		reporter.Step(ctx, "我在删除隔离文件。")
+		guids := strings.Split(strings.TrimSpace(call.IsolateFileGUIDs), ",")
+		cleaned := make([]string, 0, len(guids))
+		for _, g := range guids {
+			g = strings.TrimSpace(g)
+			if g != "" {
+				cleaned = append(cleaned, g)
+			}
+		}
+		if err := s.edr.DeleteIsolateFiles(ctx, cleaned); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("已删除 %d 条隔离文件记录。", len(cleaned)), nil
 	case "edr_release_isolate_files":
 		reporter.Step(ctx, "我在放行隔离文件。")
 		guids := strings.Split(strings.TrimSpace(call.IsolateFileGUIDs), ",")
@@ -1022,6 +1036,34 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 			return "", err
 		}
 		return fmt.Sprintf("IOC %s 已删除。", call.IOCID), nil
+	case "edr_delete_isolate_files":
+		reporter.Step(ctx, "我在删除隔离文件记录。")
+		guids := strings.Split(strings.TrimSpace(call.IsolateFileGUIDs), ",")
+		cleaned := make([]string, 0, len(guids))
+		for _, g := range guids {
+			g = strings.TrimSpace(g)
+			if g != "" {
+				cleaned = append(cleaned, g)
+			}
+		}
+		if err := s.edr.DeleteIsolateFiles(ctx, cleaned); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("已删除 %d 条隔离文件记录。", len(cleaned)), nil
+	case "edr_release_isolate_files":
+		reporter.Step(ctx, "我在放行隔离文件。")
+		guids := strings.Split(strings.TrimSpace(call.IsolateFileGUIDs), ",")
+		cleaned := make([]string, 0, len(guids))
+		for _, g := range guids {
+			g = strings.TrimSpace(g)
+			if g != "" {
+				cleaned = append(cleaned, g)
+			}
+		}
+		if err := s.edr.ReleaseIsolateFiles(ctx, edr.ReleaseIsolateFilesRequest{GUIDs: cleaned, IsAddExclusion: call.IsolateFileAddExcl, ReleaseAllHash: call.IsolateFileReleaseAll}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("已放行 %d 个隔离文件。", len(cleaned)), nil
 	default:
 		return "", fmt.Errorf("unsupported confirmed action: %s", call.Name)
 	}
@@ -1029,7 +1071,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 
 func isCriticalTool(name string) bool {
 	switch name {
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files":
 		return true
 	default:
 		return false
@@ -1416,7 +1458,7 @@ func (*Service) formatIsolateFiles(result edr.ListIsolateFilesResponse, page int
 		} else if f.RecoverStatus == 2 {
 			status = "已恢复"
 		}
-		lines = append(lines, fmt.Sprintf("- guid=%s hostname=%s filename=%s md5=%s status=%s", f.GUID, f.Hostname, f.FileName, f.MD5, status))
+		lines = append(lines, fmt.Sprintf("- GUID=%s 主机=%s 文件=%s MD5=%s SHA1=%s 状态=%s ClientID=%s 组织=%s", f.GUID, f.Hostname, f.FileName, f.MD5, f.SHA1, status, f.ClientID, f.OrgName))
 	}
 	if totalPages > 1 {
 		lines = append(lines, fmt.Sprintf("翻页示例：/edr isolate_files %d %d", minInt(page+1, totalPages), pageSize))

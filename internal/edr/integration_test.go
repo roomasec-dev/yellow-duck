@@ -180,6 +180,42 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		}
 	})
 
+	t.Run("isolate_file_release", func(t *testing.T) {
+		// 先获取一条隔离文件的 GUID
+		result, err := client.ListIsolateFiles(ctx, ListIsolateFilesRequest{Page: 1, Limit: 1})
+		t.Logf("isolate_file_release result %+v", result)
+		if err != nil {
+			t.Fatalf("list isolate files failed: %v", err)
+		}
+		if len(result.Results) == 0 {
+			t.Skip("no isolate files to release")
+		}
+		guid := result.Results[0].GUID
+		t.Logf("releasing isolate file: guid=%s", guid)
+		if err := client.ReleaseIsolateFiles(ctx, ReleaseIsolateFilesRequest{GUIDs: []string{guid}}); err != nil {
+			t.Fatalf("release isolate file failed: %v", err)
+		}
+		t.Logf("isolate_file_release done: guid=%s", guid)
+	})
+
+	t.Run("isolate_file_delete", func(t *testing.T) {
+		// 先获取一条隔离文件的 GUID
+		result, err := client.ListIsolateFiles(ctx, ListIsolateFilesRequest{Page: 1, Limit: 1})
+		t.Logf("isolate_file_delete result %+v", result)
+		if err != nil {
+			t.Fatalf("list isolate files failed: %v", err)
+		}
+		if len(result.Results) == 0 {
+			t.Skip("no isolate files to release")
+		}
+		guid := result.Results[0].GUID
+		t.Logf("deleting isolate file: guid=%s", guid)
+		if err := client.DeleteIsolateFiles(ctx, []string{guid}); err != nil {
+			t.Fatalf("delete isolate file failed: %v", err)
+		}
+		t.Logf("isolate_file_delete done: guid=%s", guid)
+	})
+
 	t.Run("instructions_tasks", func(t *testing.T) {
 		result, err := client.ListTasks(ctx, ListTasksRequest{Page: 1, Limit: 1})
 		if err != nil {
