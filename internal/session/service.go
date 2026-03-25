@@ -768,7 +768,7 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 
 func callNeedsGroundedEDRAnswer(name string) bool {
 	switch name {
-	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks":
+	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result":
 		return true
 	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_release_isolate_files":
 		return false
@@ -964,6 +964,13 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return s.formatTasks(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_task_result":
+		reporter.Step(ctx, "我在拉取任务结果。")
+		result, err := s.edr.GetTaskResult(ctx, call.TaskID)
+		if err != nil {
+			return "", err
+		}
+		return formatTaskResult(result), nil
 	default:
 		return "", nil
 	}
@@ -1210,6 +1217,25 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		if err == nil {
 			toolResult = s.formatLogs(ctx, result, page, pageSize, planner.ToolCall{ClientID: decision.ClientID, Page: page, PageSize: pageSize})
 		}
+	case "tasks":
+		reporter.Step(ctx, "我在拉取指令任务列表。")
+		page := positiveOr(decision.Page, 1)
+		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
+		result, callErr := s.edr.ListTasks(ctx, edr.ListTasksRequest{Page: page, Limit: pageSize})
+		err = callErr
+		if err == nil {
+			toolResult = s.formatTasks(result, page, pageSize)
+		}
+	case "task_result":
+		if decision.TaskID == "" {
+			return "", fmt.Errorf("查询任务结果需要提供 task_id，请使用类似「查看任务结果 12345」或「task_id=12345」的格式")
+		}
+		reporter.Step(ctx, "我在拉取任务结果。")
+		result, callErr := s.edr.GetTaskResult(ctx, decision.TaskID)
+		err = callErr
+		if err == nil {
+			toolResult = formatTaskResult(result)
+		}
 	default:
 		return "", fmt.Errorf("unsupported routed edr action: %s", decision.Action)
 	}
@@ -1428,6 +1454,41 @@ func (*Service) formatTasks(result edr.ListTasksResponse, page int, pageSize int
 	}
 	if totalPages > 1 {
 		lines = append(lines, fmt.Sprintf("翻页示例：/edr tasks %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatTaskResult(result edr.TaskResult) string {
+	var lines []string
+	lines = append(lines, fmt.Sprintf("任务结果 - hostname=%s instruction=%s", result.HostName, result.InstructionName))
+	if result.Message != "" {
+		lines = append(lines, fmt.Sprintf("消息：%s", result.Message))
+	}
+	if len(result.Process) > 0 {
+		lines = append(lines, fmt.Sprintf("进程数量：%d", len(result.Process)))
+		for _, p := range result.Process {
+			sig := "无签名"
+			if p.Signature != "" {
+				sig = p.Signature
+			}
+			lines = append(lines, fmt.Sprintf("  - pid=%d name=%s path=%s sha1=%s signature=%s", p.PID, p.PName, p.Path, p.SHA1, sig))
+		}
+	}
+	if len(result.ImageDetail) > 0 {
+		lines = append(lines, fmt.Sprintf("镜像数量：%d", len(result.ImageDetail)))
+		for _, img := range result.ImageDetail {
+			sys := "否"
+			if img.IsSystem == 1 {
+				sys = "是"
+			}
+			lines = append(lines, fmt.Sprintf("  - path=%s sha1=%s system=%s", img.ImagePath, img.ImageSHA1, sys))
+		}
+	}
+	if len(result.ProcessDetail) > 0 {
+		lines = append(lines, fmt.Sprintf("进程详情数量：%d", len(result.ProcessDetail)))
+	}
+	if len(lines) == 1 {
+		return "任务结果为空"
 	}
 	return strings.Join(lines, "\n")
 }

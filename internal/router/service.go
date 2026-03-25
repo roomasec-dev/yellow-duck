@@ -24,6 +24,7 @@ type Decision struct {
 	PageSize          int     `json:"page_size"`
 	Reason            string  `json:"reason"`
 	NeedsConfirmation bool    `json:"needs_confirmation"`
+	TaskID            string  `json:"task_id"`
 }
 
 type Service struct {
@@ -58,19 +59,20 @@ func (s *Service) analyzeByModel(ctx context.Context, text string) (Decision, er
 	}
 
 	systemPrompt := "你是 EDR 意图路由器。请把用户输入路由成结构化 JSON。\n" +
-		"可选 action 只有：none, hosts, incidents, detections, logs, isolate, release, iocs。\n" +
+		"可选 action 只有：none, hosts, incidents, detections, logs, isolate, release, iocs, tasks, task_result。\n" +
 		"如果是查询主机，尽量提取 hostname 或 client_ip。\n" +
 		"如果是查事件、检出、日志，按最接近的 action 返回。\n" +
 		"如果用户提到第几页、page、每页多少条，也尽量提取 page 和 page_size。\n" +
 		"如果是高危写操作（隔离/恢复），needs_confirmation=true。\n" +
 		"只输出 JSON，不要 markdown，不要解释。JSON 结构：{" +
-		"\"action\":\"none|hosts|incidents|detections|logs|isolate|release|iocs\"," +
+		"\"action\":\"none|hosts|incidents|detections|logs|isolate|release|iocs|tasks|task_result\"," +
 		"\"confidence\":0.0," +
 		"\"hostname\":\"\"," +
 		"\"client_id\":\"\"," +
 		"\"client_ip\":\"\"," +
 		"\"page\":0," +
 		"\"page_size\":0," +
+		"\"task_id\":\"\"," +
 		"\"reason\":\"\"," +
 		"\"needs_confirmation\":false}"
 	if s.prompt != nil {
@@ -118,6 +120,7 @@ func normalizeDecision(d Decision) Decision {
 	d.Hostname = strings.TrimSpace(d.Hostname)
 	d.ClientID = strings.TrimSpace(d.ClientID)
 	d.ClientIP = strings.TrimSpace(d.ClientIP)
+	d.TaskID = strings.TrimSpace(d.TaskID)
 	if d.Page < 0 {
 		d.Page = 0
 	}
@@ -146,6 +149,7 @@ func heuristicDecision(text string) Decision {
 	plain := strings.ToLower(strings.TrimSpace(text))
 	decision := Decision{Action: "none", Confidence: 0.2}
 	decision.Page, decision.PageSize = parsePaginationHints(text)
+	decision.TaskID = extractTaskID(text)
 	switch {
 	case containsAny(plain, "检出", "detection", "detections"):
 		decision.Action = "detections"
@@ -170,6 +174,12 @@ func heuristicDecision(text string) Decision {
 	case containsAny(plain, "ioc", "威胁指标", "hash", "哈希"):
 		decision.Action = "iocs"
 		decision.Confidence = 0.7
+	case containsAny(plain, "任务结果", "task_result", "任务详情"):
+		decision.Action = "task_result"
+		decision.Confidence = 0.7
+	case containsAny(plain, "任务", "tasks", "指令任务", "查询任务"):
+		decision.Action = "tasks"
+		decision.Confidence = 0.7
 	}
 	return decision
 }
@@ -187,6 +197,25 @@ func parsePaginationHints(text string) (int, int) {
 		`每次\s*(\d+)\s*条`,
 	)
 	return page, pageSize
+}
+
+func extractTaskID(text string) string {
+	taskIDPatterns := []string{
+		`(?:task[_\s-]?id|task_id|任务ID|任务\s*ID)[:\s=]*([a-zA-Z0-9\-_]+)`,
+		`(?:任务|task)\s+([a-zA-Z0-9\-_]+)\s*(?:结果|的\s*结果)`,
+		`(?:结果|result)\s+(?:task[_\s]?id\s*)?([a-zA-Z0-9\-_]+)`,
+	}
+	for _, pattern := range taskIDPatterns {
+		re := regexp.MustCompile(pattern)
+		match := re.FindStringSubmatch(text)
+		if len(match) >= 2 {
+			taskID := strings.TrimSpace(match[1])
+			if taskID != "" {
+				return taskID
+			}
+		}
+	}
+	return ""
 }
 
 func firstIntMatch(text string, patterns ...string) int {

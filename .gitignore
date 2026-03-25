@@ -3,3 +3,4 @@ data/
 *.log
 *.sqlite
 *.db
+.DS_Store
