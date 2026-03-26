@@ -35,7 +35,8 @@ type StorageConfig struct {
 }
 
 type ChannelConfig struct {
-	Feishu FeishuConfig `toml:"feishu"`
+	Feishu  FeishuConfig  `toml:"feishu"`
+	Dingtalk DingtalkConfig `toml:"dingtalk"`
 }
 
 type FeishuConfig struct {
@@ -48,6 +49,16 @@ type FeishuConfig struct {
 	BaseURL           string `toml:"base_url"`
 	ReplyMode         string `toml:"reply_mode"`
 	WebhookPath       string `toml:"webhook_path"`
+}
+
+type DingtalkConfig struct {
+	Enabled     bool   `toml:"enabled"`
+	Mode        string `toml:"mode"`
+	ClientID    string `toml:"client_id"`
+	ClientSecret string `toml:"client_secret"`
+	BaseURL     string `toml:"base_url"`
+	WebhookPath string `toml:"webhook_path"`
+	ReplyMode   string `toml:"reply_mode"`
 }
 
 type ModelsConfig struct {
@@ -215,6 +226,18 @@ func applyDefaults(cfg *Config) {
 	if cfg.Channel.Feishu.WebhookPath == "" {
 		cfg.Channel.Feishu.WebhookPath = "/webhook/feishu/event"
 	}
+	if cfg.Channel.Dingtalk.BaseURL == "" {
+		cfg.Channel.Dingtalk.BaseURL = "https://api.dingtalk.com"
+	}
+	if cfg.Channel.Dingtalk.Mode == "" {
+		cfg.Channel.Dingtalk.Mode = "webhook"
+	}
+	if cfg.Channel.Dingtalk.ReplyMode == "" {
+		cfg.Channel.Dingtalk.ReplyMode = "reply"
+	}
+	if cfg.Channel.Dingtalk.WebhookPath == "" {
+		cfg.Channel.Dingtalk.WebhookPath = "/webhook/dingtalk/event"
+	}
 	for name, provider := range cfg.Models.Providers {
 		if provider.Type == "" {
 			provider.Type = "openai_compatible"
@@ -330,6 +353,16 @@ func (c Config) Validate() error {
 		case "webhook", "longconn", "both":
 		default:
 			return fmt.Errorf("channel.feishu.mode must be one of webhook, longconn, both")
+		}
+	}
+	if c.Channel.Dingtalk.Enabled {
+		if c.Channel.Dingtalk.ClientID == "" || c.Channel.Dingtalk.ClientSecret == "" {
+			return fmt.Errorf("channel.dingtalk client_id and client_secret are required when enabled")
+		}
+		switch strings.ToLower(c.Channel.Dingtalk.Mode) {
+		case "webhook", "longconn", "both":
+		default:
+			return fmt.Errorf("channel.dingtalk.mode must be one of webhook, longconn, both")
 		}
 	}
 	return nil

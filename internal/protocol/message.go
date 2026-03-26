@@ -5,7 +5,8 @@ import "time"
 type Channel string
 
 const (
-	ChannelFeishu Channel = "feishu"
+	ChannelFeishu  Channel = "feishu"
+	ChannelDingtalk Channel = "dingtalk"
 )
 
 type InboundMessage struct {

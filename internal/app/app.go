@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"rm_ai_agent/internal/artifact"
+	"rm_ai_agent/internal/channel/dingtalk"
 	"rm_ai_agent/internal/channel/feishu"
 	"rm_ai_agent/internal/compression"
 	"rm_ai_agent/internal/config"
@@ -32,6 +33,7 @@ type App struct {
 	logger     *logx.Logger
 	httpServer *http.Server
 	feishu     *feishu.Handler
+	dingtalk   *dingtalk.Handler
 	scheduler  *scheduler.Service
 }
 
@@ -69,6 +71,12 @@ func New(cfg config.Config) (*App, error) {
 		return nil, fmt.Errorf("create feishu handler: %w", err)
 	}
 
+	dingtalkClient := dingtalk.NewClient(cfg.Channel.Dingtalk, logger)
+	dingtalkHandler := dingtalk.NewHandler(cfg.Channel.Dingtalk, dataStore, sessionService, dingtalkClient, logger)
+	if dingtalkHandler != nil {
+		logger.Info("dingtalk handler created", "enabled", cfg.Channel.Dingtalk.Enabled)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -83,6 +91,17 @@ func New(cfg config.Config) (*App, error) {
 			"mode", cfg.Channel.Feishu.Mode,
 			"app_id", mask(cfg.Channel.Feishu.AppID),
 			"webhook_path", cfg.Channel.Feishu.WebhookPath,
+		)
+	}
+	if cfg.Channel.Dingtalk.Enabled && (strings.EqualFold(cfg.Channel.Dingtalk.Mode, "webhook") || strings.EqualFold(cfg.Channel.Dingtalk.Mode, "both")) {
+		mux.Handle(cfg.Channel.Dingtalk.WebhookPath, dingtalkHandler)
+	}
+	if cfg.Channel.Dingtalk.Enabled {
+		logger.Info(
+			"dingtalk channel configured",
+			"mode", cfg.Channel.Dingtalk.Mode,
+			"client_id", mask(cfg.Channel.Dingtalk.ClientID),
+			"webhook_path", cfg.Channel.Dingtalk.WebhookPath,
 		)
 	}
 	if strings.TrimSpace(cfg.Server.LogFile) != "" {
@@ -100,6 +119,7 @@ func New(cfg config.Config) (*App, error) {
 		logger:     logger,
 		httpServer: httpServer,
 		feishu:     feishuHandler,
+		dingtalk:   dingtalkHandler,
 		scheduler:  schedulerService,
 	}, nil
 }
@@ -129,6 +149,13 @@ func (a *App) Run(ctx context.Context) error {
 			go func() {
 				if err := a.feishu.StartLongConnection(ctx); err != nil {
 					a.logger.Error("feishu long connection stopped", "error", err)
+				}
+			}()
+		}
+		if a.dingtalk != nil && a.config.Channel.Dingtalk.Enabled && (strings.EqualFold(a.config.Channel.Dingtalk.Mode, "longconn") || strings.EqualFold(a.config.Channel.Dingtalk.Mode, "both")) {
+			go func() {
+				if err := a.dingtalk.StartLongConnection(ctx); err != nil {
+					a.logger.Error("dingtalk long connection stopped", "error", err)
 				}
 			}()
 		}

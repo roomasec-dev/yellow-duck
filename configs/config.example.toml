@@ -17,6 +17,15 @@ base_url = "https://open.feishu.cn"
 reply_mode = "reply"
 webhook_path = "/webhook/feishu/event"
 
+[channel.dingtalk]
+enabled = false
+mode = "longconn"
+client_id = ""
+client_secret = ""
+base_url = "https://api.dingtalk.com"
+reply_mode = "reply"
+webhook_path = "/webhook/dingtalk/event"
+
 [models]
 default_provider = "deepseek"
 default_model = "deepseek-reasoner"
