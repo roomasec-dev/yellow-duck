@@ -26,6 +26,11 @@ type Decision struct {
 	NeedsConfirmation bool    `json:"needs_confirmation"`
 	TaskID            string  `json:"task_id"`
 	InstructionName   string  `json:"instruction_name"`
+	PlanName          string  `json:"plan_name"`
+	ScanType          int     `json:"scan_type"`
+	PlanType          int     `json:"plan_type"`
+	Scope             int     `json:"scope"`
+	RID               string  `json:"rid"`
 }
 
 type Service struct {
@@ -60,13 +65,13 @@ func (s *Service) analyzeByModel(ctx context.Context, text string) (Decision, er
 	}
 
 	systemPrompt := "你是 EDR 意图路由器。请把用户输入路由成结构化 JSON。\n" +
-		"可选 action 只有：none, hosts, incidents, detections, logs, isolate, release, iocs, tasks, task_result, send_instruction。\n" +
+		"可选 action 只有：none, hosts, incidents, detections, logs, isolate, release, iocs, tasks, task_result, send_instruction, virus_scan, virus_scan_record, virus_add, virus_update, virus_cancel, virus_by_host, virus_by_hash, virus_hash_hosts。\n" +
 		"如果是查询主机，尽量提取 hostname 或 client_ip。\n" +
 		"如果是查事件、检出、日志，按最接近的 action 返回。\n" +
 		"如果用户提到第几页、page、每页多少条，也尽量提取 page 和 page_size。\n" +
-		"如果是高危写操作（隔离/恢复），needs_confirmation=true。\n" +
+		"如果是高危写操作（隔离/恢复/取消扫描计划/新增扫描/更新扫描），needs_confirmation=true。\n" +
 		"只输出 JSON，不要 markdown，不要解释。JSON 结构：{" +
-		"\"action\":\"none|hosts|incidents|detections|logs|isolate|release|iocs|tasks|task_result|send_instruction\"," +
+		"\"action\":\"none|hosts|incidents|detections|logs|isolate|release|iocs|tasks|task_result|send_instruction|virus_scan|virus_scan_record|virus_add|virus_update|virus_cancel|virus_by_host|virus_by_hash|virus_hash_hosts\"," +
 		"\"confidence\":0.0," +
 		"\"hostname\":\"\"," +
 		"\"client_id\":\"\"," +
@@ -124,6 +129,8 @@ func normalizeDecision(d Decision) Decision {
 	d.ClientIP = strings.TrimSpace(d.ClientIP)
 	d.TaskID = strings.TrimSpace(d.TaskID)
 	d.InstructionName = strings.TrimSpace(d.InstructionName)
+	d.PlanName = strings.TrimSpace(d.PlanName)
+	d.RID = strings.TrimSpace(d.RID)
 	if d.Page < 0 {
 		d.Page = 0
 	}
@@ -187,6 +194,41 @@ func heuristicDecision(text string) Decision {
 	case containsAny(plain, "任务", "tasks", "指令任务", "查询任务"):
 		decision.Action = "tasks"
 		decision.Confidence = 0.7
+	case containsAny(plain, "扫描计划", "病毒扫描", "scan_plan", "virus_scan"):
+		decision.Action = "virus_scan"
+		decision.Confidence = 0.8
+	case containsAny(plain, "扫描记录", "scan_record", "病毒查杀记录"):
+		decision.Action = "virus_scan_record"
+		decision.Confidence = 0.8
+	case containsAny(plain, "新增扫描", "添加扫描", "创建扫描计划", "新建扫描计划"):
+		decision.Action = "virus_add"
+		decision.Confidence = 0.9
+		decision.NeedsConfirmation = true
+		decision.PlanName = extractPlanName(text)
+		decision.ScanType = extractScanType(text)
+		decision.PlanType = extractPlanType(text)
+		decision.Scope = extractScope(text)
+	case containsAny(plain, "修改扫描", "更新扫描计划", "编辑扫描计划"):
+		decision.Action = "virus_update"
+		decision.Confidence = 0.9
+		decision.NeedsConfirmation = true
+		decision.RID = extractRID(text)
+		decision.PlanName = extractPlanName(text)
+		decision.ScanType = extractScanType(text)
+	case containsAny(plain, "取消扫描", "删除扫描计划", "停止扫描"):
+		decision.Action = "virus_cancel"
+		decision.Confidence = 0.9
+		decision.NeedsConfirmation = true
+		decision.RID = extractRID(text)
+	case containsAny(plain, "主机病毒", "染毒主机", "中毒主机", "病毒主机"):
+		decision.Action = "virus_by_host"
+		decision.Confidence = 0.8
+	case containsAny(plain, "病毒hash", "病毒哈希", "病毒md5", "病毒sha1"):
+		decision.Action = "virus_by_hash"
+		decision.Confidence = 0.8
+	case containsAny(plain, "hash关联主机", "哈希主机", "md5主机", "sha1主机"):
+		decision.Action = "virus_hash_hosts"
+		decision.Confidence = 0.8
 	}
 	return decision
 }
@@ -264,4 +306,77 @@ func containsAny(text string, keywords ...string) bool {
 		}
 	}
 	return false
+}
+
+func extractPlanName(text string) string {
+	patterns := []string{
+		`(?:计划名|plan_name|计划名称)[=:]\s*([^\s,，]+)`,
+		`(?:新建|创建|添加)[^\s]*\s+(\S+)扫描`,
+	}
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		match := re.FindStringSubmatch(text)
+		if len(match) >= 2 {
+			name := strings.TrimSpace(match[1])
+			if name != "" {
+				return name
+			}
+		}
+	}
+	return ""
+}
+
+func extractScanType(text string) int {
+	plain := strings.ToLower(text)
+	switch {
+	case containsAny(plain, "快速扫描", "快速", "quick"):
+		return 1
+	case containsAny(plain, "全盘扫描", "全盘", "full"):
+		return 2
+	case containsAny(plain, "自定义扫描", "自定义路径", "custom"):
+		return 3
+	}
+	return 0
+}
+
+func extractPlanType(text string) int {
+	plain := strings.ToLower(text)
+	switch {
+	case containsAny(plain, "立即执行", "立即", "立刻"):
+		return 1
+	case containsAny(plain, "计划执行", "定时", "schedule"):
+		return 2
+	}
+	return 0
+}
+
+func extractScope(text string) int {
+	plain := strings.ToLower(text)
+	switch {
+	case containsAny(plain, "特定主机", "单台", "单主机", "指定主机"):
+		return 1
+	case containsAny(plain, "主机组", "分组", "group"):
+		return 2
+	case containsAny(plain, "全网", "全部主机", "所有主机"):
+		return 3
+	}
+	return 0
+}
+
+func extractRID(text string) string {
+	patterns := []string{
+		`(?:rid|plan_id|计划ID)[=:]\s*([a-zA-Z0-9\-_]+)`,
+		`(?:扫描计划|计划)\s*ID[:\s=]*([a-zA-Z0-9\-_]+)`,
+	}
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		match := re.FindStringSubmatch(text)
+		if len(match) >= 2 {
+			rid := strings.TrimSpace(match[1])
+			if rid != "" {
+				return rid
+			}
+		}
+	}
+	return ""
 }

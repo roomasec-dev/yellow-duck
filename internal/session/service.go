@@ -106,11 +106,11 @@ func (s *Service) HandleInbound(ctx context.Context, msg protocol.InboundMessage
 		return response, err
 	}
 
-	if response, ok, err := s.handlePlannedTools(ctx, sessionKey, msg.Text, locale, reporter); ok || err != nil {
+	if response, ok, err := s.handleNaturalLanguageEDR(ctx, sessionKey, msg.Text, locale, reporter); ok || err != nil {
 		return response, err
 	}
 
-	if response, ok, err := s.handleNaturalLanguageEDR(ctx, sessionKey, msg.Text, locale, reporter); ok || err != nil {
+	if response, ok, err := s.handlePlannedTools(ctx, sessionKey, msg.Text, locale, reporter); ok || err != nil {
 		return response, err
 	}
 
@@ -1317,6 +1317,100 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		if err == nil {
 			toolResult = fmt.Sprintf("指令已下发成功，任务ID: %s", result.TaskID)
 		}
+	case "virus_scan":
+		reporter.Step(ctx, "我在拉取扫描计划列表。")
+		page := positiveOr(decision.Page, 1)
+		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
+		result, callErr := s.edr.ListVirusScans(ctx, edr.ListVirusScansRequest{Page: page, Limit: pageSize})
+		err = callErr
+		if err == nil {
+			toolResult = formatVirusScans(result, page, pageSize)
+		}
+	case "virus_scan_record":
+		reporter.Step(ctx, "我在拉取扫描记录。")
+		page := positiveOr(decision.Page, 1)
+		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
+		result, callErr := s.edr.ListVirusScanRecords(ctx, edr.ListVirusScanRecordsRequest{Page: page, Limit: pageSize})
+		err = callErr
+		if err == nil {
+			toolResult = formatVirusScanRecords(result, page, pageSize)
+		}
+	case "virus_by_host":
+		reporter.Step(ctx, "我在按主机查询病毒信息。")
+		page := positiveOr(decision.Page, 1)
+		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
+		result, callErr := s.edr.ListVirusByHost(ctx, edr.ListVirusByHostRequest{HostName: decision.Hostname, ClientID: decision.ClientID, Page: page, Limit: pageSize})
+		err = callErr
+		if err == nil {
+			toolResult = formatVirusByHost(result, page, pageSize)
+		}
+	case "virus_by_hash":
+		reporter.Step(ctx, "我在按哈希查询病毒信息。")
+		page := positiveOr(decision.Page, 1)
+		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
+		result, callErr := s.edr.ListVirusByHash(ctx, edr.ListVirusByHashRequest{Page: page, Limit: pageSize})
+		err = callErr
+		if err == nil {
+			toolResult = formatVirusByHash(result, page, pageSize)
+		}
+	case "virus_hash_hosts":
+		reporter.Step(ctx, "我在按哈希查询关联主机。")
+		page := positiveOr(decision.Page, 1)
+		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
+		result, callErr := s.edr.ListVirusHashHosts(ctx, edr.ListVirusHashHostsRequest{HostName: decision.Hostname, ClientID: decision.ClientID, Page: page, Limit: pageSize})
+		err = callErr
+		if err == nil {
+			toolResult = formatVirusHashHosts(result, page, pageSize)
+		}
+	case "virus_add":
+		if decision.PlanName == "" {
+			return "", fmt.Errorf("创建扫描计划需要提供计划名称（plan_name），请使用类似「创建扫描计划 plan_name=xxx」的格式")
+		}
+		if decision.ScanType == 0 {
+			return "", fmt.Errorf("创建扫描计划需要提供扫描类型（scan_type）：1-快速扫描 2-全盘扫描 3-自定义路径扫描，请使用类似「创建扫描计划 plan_name=xxx scan_type=1」的格式")
+		}
+		if decision.PlanType == 0 {
+			return "", fmt.Errorf("创建扫描计划需要提供执行方式（plan_type）：1-立即执行 2-计划执行，请使用类似「创建扫描计划 plan_name=xxx scan_type=1 plan_type=1」的格式")
+		}
+		if decision.Scope == 0 {
+			return "", fmt.Errorf("创建扫描计划需要提供扫描范围（scope）：1-特定主机 2-主机组 3-全网主机，请使用类似「创建扫描计划 plan_name=xxx scan_type=1 plan_type=1 scope=1」的格式")
+		}
+		reporter.Step(ctx, "我正在创建扫描计划。")
+		callErr := s.edr.AddVirusScan(ctx, edr.AddVirusScanRequest{
+			PlanName: decision.PlanName,
+			ScanType: decision.ScanType,
+			PlanType: decision.PlanType,
+			Scope:    decision.Scope,
+			ClientID: decision.ClientID,
+		})
+		err = callErr
+		if err == nil {
+			toolResult = fmt.Sprintf("扫描计划「%s」创建成功", decision.PlanName)
+		}
+	case "virus_update":
+		if decision.RID == "" {
+			return "", fmt.Errorf("更新扫描计划需要提供计划ID（rid），请使用类似「更新扫描计划 rid=xxx」的格式")
+		}
+		reporter.Step(ctx, "我正在更新扫描计划。")
+		callErr := s.edr.UpdateVirusScan(ctx, edr.UpdateVirusScanRequest{
+			RID:              decision.RID,
+			PlanName:         decision.PlanName,
+			ScanType:         decision.ScanType,
+		})
+		err = callErr
+		if err == nil {
+			toolResult = fmt.Sprintf("扫描计划 %s 更新成功", decision.RID)
+		}
+	case "virus_cancel":
+		if decision.RID == "" {
+			return "", fmt.Errorf("取消扫描计划需要提供计划ID（rid），请使用类似「取消扫描计划 rid=xxx」的格式")
+		}
+		reporter.Step(ctx, "我正在取消扫描计划。")
+		callErr := s.edr.CancelVirusScan(ctx, decision.RID)
+		err = callErr
+		if err == nil {
+			toolResult = fmt.Sprintf("扫描计划 %s 已取消", decision.RID)
+		}
 	default:
 		return "", fmt.Errorf("unsupported routed edr action: %s", decision.Action)
 	}
@@ -1501,6 +1595,142 @@ func (*Service) formatIsolateFiles(result edr.ListIsolateFilesResponse, page int
 	}
 	if totalPages > 1 {
 		lines = append(lines, fmt.Sprintf("翻页示例：/edr isolate_files %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatVirusScans(result edr.ListVirusScansResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到扫描计划。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 个扫描计划，当前第 %d/%d 页，本页 %d 个（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
+	for _, scan := range result.Results {
+		statusStr := "未知"
+		switch scan.Status {
+		case 0:
+			statusStr = "未执行"
+		case 1:
+			statusStr = "执行中"
+		case 2:
+			statusStr = "已完成"
+		case 3:
+			statusStr = "已取消"
+		}
+		lines = append(lines, fmt.Sprintf("- rid=%s name=%s scope=%d status=%d(%s) user=%s", scan.RID, scan.PlanName, scan.Scope, scan.Status, statusStr, scan.OperationUser))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus_scan %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatVirusScanRecords(result edr.ListVirusScanRecordsResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到扫描记录。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 条扫描记录，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
+	for _, record := range result.Results {
+		statusStr := "未知"
+		switch record.Status {
+		case 0:
+			statusStr = "未执行"
+		case 1:
+			statusStr = "执行中"
+		case 2:
+			statusStr = "已完成"
+		case 3:
+			statusStr = "已取消"
+		}
+		lines = append(lines, fmt.Sprintf("- id=%s hostname=%s scan_type=%s status=%d(%s) virus_file=%d virus_mem=%d", record.ID, record.HostName, record.ScanType, record.Status, statusStr, record.VirusFileNum, record.MemoryVirusNum))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus_scan_record %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatVirusByHost(result edr.ListVirusByHostResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到染毒主机。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 台染毒主机，当前第 %d/%d 页，本页 %d 台（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
+	for _, host := range result.Results {
+		statusStr := "未知"
+		switch host.Status {
+		case 0:
+			statusStr = "未处理"
+		case 1:
+			statusStr = "已处理"
+		case 2:
+			statusStr = "已忽略"
+		}
+		lines = append(lines, fmt.Sprintf("- hostname=%s client_id=%s virus_file=%d virus_mem=%d status=%d(%s) last_check=%d", host.HostName, host.ClientID, host.VirusFileCount, host.VirusMemoryCount, host.Status, statusStr, host.LastCheckedTime))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus_by_host %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatVirusByHash(result edr.ListVirusByHashResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到病毒哈希信息。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 条病毒哈希，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
+	for _, hash := range result.Results {
+		lines = append(lines, fmt.Sprintf("- id=%s name=%s md5=%s sha1=%s host_count=%d", hash.ID, hash.Name, hash.MD5, hash.SHA1, hash.HostCount))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus_by_hash %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatVirusHashHosts(result edr.ListVirusHashHostsResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到哈希关联的主机。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 台关联主机，当前第 %d/%d 页，本页 %d 台（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
+	for _, host := range result.Results {
+		lines = append(lines, fmt.Sprintf("- hostname=%s client_id=%s sha1=%s path=%s virus_file=%d virus_mem=%d", host.HostName, host.ClientID, host.SHA1, host.Path, host.VirusFileCount, host.VirusMemoryCount))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus_hash_hosts %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
