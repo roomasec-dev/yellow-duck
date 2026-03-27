@@ -3,12 +3,20 @@ package dingtalk
 import (
 	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha1"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -266,7 +274,7 @@ func (h *Handler) processStreamBotMessage(ctx context.Context, dataBytes json.Ra
 		ChatID:     data.ConversationID,
 		ChatType:   data.ConversationType,
 		ThreadID:   "",
-		MessageID:  data.MsgId,
+		MessageID:  fmt.Sprintf("%s:%s", data.ConversationID, data.MsgId),
 		SenderID:   data.SenderStaffId,
 		Text:       text,
 		RawJSON:    "",
@@ -357,6 +365,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Info("dingtalk webhook called", "method", r.Method, "path", r.URL.Path)
 
+	// 先读取 body 获取 encrypt 字段用于签名验证
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		h.logger.Error("dingtalk webhook failed to read body", "error", err)
@@ -364,19 +373,112 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var envelope webhookEnvelope
-	if err := json.Unmarshal(body, &envelope); err != nil {
+	var req webhookRequest
+	if err := json.Unmarshal(body, &req); err != nil {
 		h.logger.Warn("dingtalk webhook failed to parse json", "error", err, "body", string(body))
 		writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
 		return
 	}
 
-	if envelope.MsgType != "text" || strings.TrimSpace(envelope.Text.Content) == "" {
+	// 验证签名
+	if err := h.verifyDingTalkSignature(r, req.Encrypt); err != nil {
+		h.logger.Warn("dingtalk signature verification failed", "error", err)
 		writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
 		return
 	}
 
-	if envelope.SessionWebhook == "" {
+	h.logger.Info("dingtalk webhook received",
+		"msgType", req.MsgType,
+		"encrypt", req.Encrypt != "",
+		"text", req.Text.Content,
+		"sessionWebhook", req.SessionWebhook,
+		"conversationId", req.ConversationID)
+
+	// Decrypt message if encrypted
+	text := req.Text.Content
+	if req.Encrypt != "" {
+		h.logger.Info("dingtalk message is encrypted, attempting to decrypt")
+		decrypted, err := h.decryptMessage(req.Encrypt)
+		if err != nil {
+			h.logger.Warn("dingtalk failed to decrypt message", "error", err)
+			writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
+			return
+		}
+		h.logger.Info("dingtalk decrypted successfully", "decrypted", decrypted)
+		// Parse decrypted content
+		var decryptedMsg struct {
+			EventType      string `json:"EventType"`
+			Text          struct{ Content string `json:"content"` } `json:"text"`
+			SessionWebhook string `json:"sessionWebhook"`
+			ConversationID string `json:"conversationId"`
+			ConversationType string `json:"conversationType"`
+			SenderStaffID string `json:"senderStaffId"`
+			RobotCode    string `json:"robotCode"`
+		}
+		if err := json.Unmarshal([]byte(decrypted), &decryptedMsg); err != nil {
+			h.logger.Warn("dingtalk failed to parse decrypted message", "error", err)
+			writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
+			return
+		}
+
+		// 处理 check_url 验证消息
+		if decryptedMsg.EventType == "check_url" {
+			h.logger.Info("dingtalk check_url verification received, returning encrypted success")
+			// 钉钉要求返回加密的 "success" 消息
+			encrypt, err := h.encryptMessage("success")
+			if err != nil {
+				h.logger.Error("encrypt success message failed", "error", err)
+				writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
+				return
+			}
+			timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
+			nonce := generateRandomString(16)
+			sign := computeSignature(h.cfg.VerificationToken, timestamp, nonce, encrypt)
+			writeJSON(w, http.StatusOK, map[string]string{
+				"msg_signature": sign,
+				"encrypt":       encrypt,
+				"timeStamp":     timestamp,
+				"nonce":         nonce,
+			})
+			return
+		}
+
+		text = decryptedMsg.Text.Content
+		req.SessionWebhook = decryptedMsg.SessionWebhook
+		req.ConversationID = decryptedMsg.ConversationID
+		req.ConversationType = decryptedMsg.ConversationType
+		req.SenderStaffID = decryptedMsg.SenderStaffID
+		req.RobotCode = decryptedMsg.RobotCode
+	}
+
+	// 处理 check_url 验证消息（未加密的情况）
+	if req.MsgType == "check_url" || (req.Encrypt != "" && text == "") {
+		h.logger.Info("dingtalk check_url verification received (unencrypted)")
+		encrypt, err := h.encryptMessage("success")
+		if err != nil {
+			h.logger.Error("encrypt success message failed", "error", err)
+			writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
+			return
+		}
+		timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
+		nonce := generateRandomString(16)
+		sign := computeSignature(h.cfg.VerificationToken, timestamp, nonce, encrypt)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"msg_signature": sign,
+			"encrypt":       encrypt,
+			"timeStamp":     timestamp,
+			"nonce":         nonce,
+		})
+		return
+	}
+
+	if strings.TrimSpace(text) == "" {
+		h.logger.Info("dingtalk message text is empty, ignoring")
+		writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
+		return
+	}
+
+	if req.SessionWebhook == "" {
 		h.logger.Warn("dingtalk webhook missing session webhook, ignoring message")
 		writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
 		return
@@ -384,13 +486,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	inbound := protocol.InboundMessage{
 		Channel:    protocol.ChannelDingtalk,
-		TenantKey:  envelope.RobotCode,
-		ChatID:     envelope.ConversationID,
-		ChatType:   envelope.ConversationType,
+		TenantKey:  req.RobotCode,
+		ChatID:     req.ConversationID,
+		ChatType:   req.ConversationType,
 		ThreadID:   "",
-		MessageID:  envelope.SessionWebhook,
-		SenderID:   envelope.SenderStaffID,
-		Text:       strings.TrimSpace(envelope.Text.Content),
+		MessageID:  fmt.Sprintf("%s:%s", req.ConversationID, req.SessionWebhook),
+		SenderID:   req.SenderStaffID,
+		Text:       strings.TrimSpace(text),
 		RawJSON:    string(body),
 		ReceivedAt: time.Now().UTC(),
 	}
@@ -409,7 +511,191 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h.logger.Info("received webhook dingtalk message", "message_id", inbound.MessageID, "chat_id", inbound.ChatID, "chat_type", inbound.ChatType, "text_preview", shortText(inbound.Text))
 
-	go h.processInbound(inbound, envelope.SessionWebhook)
+	go h.processInbound(inbound, req.SessionWebhook)
+}
+
+// verifyDingTalkSignature verifies the DingTalk webhook signature
+func (h *Handler) verifyDingTalkSignature(r *http.Request, encryptStr string) error {
+	sign := r.URL.Query().Get("msg_signature")
+	timestamp := r.URL.Query().Get("timestamp")
+	nonce := r.URL.Query().Get("nonce")
+
+	if sign == "" || timestamp == "" || nonce == "" {
+		return nil
+	}
+
+	if h.cfg.VerificationToken == "" {
+		return nil
+	}
+
+	// 签名计算：SHA1(token + timestamp + nonce + encrypt)
+	arr := []string{h.cfg.VerificationToken, timestamp, nonce, encryptStr}
+	sort.Strings(arr)
+	str := strings.Join(arr, "")
+	sigHash := sha1.Sum([]byte(str))
+	expectedSign := hex.EncodeToString(sigHash[:])
+
+	if expectedSign != sign {
+		return fmt.Errorf("signature mismatch: expected %s, got %s", expectedSign, sign)
+	}
+
+	return nil
+}
+
+// decryptMessage decrypts the encrypted message from DingTalk
+func (h *Handler) decryptMessage(encryptStr string) (string, error) {
+	if h.cfg.EncryptKey == "" {
+		return encryptStr, nil
+	}
+
+	// 钉钉：encodingAesKey + "=" 然后 base64 解码得到 32 字节 AES key
+	keyWithPadding := h.cfg.EncryptKey + "="
+	aesKey, err := base64.StdEncoding.DecodeString(keyWithPadding)
+	if err != nil {
+		return "", fmt.Errorf("encrypt_key base64 decode failed: %w", err)
+	}
+	if len(aesKey) != 32 {
+		return "", fmt.Errorf("encrypt_key must be 32 bytes after decode, got %d", len(aesKey))
+	}
+
+	// 对密文进行 base64 解码
+	ciphertext, err := base64.StdEncoding.DecodeString(encryptStr)
+	if err != nil {
+		return "", fmt.Errorf("ciphertext base64 decode failed: %w", err)
+	}
+
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return "", fmt.Errorf("create cipher failed: %w", err)
+	}
+
+	// IV: 取 AES key 的前 16 字节
+	iv := make([]byte, 16)
+	copy(iv, aesKey)
+
+	if len(ciphertext) < aes.BlockSize {
+		return "", fmt.Errorf("ciphertext too short")
+	}
+
+	plaintext := make([]byte, len(ciphertext))
+	mode := cipher.NewCBCDecrypter(block, iv)
+	mode.CryptBlocks(plaintext, ciphertext)
+
+	// 去除 PKCS7 padding
+	plaintext, err = unpadPKCS7(plaintext)
+	if err != nil {
+		return "", fmt.Errorf("unpad failed: %w", err)
+	}
+
+	// 解析钉钉加密消息格式：
+	// 0-15: 16字节随机串
+	// 16-19: 4字节网络序的明文长度
+	// 20 到 20+length: 明文
+	// 20+length 之后: corpId
+	if len(plaintext) < 20 {
+		return "", fmt.Errorf("decrypted plaintext too short: %d", len(plaintext))
+	}
+
+	// 读取明文长度（网络字节序，大端）
+	length := int(binary.BigEndian.Uint32(plaintext[16:20]))
+	if len(plaintext) < 20+length {
+		return "", fmt.Errorf("invalid plaintext length: claimed %d, have %d", length, len(plaintext)-20)
+	}
+
+	result := string(plaintext[20 : 20+length])
+	return result, nil
+}
+
+// unpadPKCS7 removes PKCS7 padding
+func unpadPKCS7(data []byte) ([]byte, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("data is empty")
+	}
+	padLen := int(data[len(data)-1])
+	if padLen > len(data) || padLen == 0 {
+		return nil, fmt.Errorf("invalid padding length: %d", padLen)
+	}
+	return data[:len(data)-padLen], nil
+}
+
+// encryptMessage encrypts a message for DingTalk response
+func (h *Handler) encryptMessage(plaintext string) (string, error) {
+	if h.cfg.EncryptKey == "" {
+		return plaintext, nil
+	}
+
+	// 获取 AES key
+	keyWithPadding := h.cfg.EncryptKey + "="
+	aesKey, err := base64.StdEncoding.DecodeString(keyWithPadding)
+	if err != nil {
+		return "", fmt.Errorf("encrypt_key base64 decode failed: %w", err)
+	}
+	if len(aesKey) != 32 {
+		return "", fmt.Errorf("encrypt_key must be 32 bytes after decode, got %d", len(aesKey))
+	}
+
+	// 生成 16 字节随机串
+	randomBytes := make([]byte, 16)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("generate random bytes failed: %w", err)
+	}
+
+	// 钉钉加密消息格式：random(16) + length(4) + plaintext + corpId
+	plaintextBytes := []byte(plaintext)
+	lengthBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(lengthBytes, uint32(len(plaintextBytes)))
+	corpId := h.cfg.ClientID // 钉钉用 clientId 作为 corpId
+
+	// 组装数据
+	data := make([]byte, 0, 16+4+len(plaintextBytes)+len(corpId)+32)
+	data = append(data, randomBytes...)
+	data = append(data, lengthBytes...)
+	data = append(data, plaintextBytes...)
+	data = append(data, corpId...)
+
+	// PKCS7 padding（block size = 32）
+	padLen := 32 - len(data)%32
+	if padLen == 0 {
+		padLen = 32
+	}
+	padding := make([]byte, padLen)
+	for i := range padding {
+		padding[i] = byte(padLen)
+	}
+	data = append(data, padding...)
+
+	// AES-CBC 加密
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return "", fmt.Errorf("create cipher failed: %w", err)
+	}
+	iv := make([]byte, 16)
+	copy(iv, aesKey)
+
+	ciphertext := make([]byte, len(data))
+	mode := cipher.NewCBCEncrypter(block, iv)
+	mode.CryptBlocks(ciphertext, data)
+
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// generateRandomString generates a random string of specified length
+func generateRandomString(length int) string {
+	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	result := make([]byte, length)
+	for i := range result {
+		result[i] = chars[time.Now().UnixNano()%int64(len(chars))]
+	}
+	return string(result)
+}
+
+// computeSignature computes DingTalk signature for response
+func computeSignature(token, timestamp, nonce, encrypt string) string {
+	arr := []string{token, timestamp, nonce, encrypt}
+	sort.Strings(arr)
+	str := strings.Join(arr, "")
+	h := sha1.Sum([]byte(str))
+	return hex.EncodeToString(h[:])
 }
 
 type webhookEnvelope struct {
@@ -425,6 +711,24 @@ type webhookEnvelope struct {
 	SessionWebhookURI string `json:"sessionWebhookUri"`
 	RobotCode       string `json:"robotCode"`
 	Time            int64  `json:"time"`
+}
+
+// webhookRequest is the actual DingTalk webhook callback format
+type webhookRequest struct {
+	Timestamp      string `json:"timestamp"`
+	MsgType       string `json:"msgtype"`
+	EncrypteMode  string `json:"encrypteMode"`
+	Encrypt       string `json:"encrypt"`
+	WebhookURI    string `json:"webhookURI"`
+	RobotCode     string `json:"robotCode"`
+	ConversationID string `json:"conversationId"`
+	ConversationType string `json:"conversationType"`
+	SenderNick    string `json:"senderNick"`
+	SenderStaffID string `json:"senderStaffId"`
+	SessionWebhook string `json:"sessionWebhook"`
+	Text          struct {
+		Content string `json:"content"`
+	} `json:"text"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

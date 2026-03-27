@@ -45,6 +45,12 @@
 - 如果用长连接，只需要 `app_id` 和 `app_secret`
 - `verification_token` / `encrypt_key` 主要用于 webhook 模式
 
+## 钉钉接入
+- 现在默认使用 `longconn` 长连接模式，不需要公网回调地址
+- `channel.dingtalk.mode` 支持 `longconn`、`webhook`、`both`
+- 如果用长连接，只需要 `client_id` 和 `client_secret`
+- `verification_token` / `encrypt_key` 主要用于 webhook 模式
+
 ## 安装与运行
 
 ### 预编译文件

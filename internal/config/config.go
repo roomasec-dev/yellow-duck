@@ -52,13 +52,15 @@ type FeishuConfig struct {
 }
 
 type DingtalkConfig struct {
-	Enabled     bool   `toml:"enabled"`
-	Mode        string `toml:"mode"`
-	ClientID    string `toml:"client_id"`
-	ClientSecret string `toml:"client_secret"`
-	BaseURL     string `toml:"base_url"`
-	WebhookPath string `toml:"webhook_path"`
-	ReplyMode   string `toml:"reply_mode"`
+	Enabled         bool   `toml:"enabled"`
+	Mode            string `toml:"mode"`
+	ClientID        string `toml:"client_id"`
+	ClientSecret    string `toml:"client_secret"`
+	BaseURL         string `toml:"base_url"`
+	WebhookPath     string `toml:"webhook_path"`
+	ReplyMode       string `toml:"reply_mode"`
+	EncryptKey      string `toml:"encrypt_key"`
+	VerificationToken string `toml:"verification_token"`
 }
 
 type ModelsConfig struct {
