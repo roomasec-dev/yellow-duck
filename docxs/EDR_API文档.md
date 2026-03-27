@@ -839,3 +839,470 @@
 ```
 
 说明：`process_info`、`behavior_stats`、`behaviors` 为扩展字段结构，实际返回可能根据 `view_type`、平台和检测来源包含更多键值对。
+
+---
+
+## 7. 病毒扫描计划管理 (Virus Scan)
+
+说明：以下接口由 open_api 透传到 ratp-console，open_api 会自动补充组织、用户、语言等上下文信息，不需要调用方显式传入。
+
+### 7.1 新建扫描计划
+**接口地址**: `POST /open_api/rm/v1/virus_scan/add`
+
+**Request Body**:
+```json
+{
+  "scan_type": 1,               // (Required) 1 快速扫描 2 全盘扫描 3 自定义路径扫描
+  "plan_name": "string",        // (Required) 计划名称
+  "plan_type": 1,               // (Required) 1 立即执行 2 计划执行
+  "scope": 1,                   // 1 特定主机 2 主机组 3 全网主机
+  "contents": {},               // object，透传下游；scan_type=3 时要求包含 scan_path
+  "client_id": "string",        // scope=1 时使用
+  "execute_start_time": 0,      // plan_type=2 时使用，Unix 时间戳
+  "execute_cycle": 1,           // cycle_setting=true 时：1 每天 2 每周 3 每月
+  "cycle_setting": false,       // 是否周期执行
+  "group_ids": [1, 2]           // scope=2 时使用
+}
+```
+
+**Response Body**:
+```json
+{
+  "error": 0,
+  "message": "string",
+  "data": null
+}
+```
+
+**字段约束**:
+- `scan_type`、`plan_name`、`plan_type` 为源码 binding 必填字段
+- `scope=1` 时必须提供 `client_id`
+- `scope=2` 时必须提供 `group_ids`
+- `scan_type=3` 时必须在 `contents.scan_path` 中提供至少一个扫描路径
+- `cycle_setting=true` 时 `execute_cycle` 仅支持 `1/2/3`
+- `plan_type=2` 时通常应提供 `execute_start_time`
+
+### 7.2 编辑扫描计划
+**接口地址**: `POST /open_api/rm/v1/virus_scan/update`
+
+**Request Body**:
+```json
+{
+  "rid": "string",              // (Required) 扫描计划ID
+  "scan_type": 1,
+  "plan_name": "string",
+  "plan_type": 2,
+  "scope": 2,
+  "contents": {},               // object，透传下游；scan_type=3 时要求包含 scan_path
+  "client_id": "string",
+  "execute_start_time": 0,
+  "execute_cycle": 2,
+  "cycle_setting": true,
+  "group_ids": [1001, 1002]
+}
+```
+
+**Response Body**:
+```json
+{
+  "error": 0,
+  "message": "string",
+  "data": null
+}
+```
+
+**字段约束**:
+- `rid` 为源码 binding 必填字段
+- 其余约束与“7.1 新建扫描计划”一致
+
+### 7.3 取消扫描计划
+**接口地址**: `POST /open_api/rm/v1/virus_scan/cancel`
+
+**Request Body**:
+```json
+{
+  "rid": "string"               // 扫描计划ID
+}
+```
+
+**Response Body**:
+```json
+{
+  "error": 0,
+  "message": "string",
+  "data": null
+}
+```
+
+### 7.4 获取扫描计划列表
+**接口地址**: `POST /open_api/rm/v1/virus_scan/list`
+
+**Request Body**:
+```json
+{
+  "plan_name": "string",
+  "scope": 0,
+  "plan_type": 0,
+  "cycle_setting": 0,           // 1 周期执行 2 非周期执行
+  "scan_type": 0,
+  "update_time": {
+    "time_range": {
+      "start": 0,
+      "end": 0
+    },
+    "quick_time": {
+      "time_num": 7,
+      "time_span": "last",
+      "time_type": "days"
+    }
+  },
+  "status": "0",                // 0 准备中 1 执行中 2 已完成 3 已取消
+  "operation_user": "string",
+  "page": 1,
+  "limit": 10
+}
+```
+
+**Response Body**:
+```json
+{
+  "error": 0,
+  "message": "string",
+  "data": {
+    "total": 0,
+    "results": [
+      {
+        "rid": "string",
+        "org_name": "string",
+        "client_id": "string",
+        "plan_name": "string",
+        "plan_type": 0,
+        "execute_start_time": 0,
+        "execute_cycle": 0,
+        "cycle_setting": false,
+        "execute_desc": "string",
+        "scope": 0,
+        "scope_content": "string",
+        "contents": "string",
+        "group_ids": [0],
+        "scan_type": 0,
+        "create_time": 0,
+        "update_time": 0,
+        "operation_user": "string",
+        "operation_uid": "string",
+        "status": 0,
+        "is_deleted": 0
+      }
+    ]
+  }
+}
+```
+
+说明：`page/limit` 省略时，服务端默认使用 `page=1`、`limit=10`。
+
+### 7.5 获取扫描执行记录
+**接口地址**: `POST /open_api/rm/v1/virus_scan/scan_record`
+
+**Request Body**:
+```json
+{
+  "rid": "string",
+  "task_id": "string",
+  "execution_batch": "string",
+  "host_name": "string",
+  "client_id": "string",
+  "scan_type": "1,2,3",
+  "status": "0,1,2,3",
+  "start_time": {
+    "time_range": {
+      "start": 0,
+      "end": 0
+    },
+    "quick_time": {
+      "time_num": 7,
+      "time_span": "last",
+      "time_type": "days"
+    }
+  },
+  "end_time": {
+    "time_range": {
+      "start": 0,
+      "end": 0
+    },
+    "quick_time": {
+      "time_num": 7,
+      "time_span": "last",
+      "time_type": "days"
+    }
+  },
+  "page": 1,
+  "limit": 10
+}
+```
+
+**Response Body**:
+```json
+{
+  "error": 0,
+  "message": "string",
+  "data": {
+    "total": 0,
+    "results": [
+      {
+        "id": "string",
+        "task_id": "string",
+        "execution_batch": "string",
+        "rid": "string",
+        "org_name": "string",
+        "client_id": "string",
+        "host_name": "string",
+        "scan_type": "string",
+        "contents": "string",
+        "status": 0,
+        "create_time": 0,
+        "start_time": 0,
+        "end_time": 0,
+        "update_time": 0,
+        "virus_file_num": 0,
+        "memory_virus_num": 0,
+        "response_time": 0,
+        "plan_name": "string",
+        "host_status": "string"
+      }
+    ]
+  }
+}
+```
+
+说明：
+- `page/limit` 省略时，服务端默认使用 `page=1`、`limit=10`
+- `start_time` 省略时，服务端会自动补默认时间范围（最近配置限制天数）
+
+---
+
+## 8. 病毒统计与明细 (Virus)
+
+说明：
+- `page/limit` 省略时，console 侧默认使用 `page=1`、`limit=10`
+- `last_checked_time` 省略时，console 侧会自动补默认查询时间范围（最近配置限制天数）
+
+### 8.1 按主机统计
+**接口地址**: `POST /open_api/rm/v1/virus/host/list`
+
+**Request Body**:
+```json
+{
+  "client_id": "string",
+  "username": "string",
+  "host_name": "string",
+  "importance": 0,
+  "mac_address": "string",
+  "client_ip": "string",
+  "rmconnectip": "string",
+  "status": 0,                  // 0 未处置 1 部分处置 2 全部处置
+  "last_checked_time": {
+    "time_range": {
+      "start": 0,
+      "end": 0
+    },
+    "quick_time": {
+      "time_num": 7,
+      "time_span": "last",
+      "time_type": "days"
+    }
+  },
+  "page": 1,
+  "limit": 10
+}
+```
+
+**Response Body**:
+```json
+{
+  "error": 0,
+  "message": "string",
+  "data": {
+    "total": 0,
+    "results": [
+      {
+        "host_name": "string",
+        "client_id": "string",
+        "status": 0,
+        "username": "string",
+        "importance": 0,
+        "client_ip": "string",
+        "rm_connect_ip": "string",
+        "mac_address": "string",
+        "virus_file_count": 0,
+        "virus_memory_count": 0,
+        "last_checked_time": 0,
+        "last_active": 0,
+        "host_status": "string",
+        "path": "string"
+      }
+    ]
+  }
+}
+```
+
+说明：当请求体中传入 `status` 筛选时，服务内部会切换到 hash 维度聚合逻辑，`results` 项会从 `VirusHostBaseResponse` 变为 `VirusHostByHashResponse`，额外返回：
+
+```json
+{
+  "sha1": "string",
+  "md5": "string"
+}
+```
+
+### 8.2 按文件 Hash 统计
+**接口地址**: `POST /open_api/rm/v1/virus/hash/list`
+
+**Request Body**:
+```json
+{
+  "last_checked_time": {
+    "time_range": {
+      "start": 0,
+      "end": 0
+    },
+    "quick_time": {
+      "time_num": 7,
+      "time_span": "last",
+      "time_type": "days"
+    }
+  },
+  "name": "string",
+  "sha1": "string",
+  "md5": "string",
+  "page": 1,
+  "limit": 10
+}
+```
+
+**Response Body**:
+```json
+{
+  "error": 0,
+  "message": "string",
+  "data": {
+    "total": 0,
+    "results": [
+      {
+        "name": "string",
+        "sha1": "string",
+        "md5": "string",
+        "size": 0,
+        "host_count": 0,
+        "client_ids": ["string"],
+        "end_time": 0,
+        "id": "string"
+      }
+    ]
+  }
+}
+```
+
+### 8.3 按文件 Hash 查看主机明细
+**接口地址**: `POST /open_api/rm/v1/virus/hash/host/list`
+
+**Request Body**:
+```json
+{
+  "sha1": "string",
+  "client_id": "string",
+  "username": "string",
+  "host_name": "string",
+  "importance": 0,
+  "mac_address": "string",
+  "client_ip": "string",
+  "rmconnectip": "string",
+  "status": 0,                  // 0 未处置 1 部分处置 2 全部处置
+  "host_status": "online,offline",
+  "path": "string",
+  "last_checked_time": {
+    "time_range": {
+      "start": 0,
+      "end": 0
+    },
+    "quick_time": {
+      "time_num": 7,
+      "time_span": "last",
+      "time_type": "days"
+    }
+  },
+  "page": 1,
+  "limit": 10
+}
+```
+
+**Response Body**:
+```json
+{
+  "error": 0,
+  "message": "string",
+  "data": {
+    "total": 0,
+    "results": [
+      {
+        "host_name": "string",
+        "client_id": "string",
+        "status": 0,
+        "username": "string",
+        "importance": 0,
+        "client_ip": "string",
+        "rm_connect_ip": "string",
+        "mac_address": "string",
+        "virus_file_count": 0,
+        "virus_memory_count": 0,
+        "last_checked_time": 0,
+        "last_active": 0,
+        "host_status": "string",
+        "path": "string",
+        "sha1": "string",
+        "md5": "string"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 9. 查杀设置 (NGAV Settings)
+
+### 9.1 获取查杀配置
+**接口地址**: `GET /open_api/rm/v1/settings/get_ngav_conf`
+
+**Response Body**:
+```json
+{
+  "error": 0,
+  "message": "string",
+  "data": {
+    "<conf_key>": "<conf_value>"
+  }
+}
+```
+
+说明：该接口返回的是海外设置中心 `rmkernel_config` 反序列化后的 `map[string]interface{}`，即 `data` 为动态键值集合，并非固定字段结构；上面仅展示常见键示例。
+
+### 9.2 切换查杀状态
+**接口地址**: `POST /open_api/rm/v1/settings/switch_ngav_status`
+
+**Request Body**:
+```json
+{
+  "switch": "on"               // on / off
+}
+```
+
+**Response Body**:
+```json
+{
+  "error": 0,
+  "message": "string",
+  "data": null
+}
+```
+
+说明：当前实现会联动更新海外设置中的 `enable_quarantine_files` 开关。

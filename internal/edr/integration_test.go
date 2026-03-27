@@ -287,6 +287,177 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			t.Fatal("detection view returned empty result")
 		}
 	})
+
+	// Virus Scan tests
+	t.Run("virus_scan_list", func(t *testing.T) {
+		result, err := client.ListVirusScans(ctx, ListVirusScansRequest{Page: 1, Limit: 10})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("virus_scan_list raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("virus scan list failed: %v", err)
+		}
+		if result.Total < 0 {
+			t.Fatalf("unexpected total: %+v", result)
+		}
+	})
+
+	t.Run("virus_scan_scan_record", func(t *testing.T) {
+		result, err := client.ListVirusScanRecords(ctx, ListVirusScanRecordsRequest{Page: 1, Limit: 10})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("virus_scan_scan_record raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("virus scan records failed: %v", err)
+		}
+		if result.Total < 0 {
+			t.Fatalf("unexpected total: %+v", result)
+		}
+	})
+
+	// Virus Statistics tests
+	t.Run("virus_host_list", func(t *testing.T) {
+		result, err := client.ListVirusByHost(ctx, ListVirusByHostRequest{Page: 1, Limit: 10})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("virus_host_list raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("virus host list failed: %v", err)
+		}
+		if result.Total < 0 {
+			t.Fatalf("unexpected total: %+v", result)
+		}
+	})
+
+	t.Run("virus_hash_list", func(t *testing.T) {
+		result, err := client.ListVirusByHash(ctx, ListVirusByHashRequest{Page: 1, Limit: 10})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("virus_hash_list raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("virus hash list failed: %v", err)
+		}
+		if result.Total < 0 {
+			t.Fatalf("unexpected total: %+v", result)
+		}
+	})
+
+	t.Run("virus_hash_host_list", func(t *testing.T) {
+		result, err := client.ListVirusHashHosts(ctx, ListVirusHashHostsRequest{Page: 1, Limit: 10})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("virus_hash_host_list raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("virus hash host list failed: %v", err)
+		}
+		if result.Total < 0 {
+			t.Fatalf("unexpected total: %+v", result)
+		}
+	})
+
+	// NGAV Settings tests
+	t.Run("settings_get_ngav_conf", func(t *testing.T) {
+		result, err := client.GetNGAVConf(ctx)
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("settings_get_ngav_conf raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("get ngav conf failed: %v", err)
+		}
+		if result == nil {
+			t.Fatal("ngav conf returned nil")
+		}
+	})
+
+	// Virus Scan write operations tests
+	t.Run("virus_scan_add", func(t *testing.T) {
+		// 先获取一台在线主机的 client_id
+		hosts, err := client.ListHosts(ctx, ListHostsRequest{Page: 1, Limit: 10})
+		if err != nil {
+			t.Fatalf("list hosts failed: %v", err)
+		}
+		var clientID string
+		for _, h := range hosts.Hosts {
+			if h.Status == "online" {
+				clientID = h.ClientID
+				break
+			}
+		}
+		if clientID == "" {
+			t.Skip("no online host to create virus scan")
+		}
+
+		// 创建快速扫描计划
+		err = client.AddVirusScan(ctx, AddVirusScanRequest{
+			ScanType: 1, // 1 快速扫描
+			PlanName: "integration test scan",
+			PlanType: 1, // 1 立即执行
+			Scope:    1, // 1 特定主机
+			ClientID: clientID,
+		})
+		if err != nil {
+			t.Fatalf("add virus scan failed: %v", err)
+		}
+		t.Logf("virus_scan_add done: client_id=%s", clientID)
+	})
+
+	t.Run("virus_scan_update", func(t *testing.T) {
+		// 先获取一个现有的扫描计划
+		result, err := client.ListVirusScans(ctx, ListVirusScansRequest{Page: 1, Limit: 1})
+		if err != nil {
+			t.Fatalf("list virus scans failed: %v", err)
+		}
+		if len(result.Results) == 0 {
+			t.Skip("no virus scan to update")
+		}
+		rid := result.Results[0].RID
+		t.Logf("updating virus scan: rid=%s", rid)
+
+		// 更新扫描计划名称
+		err = client.UpdateVirusScan(ctx, UpdateVirusScanRequest{
+			RID:      rid,
+			PlanName: "updated integration test scan",
+		})
+		if err != nil {
+			t.Fatalf("update virus scan failed: %v", err)
+		}
+		t.Logf("virus_scan_update done: rid=%s", rid)
+	})
+
+	t.Run("virus_scan_cancel", func(t *testing.T) {
+		// 先获取一个现有的扫描计划
+		result, err := client.ListVirusScans(ctx, ListVirusScansRequest{Page: 1, Limit: 10})
+		if err != nil {
+			t.Fatalf("list virus scans failed: %v", err)
+		}
+		var rid string
+		for _, scan := range result.Results {
+			if scan.Status == 0 || scan.Status == 1 {
+				rid = scan.RID
+				break
+			}
+		}
+		if rid == "" {
+			t.Skip("no virus scan to cancel")
+		}
+		t.Logf("canceling virus scan: rid=%s", rid)
+
+		err = client.CancelVirusScan(ctx, rid)
+		if err != nil {
+			t.Fatalf("cancel virus scan failed: %v", err)
+		}
+		t.Logf("virus_scan_cancel done: rid=%s", rid)
+	})
+
+	t.Run("settings_switch_ngav_status", func(t *testing.T) {
+		// 先获取当前 NGAV 配置
+		conf, err := client.GetNGAVConf(ctx)
+		if err != nil {
+			t.Fatalf("get ngav conf failed: %v", err)
+		}
+		t.Logf("current ngav conf: %+v", conf)
+
+		// 切换状态
+		err = client.SwitchNGAVStatus(ctx, "off")
+		if err != nil {
+			t.Fatalf("switch ngav status failed: %v", err)
+		}
+		t.Logf("settings_switch_ngav_status done")
+	})
 }
 
 func mustLoadLocalConfig(t *testing.T) config.Config {

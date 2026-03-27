@@ -40,6 +40,22 @@ type Client interface {
 	ListTasks(ctx context.Context, req ListTasksRequest) (ListTasksResponse, error)
 	GetTaskResult(ctx context.Context, taskID string) (TaskResult, error)
 	SendInstruction(ctx context.Context, clientID string, instructionName string, taskName string) (InstructionResult, error)
+
+	// Virus Scan
+	AddVirusScan(ctx context.Context, req AddVirusScanRequest) error
+	UpdateVirusScan(ctx context.Context, req UpdateVirusScanRequest) error
+	CancelVirusScan(ctx context.Context, rid string) error
+	ListVirusScans(ctx context.Context, req ListVirusScansRequest) (ListVirusScansResponse, error)
+	ListVirusScanRecords(ctx context.Context, req ListVirusScanRecordsRequest) (ListVirusScanRecordsResponse, error)
+
+	// Virus Statistics
+	ListVirusByHost(ctx context.Context, req ListVirusByHostRequest) (ListVirusByHostResponse, error)
+	ListVirusByHash(ctx context.Context, req ListVirusByHashRequest) (ListVirusByHashResponse, error)
+	ListVirusHashHosts(ctx context.Context, req ListVirusHashHostsRequest) (ListVirusHashHostsResponse, error)
+
+	// NGAV Settings
+	GetNGAVConf(ctx context.Context) (map[string]any, error)
+	SwitchNGAVStatus(ctx context.Context, switchStatus string) error
 }
 
 type OpenAPIClient struct {
@@ -350,6 +366,223 @@ type ProcessDetail struct {
 	ThreadFeature  int    `json:"thread_feature"`
 	CodeFeature    int    `json:"code_feature"`
 	AddressFeature int    `json:"address_feature"`
+}
+
+// Virus Scan Management
+
+type AddVirusScanRequest struct {
+	ScanType         int              `json:"scan_type"`
+	PlanName         string           `json:"plan_name"`
+	PlanType         int              `json:"plan_type"`
+	Scope            int              `json:"scope"`
+	Contents         map[string]any   `json:"contents,omitempty"`
+	ClientID         string           `json:"client_id,omitempty"`
+	ExecuteStartTime int64            `json:"execute_start_time,omitempty"`
+	ExecuteCycle     int              `json:"execute_cycle,omitempty"`
+	CycleSetting     bool             `json:"cycle_setting,omitempty"`
+	GroupIDs         []int            `json:"group_ids,omitempty"`
+}
+
+type UpdateVirusScanRequest struct {
+	RID              string           `json:"rid"`
+	ScanType         int              `json:"scan_type,omitempty"`
+	PlanName         string           `json:"plan_name,omitempty"`
+	PlanType         int              `json:"plan_type,omitempty"`
+	Scope            int              `json:"scope,omitempty"`
+	Contents         map[string]any   `json:"contents,omitempty"`
+	ClientID         string           `json:"client_id,omitempty"`
+	ExecuteStartTime int64            `json:"execute_start_time,omitempty"`
+	ExecuteCycle     int              `json:"execute_cycle,omitempty"`
+	CycleSetting     bool             `json:"cycle_setting,omitempty"`
+	GroupIDs         []int            `json:"group_ids,omitempty"`
+}
+
+type ListVirusScansRequest struct {
+	PlanName     string      `json:"plan_name,omitempty"`
+	Scope        int         `json:"scope,omitempty"`
+	PlanType     int         `json:"plan_type,omitempty"`
+	CycleSetting int         `json:"cycle_setting,omitempty"`
+	ScanType     int         `json:"scan_type,omitempty"`
+	UpdateTime   *TimeFilter `json:"update_time,omitempty"`
+	Status       string      `json:"status,omitempty"`
+	OperationUser string     `json:"operation_user,omitempty"`
+	Page         int         `json:"page"`
+	Limit        int         `json:"limit"`
+}
+
+type VirusScan struct {
+	RID              string   `json:"rid"`
+	OrgName          string   `json:"org_name"`
+	ClientID         string   `json:"client_id"`
+	PlanName         string   `json:"plan_name"`
+	PlanType         int      `json:"plan_type"`
+	ExecuteStartTime int64    `json:"execute_start_time"`
+	ExecuteCycle     int      `json:"execute_cycle"`
+	CycleSetting     bool     `json:"cycle_setting"`
+	ExecuteDesc      string   `json:"execute_desc"`
+	Scope            int      `json:"scope"`
+	ScopeContent     string   `json:"scope_content"`
+	Contents         string   `json:"contents"`
+	GroupIDs         []int    `json:"group_ids"`
+	ScanType         int      `json:"scan_type"`
+	CreateTime       int64    `json:"create_time"`
+	UpdateTime       int64    `json:"update_time"`
+	OperationUser    string   `json:"operation_user"`
+	OperationUID     string   `json:"operation_uid"`
+	Status           int      `json:"status"`
+	IsDeleted        int      `json:"is_deleted"`
+}
+
+type ListVirusScansResponse struct {
+	Total   int         `json:"total"`
+	Results []VirusScan `json:"results"`
+}
+
+type ListVirusScanRecordsRequest struct {
+	RID            string      `json:"rid,omitempty"`
+	TaskID         string      `json:"task_id,omitempty"`
+	ExecutionBatch string      `json:"execution_batch,omitempty"`
+	HostName       string      `json:"host_name,omitempty"`
+	ClientID       string      `json:"client_id,omitempty"`
+	ScanType       string      `json:"scan_type,omitempty"`
+	Status         string      `json:"status,omitempty"`
+	StartTime      *TimeFilter `json:"start_time,omitempty"`
+	EndTime        *TimeFilter `json:"end_time,omitempty"`
+	Page           int         `json:"page"`
+	Limit          int         `json:"limit"`
+}
+
+type VirusScanRecord struct {
+	ID               string `json:"id"`
+	TaskID           string `json:"task_id"`
+	ExecutionBatch   string `json:"execution_batch"`
+	RID              string `json:"rid"`
+	OrgName          string `json:"org_name"`
+	ClientID         string `json:"client_id"`
+	HostName         string `json:"host_name"`
+	ScanType         string `json:"scan_type"`
+	Contents         string `json:"contents"`
+	Status           int    `json:"status"`
+	CreateTime       int64  `json:"create_time"`
+	StartTime        int64  `json:"start_time"`
+	EndTime          int64  `json:"end_time"`
+	UpdateTime       int64  `json:"update_time"`
+	VirusFileNum     int    `json:"virus_file_num"`
+	MemoryVirusNum   int    `json:"memory_virus_num"`
+	ResponseTime     int64  `json:"response_time"`
+	PlanName         string `json:"plan_name"`
+	HostStatus       string `json:"host_status"`
+}
+
+type ListVirusScanRecordsResponse struct {
+	Total   int              `json:"total"`
+	Results []VirusScanRecord `json:"results"`
+}
+
+// Virus Statistics
+
+type ListVirusByHostRequest struct {
+	ClientID       string      `json:"client_id,omitempty"`
+	Username       string      `json:"username,omitempty"`
+	HostName       string      `json:"host_name,omitempty"`
+	Importance     int         `json:"importance,omitempty"`
+	MacAddress     string      `json:"mac_address,omitempty"`
+	ClientIP       string      `json:"client_ip,omitempty"`
+	RMConnectIP    string      `json:"rmconnectip,omitempty"`
+	Status         int         `json:"status,omitempty"`
+	LastCheckedTime *TimeFilter `json:"last_checked_time,omitempty"`
+	Page           int         `json:"page"`
+	Limit          int         `json:"limit"`
+}
+
+type VirusByHost struct {
+	HostName       string `json:"host_name"`
+	ClientID       string `json:"client_id"`
+	Status         int    `json:"status"`
+	Username       string `json:"username"`
+	Importance     int    `json:"importance"`
+	ClientIP       string `json:"client_ip"`
+	RMConnectIP    string `json:"rm_connect_ip"`
+	MacAddress     string `json:"mac_address"`
+	VirusFileCount int    `json:"virus_file_count"`
+	VirusMemoryCount int   `json:"virus_memory_count"`
+	LastCheckedTime int64  `json:"last_checked_time"`
+	LastActive     int64  `json:"last_active"`
+	HostStatus     string `json:"host_status"`
+	Path           string `json:"path"`
+	SHA1           string `json:"sha1,omitempty"`
+	MD5            string `json:"md5,omitempty"`
+}
+
+type ListVirusByHostResponse struct {
+	Total   int           `json:"total"`
+	Results []VirusByHost `json:"results"`
+}
+
+type ListVirusByHashRequest struct {
+	LastCheckedTime *TimeFilter `json:"last_checked_time,omitempty"`
+	Name            string      `json:"name,omitempty"`
+	SHA1            string      `json:"sha1,omitempty"`
+	MD5             string      `json:"md5,omitempty"`
+	Page            int         `json:"page"`
+	Limit           int         `json:"limit"`
+}
+
+type VirusByHash struct {
+	Name       string   `json:"name"`
+	SHA1       string   `json:"sha1"`
+	MD5        string   `json:"md5"`
+	Size       int64     `json:"size"`
+	HostCount  int      `json:"host_count"`
+	ClientIDs  []string `json:"client_ids"`
+	EndTime    int64    `json:"end_time"`
+	ID         string   `json:"id"`
+}
+
+type ListVirusByHashResponse struct {
+	Total   int         `json:"total"`
+	Results []VirusByHash `json:"results"`
+}
+
+type ListVirusHashHostsRequest struct {
+	SHA1            string      `json:"sha1,omitempty"`
+	ClientID        string      `json:"client_id,omitempty"`
+	Username        string      `json:"username,omitempty"`
+	HostName        string      `json:"host_name,omitempty"`
+	Importance      int         `json:"importance,omitempty"`
+	MacAddress      string      `json:"mac_address,omitempty"`
+	ClientIP        string      `json:"client_ip,omitempty"`
+	RMConnectIP     string      `json:"rmconnectip,omitempty"`
+	Status          int         `json:"status,omitempty"`
+	HostStatus      string      `json:"host_status,omitempty"`
+	Path            string      `json:"path,omitempty"`
+	LastCheckedTime *TimeFilter `json:"last_checked_time,omitempty"`
+	Page            int         `json:"page"`
+	Limit           int         `json:"limit"`
+}
+
+type VirusHashHost struct {
+	HostName        string `json:"host_name"`
+	ClientID        string `json:"client_id"`
+	Status          int    `json:"status"`
+	Username        string `json:"username"`
+	Importance      int    `json:"importance"`
+	ClientIP        string `json:"client_ip"`
+	RMConnectIP     string `json:"rm_connect_ip"`
+	MacAddress      string `json:"mac_address"`
+	VirusFileCount  int    `json:"virus_file_count"`
+	VirusMemoryCount int   `json:"virus_memory_count"`
+	LastCheckedTime int64  `json:"last_checked_time"`
+	LastActive      int64  `json:"last_active"`
+	HostStatus      string `json:"host_status"`
+	Path            string `json:"path"`
+	SHA1            string `json:"sha1"`
+	MD5             string `json:"md5"`
+}
+
+type ListVirusHashHostsResponse struct {
+	Total   int             `json:"total"`
+	Results []VirusHashHost `json:"results"`
 }
 
 type TimeFilter struct {
@@ -1169,4 +1402,412 @@ func (c *OpenAPIClient) invalidatePlatformToken() {
 	defer c.tokenMu.Unlock()
 	c.platformToken = ""
 	c.tokenExpiresAt = time.Time{}
+}
+
+// Virus Scan Management
+
+func (c *OpenAPIClient) AddVirusScan(ctx context.Context, req AddVirusScanRequest) error {
+	payload := map[string]any{
+		"scan_type": req.ScanType,
+		"plan_name": req.PlanName,
+		"plan_type": req.PlanType,
+		"scope":     req.Scope,
+	}
+	if req.Contents != nil {
+		payload["contents"] = req.Contents
+	}
+	if req.ClientID != "" {
+		payload["client_id"] = req.ClientID
+	}
+	if req.ExecuteStartTime > 0 {
+		payload["execute_start_time"] = req.ExecuteStartTime
+	}
+	if req.ExecuteCycle > 0 {
+		payload["execute_cycle"] = req.ExecuteCycle
+	}
+	if req.CycleSetting {
+		payload["cycle_setting"] = req.CycleSetting
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/virus_scan/add", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("add virus scan failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) UpdateVirusScan(ctx context.Context, req UpdateVirusScanRequest) error {
+	payload := map[string]any{
+		"rid": req.RID,
+	}
+	if req.ScanType > 0 {
+		payload["scan_type"] = req.ScanType
+	}
+	if req.PlanName != "" {
+		payload["plan_name"] = req.PlanName
+	}
+	if req.PlanType > 0 {
+		payload["plan_type"] = req.PlanType
+	}
+	if req.Scope > 0 {
+		payload["scope"] = req.Scope
+	}
+	if req.Contents != nil {
+		payload["contents"] = req.Contents
+	}
+	if req.ClientID != "" {
+		payload["client_id"] = req.ClientID
+	}
+	if req.ExecuteStartTime > 0 {
+		payload["execute_start_time"] = req.ExecuteStartTime
+	}
+	if req.ExecuteCycle > 0 {
+		payload["execute_cycle"] = req.ExecuteCycle
+	}
+	if req.CycleSetting {
+		payload["cycle_setting"] = req.CycleSetting
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/virus_scan/update", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("update virus scan failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) CancelVirusScan(ctx context.Context, rid string) error {
+	payload := map[string]any{"rid": rid}
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/virus_scan/cancel", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("cancel virus scan failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) ListVirusScans(ctx context.Context, req ListVirusScansRequest) (ListVirusScansResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+	}
+	if req.PlanName != "" {
+		payload["plan_name"] = req.PlanName
+	}
+	if req.Scope > 0 {
+		payload["scope"] = req.Scope
+	}
+	if req.PlanType > 0 {
+		payload["plan_type"] = req.PlanType
+	}
+	if req.CycleSetting > 0 {
+		payload["cycle_setting"] = req.CycleSetting
+	}
+	if req.ScanType > 0 {
+		payload["scan_type"] = req.ScanType
+	}
+	if req.UpdateTime != nil {
+		payload["update_time"] = req.UpdateTime
+	}
+	if req.Status != "" {
+		payload["status"] = req.Status
+	}
+	if req.OperationUser != "" {
+		payload["operation_user"] = req.OperationUser
+	}
+
+	var envelope apiEnvelope[ListVirusScansResponse]
+	if err := c.post(ctx, "/virus_scan/list", payload, &envelope); err != nil {
+		return ListVirusScansResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListVirusScansResponse{}, fmt.Errorf("list virus scans failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) ListVirusScanRecords(ctx context.Context, req ListVirusScanRecordsRequest) (ListVirusScanRecordsResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+	}
+	if req.RID != "" {
+		payload["rid"] = req.RID
+	}
+	if req.TaskID != "" {
+		payload["task_id"] = req.TaskID
+	}
+	if req.ExecutionBatch != "" {
+		payload["execution_batch"] = req.ExecutionBatch
+	}
+	if req.HostName != "" {
+		payload["host_name"] = req.HostName
+	}
+	if req.ClientID != "" {
+		payload["client_id"] = req.ClientID
+	}
+	if req.ScanType != "" {
+		payload["scan_type"] = req.ScanType
+	}
+	if req.Status != "" {
+		payload["status"] = req.Status
+	}
+	if req.StartTime != nil {
+		payload["start_time"] = req.StartTime
+	}
+	if req.EndTime != nil {
+		payload["end_time"] = req.EndTime
+	}
+
+	var envelope apiEnvelope[ListVirusScanRecordsResponse]
+	if err := c.post(ctx, "/virus_scan/scan_record", payload, &envelope); err != nil {
+		return ListVirusScanRecordsResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListVirusScanRecordsResponse{}, fmt.Errorf("list virus scan records failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+// Virus Statistics
+
+func (c *OpenAPIClient) ListVirusByHost(ctx context.Context, req ListVirusByHostRequest) (ListVirusByHostResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+	}
+	if req.ClientID != "" {
+		payload["client_id"] = req.ClientID
+	}
+	if req.Username != "" {
+		payload["username"] = req.Username
+	}
+	if req.HostName != "" {
+		payload["host_name"] = req.HostName
+	}
+	if req.Importance > 0 {
+		payload["importance"] = req.Importance
+	}
+	if req.MacAddress != "" {
+		payload["mac_address"] = req.MacAddress
+	}
+	if req.ClientIP != "" {
+		payload["client_ip"] = req.ClientIP
+	}
+	if req.RMConnectIP != "" {
+		payload["rmconnectip"] = req.RMConnectIP
+	}
+	if req.Status > 0 {
+		payload["status"] = req.Status
+	}
+	if req.LastCheckedTime != nil {
+		payload["last_checked_time"] = req.LastCheckedTime
+	}
+
+	var envelope apiEnvelope[ListVirusByHostResponse]
+	if err := c.post(ctx, "/virus/host/list", payload, &envelope); err != nil {
+		return ListVirusByHostResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListVirusByHostResponse{}, fmt.Errorf("list virus by host failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) ListVirusByHash(ctx context.Context, req ListVirusByHashRequest) (ListVirusByHashResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+	}
+	if req.LastCheckedTime != nil {
+		payload["last_checked_time"] = req.LastCheckedTime
+	}
+	if req.Name != "" {
+		payload["name"] = req.Name
+	}
+	if req.SHA1 != "" {
+		payload["sha1"] = req.SHA1
+	}
+	if req.MD5 != "" {
+		payload["md5"] = req.MD5
+	}
+
+	var envelope apiEnvelope[ListVirusByHashResponse]
+	if err := c.post(ctx, "/virus/hash/list", payload, &envelope); err != nil {
+		return ListVirusByHashResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListVirusByHashResponse{}, fmt.Errorf("list virus by hash failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) ListVirusHashHosts(ctx context.Context, req ListVirusHashHostsRequest) (ListVirusHashHostsResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+	}
+	if req.SHA1 != "" {
+		payload["sha1"] = req.SHA1
+	}
+	if req.ClientID != "" {
+		payload["client_id"] = req.ClientID
+	}
+	if req.Username != "" {
+		payload["username"] = req.Username
+	}
+	if req.HostName != "" {
+		payload["host_name"] = req.HostName
+	}
+	if req.Importance > 0 {
+		payload["importance"] = req.Importance
+	}
+	if req.MacAddress != "" {
+		payload["mac_address"] = req.MacAddress
+	}
+	if req.ClientIP != "" {
+		payload["client_ip"] = req.ClientIP
+	}
+	if req.RMConnectIP != "" {
+		payload["rmconnectip"] = req.RMConnectIP
+	}
+	if req.Status > 0 {
+		payload["status"] = req.Status
+	}
+	if req.HostStatus != "" {
+		payload["host_status"] = req.HostStatus
+	}
+	if req.Path != "" {
+		payload["path"] = req.Path
+	}
+	if req.LastCheckedTime != nil {
+		payload["last_checked_time"] = req.LastCheckedTime
+	}
+
+	var envelope apiEnvelope[ListVirusHashHostsResponse]
+	if err := c.post(ctx, "/virus/hash/host/list", payload, &envelope); err != nil {
+		return ListVirusHashHostsResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListVirusHashHostsResponse{}, fmt.Errorf("list virus hash hosts failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+// NGAV Settings
+
+func (c *OpenAPIClient) GetNGAVConf(ctx context.Context) (map[string]any, error) {
+	var envelope apiEnvelope[map[string]any]
+	if err := c.get(ctx, "/settings/get_ngav_conf", nil, &envelope); err != nil {
+		return nil, err
+	}
+	if envelope.Error != 0 {
+		return nil, fmt.Errorf("get ngav conf failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) SwitchNGAVStatus(ctx context.Context, switchStatus string) error {
+	payload := map[string]any{"switch": switchStatus}
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/settings/switch_ngav_status", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("switch ngav status failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) get(ctx context.Context, path string, payload any, out any) error {
+	headers := make(map[string]string, len(c.headers)+1)
+	for key, value := range c.headers {
+		headers[key] = value
+	}
+	if headers["Authorization"] == "" && c.cfg.Platform.Enabled {
+		token, err := c.platformTokenValue(ctx)
+		if err != nil {
+			return err
+		}
+		headers["Authorization"] = token
+	}
+	return c.getWithHeaders(ctx, c.baseURL+path, headers, payload, out)
+}
+
+func (c *OpenAPIClient) getWithHeaders(ctx context.Context, url string, headers map[string]string, payload any, out any) error {
+	if payload != nil {
+		body, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("marshal edr payload: %w", err)
+		}
+		url += "?" + string(body)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("create edr request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("execute edr request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("edr http %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode edr response: %w", err)
+	}
+	return nil
 }
