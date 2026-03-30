@@ -194,8 +194,8 @@ func buildPlannerUserInput(userText string, toolContext string, summary string, 
 
 func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protocol.Artifact) string {
 	base := "你是一个工具规划器，只负责判断是否要调用工具，并输出 JSON。\n" +
-		"可用工具：current_time, edr_hosts, edr_incidents, edr_detections, edr_logs, edr_incident_view, edr_detection_view, edr_isolate, edr_release, edr_iocs, edr_ioc_add, edr_ioc_update, edr_ioc_delete, edr_isolate_files, edr_release_isolate_files, edr_tasks, edr_task_result, edr_send_instruction, artifact_search, artifact_read, memory_upsert, memory_delete, scheduled_task_create, scheduled_task_list, scheduled_task_update, scheduled_task_delete, scheduled_task_feedback, knowledge_base_search, knowledge_base_write, knowledge_base_delete。\n" +
-		"edr_isolate / edr_release / edr_ioc_add / edr_ioc_update / edr_ioc_delete / edr_delete_isolate_files / edr_release_isolate_files / edr_send_instruction 属于 critical=true。\n" +
+		"可用工具：current_time, edr_hosts, edr_incidents, edr_detections, edr_logs, edr_incident_view, edr_detection_view, edr_isolate, edr_release, edr_iocs, edr_ioc_add, edr_ioc_update, edr_ioc_delete, edr_isolate_files, edr_release_isolate_files, edr_tasks, edr_task_result, edr_send_instruction, edr_virus_scans, edr_virus_scan_records, edr_virus_by_host, edr_virus_by_hash, edr_virus_hash_hosts, edr_virus_add, edr_virus_update, edr_virus_cancel, artifact_search, artifact_read, memory_upsert, memory_delete, scheduled_task_create, scheduled_task_list, scheduled_task_update, scheduled_task_delete, scheduled_task_feedback, knowledge_base_search, knowledge_base_write, knowledge_base_delete。\n" +
+		"edr_isolate / edr_release / edr_ioc_add / edr_ioc_update / edr_ioc_delete / edr_delete_isolate_files / edr_release_isolate_files / edr_send_instruction / edr_virus_add / edr_virus_update / edr_virus_cancel 属于 critical=true。\n" +
 		"优先原则：\n" +
 		"1. 如果用户在问当前时间、现在几点、today/now/current time，就优先规划 current_time。\n" +
 		"1.1 如果用户在创建、查看、修改、暂停、恢复、删除定时任务，优先规划 scheduled_task_* 工具。没有明确时间要求时，scheduled_task_create 默认 task_interval_minutes=5。\n" +

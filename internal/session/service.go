@@ -106,11 +106,11 @@ func (s *Service) HandleInbound(ctx context.Context, msg protocol.InboundMessage
 		return response, err
 	}
 
-	if response, ok, err := s.handleNaturalLanguageEDR(ctx, sessionKey, msg.Text, locale, reporter); ok || err != nil {
+	if response, ok, err := s.handlePlannedTools(ctx, sessionKey, msg.Text, locale, reporter); ok || err != nil {
 		return response, err
 	}
 
-	if response, ok, err := s.handlePlannedTools(ctx, sessionKey, msg.Text, locale, reporter); ok || err != nil {
+	if response, ok, err := s.handleNaturalLanguageEDR(ctx, sessionKey, msg.Text, locale, reporter); ok || err != nil {
 		return response, err
 	}
 
@@ -1121,11 +1121,6 @@ func (s *Service) handleNaturalLanguageEDR(ctx context.Context, sessionKey strin
 		return "", false, nil
 	}
 
-	// Virus actions now go through planner, skip them here
-	if isVirusAction(decision.Action) {
-		return "", false, nil
-	}
-
 	if decision.NeedsConfirmation {
 		response := s.msg(locale, "write_action_hint", nil)
 		response, err = s.storeAssistantReply(ctx, sessionKey, response)
@@ -1137,14 +1132,6 @@ func (s *Service) handleNaturalLanguageEDR(ctx context.Context, sessionKey strin
 		return "", true, err
 	}
 	return response, true, nil
-}
-
-func isVirusAction(action string) bool {
-	switch action {
-	case "virus_scan", "virus_scan_record", "virus_by_host", "virus_by_hash", "virus_hash_hosts", "virus_add", "virus_update", "virus_cancel":
-		return true
-	}
-	return false
 }
 
 func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text string, locale string, reporter *progress.Reporter) (string, bool, error) {
@@ -1410,9 +1397,9 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		}
 		reporter.Step(ctx, "我正在更新扫描计划。")
 		callErr := s.edr.UpdateVirusScan(ctx, edr.UpdateVirusScanRequest{
-			RID:              decision.RID,
-			PlanName:         decision.PlanName,
-			ScanType:         decision.ScanType,
+			RID:      decision.RID,
+			PlanName: decision.PlanName,
+			ScanType: decision.ScanType,
 		})
 		err = callErr
 		if err == nil {
