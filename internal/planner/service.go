@@ -62,6 +62,11 @@ type ToolCall struct {
 	IsolateFileGUIDs      string `json:"isolate_file_guids,omitempty"`
 	IsolateFileAddExcl    bool   `json:"isolate_file_add_exclusion,omitempty"`
 	IsolateFileReleaseAll bool   `json:"isolate_file_release_all,omitempty"`
+	PlanName              string `json:"plan_name,omitempty"`
+	ScanType              int    `json:"scan_type,omitempty"`
+	PlanType             int    `json:"plan_type,omitempty"`
+	Scope                 int    `json:"scope,omitempty"`
+	RID                   string `json:"rid,omitempty"`
 }
 
 type Plan struct {

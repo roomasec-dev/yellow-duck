@@ -768,9 +768,9 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 
 func callNeedsGroundedEDRAnswer(name string) bool {
 	switch name {
-	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result":
+	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_virus_scans", "edr_virus_scan_records", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts":
 		return true
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_virus_add", "edr_virus_update", "edr_virus_cancel":
 		return false
 	default:
 		return false
@@ -918,24 +918,6 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return s.formatIOCs(ctx, result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
-	case "edr_ioc_add":
-		reporter.Step(ctx, "我在添加 IOC。")
-		if err := s.edr.AddIOC(ctx, edr.AddIOCRequest{Action: call.IOCAction, Hash: call.IOCHash, Description: call.IOCDescription, ExpirationDate: call.IOCExpirationDate, FileName: call.IOCFileName, HostType: call.IOCHostType}); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("IOC %s 已添加完成。", call.IOCHash), nil
-	case "edr_ioc_update":
-		reporter.Step(ctx, "我在更新 IOC。")
-		if err := s.edr.UpdateIOC(ctx, edr.UpdateIOCRequest{ID: call.IOCID, Action: call.IOCAction, Description: call.IOCDescription, ExpirationDate: call.IOCExpirationDate}); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("IOC %s 已更新完成。", call.IOCID), nil
-	case "edr_ioc_delete":
-		reporter.Step(ctx, "我在删除 IOC。")
-		if err := s.edr.DeleteIOC(ctx, call.IOCID); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("IOC %s 已删除。", call.IOCID), nil
 	case "edr_isolate_files":
 		reporter.Step(ctx, "我在拉取隔离文件列表。")
 		result, err := s.edr.ListIsolateFiles(ctx, edr.ListIsolateFilesRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
@@ -943,34 +925,6 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return s.formatIsolateFiles(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
-	case "edr_delete_isolate_files":
-		reporter.Step(ctx, "我在删除隔离文件。")
-		guids := strings.Split(strings.TrimSpace(call.IsolateFileGUIDs), ",")
-		cleaned := make([]string, 0, len(guids))
-		for _, g := range guids {
-			g = strings.TrimSpace(g)
-			if g != "" {
-				cleaned = append(cleaned, g)
-			}
-		}
-		if err := s.edr.DeleteIsolateFiles(ctx, cleaned); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("已删除 %d 条隔离文件记录。", len(cleaned)), nil
-	case "edr_release_isolate_files":
-		reporter.Step(ctx, "我在放行隔离文件。")
-		guids := strings.Split(strings.TrimSpace(call.IsolateFileGUIDs), ",")
-		cleaned := make([]string, 0, len(guids))
-		for _, g := range guids {
-			g = strings.TrimSpace(g)
-			if g != "" {
-				cleaned = append(cleaned, g)
-			}
-		}
-		if err := s.edr.ReleaseIsolateFiles(ctx, edr.ReleaseIsolateFilesRequest{GUIDs: cleaned, IsAddExclusion: call.IsolateFileAddExcl, ReleaseAllHash: call.IsolateFileReleaseAll}); err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("已放行 %d 个隔离文件。", len(cleaned)), nil
 	case "edr_tasks":
 		reporter.Step(ctx, "我在拉取指令任务列表。")
 		result, err := s.edr.ListTasks(ctx, edr.ListTasksRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
@@ -985,19 +939,41 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return formatTaskResult(result), nil
-	case "edr_send_instruction":
-		if call.ClientID == "" {
-			return "", fmt.Errorf("发送指令需要提供 client_id")
-		}
-		if call.InstructionName == "" {
-			return "", fmt.Errorf("发送指令需要提供 instruction_name")
-		}
-		reporter.Step(ctx, "我正在下发指令到目标主机。")
-		result, err := s.edr.SendInstruction(ctx, call.ClientID, call.InstructionName, "AI 助手下发指令")
+	case "edr_virus_scans":
+		reporter.Step(ctx, "我在拉取扫描计划列表。")
+		result, err := s.edr.ListVirusScans(ctx, edr.ListVirusScansRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("指令已下发成功，任务ID: %s", result.TaskID), nil
+		return formatVirusScans(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_virus_scan_records":
+		reporter.Step(ctx, "我在拉取扫描记录。")
+		result, err := s.edr.ListVirusScanRecords(ctx, edr.ListVirusScanRecordsRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		if err != nil {
+			return "", err
+		}
+		return formatVirusScanRecords(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_virus_by_host":
+		reporter.Step(ctx, "我在按主机查询病毒信息。")
+		result, err := s.edr.ListVirusByHost(ctx, edr.ListVirusByHostRequest{HostName: call.Hostname, ClientID: call.ClientID, Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		if err != nil {
+			return "", err
+		}
+		return formatVirusByHost(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_virus_by_hash":
+		reporter.Step(ctx, "我在按哈希查询病毒信息。")
+		result, err := s.edr.ListVirusByHash(ctx, edr.ListVirusByHashRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		if err != nil {
+			return "", err
+		}
+		return formatVirusByHash(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_virus_hash_hosts":
+		reporter.Step(ctx, "我在按哈希查询关联主机。")
+		result, err := s.edr.ListVirusHashHosts(ctx, edr.ListVirusHashHostsRequest{HostName: call.Hostname, ClientID: call.ClientID, Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		if err != nil {
+			return "", err
+		}
+		return formatVirusHashHosts(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	default:
 		return "", nil
 	}
@@ -1090,6 +1066,34 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 			return "", err
 		}
 		return fmt.Sprintf("指令已下发成功，任务ID: %s", result.TaskID), nil
+	case "edr_virus_add":
+		reporter.Step(ctx, "我正在创建扫描计划。")
+		if err := s.edr.AddVirusScan(ctx, edr.AddVirusScanRequest{
+			PlanName: call.PlanName,
+			ScanType: call.ScanType,
+			PlanType: call.PlanType,
+			Scope:    call.Scope,
+			ClientID: call.ClientID,
+		}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("扫描计划「%s」创建成功", call.PlanName), nil
+	case "edr_virus_update":
+		reporter.Step(ctx, "我正在更新扫描计划。")
+		if err := s.edr.UpdateVirusScan(ctx, edr.UpdateVirusScanRequest{
+			RID:      call.RID,
+			PlanName: call.PlanName,
+			ScanType: call.ScanType,
+		}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("扫描计划 %s 更新成功", call.RID), nil
+	case "edr_virus_cancel":
+		reporter.Step(ctx, "我正在取消扫描计划。")
+		if err := s.edr.CancelVirusScan(ctx, call.RID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("扫描计划 %s 已取消", call.RID), nil
 	default:
 		return "", fmt.Errorf("unsupported confirmed action: %s", call.Name)
 	}
@@ -1097,7 +1101,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 
 func isCriticalTool(name string) bool {
 	switch name {
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_virus_add", "edr_virus_update", "edr_virus_cancel":
 		return true
 	default:
 		return false
@@ -1117,6 +1121,11 @@ func (s *Service) handleNaturalLanguageEDR(ctx context.Context, sessionKey strin
 		return "", false, nil
 	}
 
+	// Virus actions now go through planner, skip them here
+	if isVirusAction(decision.Action) {
+		return "", false, nil
+	}
+
 	if decision.NeedsConfirmation {
 		response := s.msg(locale, "write_action_hint", nil)
 		response, err = s.storeAssistantReply(ctx, sessionKey, response)
@@ -1128,6 +1137,14 @@ func (s *Service) handleNaturalLanguageEDR(ctx context.Context, sessionKey strin
 		return "", true, err
 	}
 	return response, true, nil
+}
+
+func isVirusAction(action string) bool {
+	switch action {
+	case "virus_scan", "virus_scan_record", "virus_by_host", "virus_by_hash", "virus_hash_hosts", "virus_add", "virus_update", "virus_cancel":
+		return true
+	}
+	return false
 }
 
 func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text string, locale string, reporter *progress.Reporter) (string, bool, error) {
