@@ -863,6 +863,25 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return formatIncidents(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_batch_deal_incident":
+		reporter.Step(ctx, "我正在批量处置事件。")
+		result, err := s.edr.BatchDealIncident(ctx, edr.BatchDealIncidentRequest{
+			IDs:    strings.Split(strings.TrimSpace(call.ClientID), ","),
+			Allow:  true,
+			Status: call.ScanType,
+			Scene:  "batch",
+		})
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("批量处置完成：%d 个事件已处理", result.TotalIncident), nil
+	case "edr_incident_r2_summary":
+		reporter.Step(ctx, "我在拉取事件 R2 摘要。")
+		result, err := s.edr.IncidentR2Summary(ctx, call.IncidentID)
+		if err != nil {
+			return "", err
+		}
+		return formatIncidentR2Summary(result), nil
 	case "edr_detections":
 		reporter.Step(ctx, "我在拉取近期行为检出。")
 		result, err := s.edr.ListDetections(ctx, edr.ListDetectionsRequest{Page: positiveOr(call.Page, 1), PageSize: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
@@ -870,6 +889,20 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return formatDetections(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_event_log_alarms":
+		reporter.Step(ctx, "我在拉取事件日志告警列表。")
+		result, err := s.edr.ListEventLogAlarms(ctx, edr.ListEventLogAlarmsRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		if err != nil {
+			return "", err
+		}
+		return formatEventLogAlarms(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_detections_proxy":
+		reporter.Step(ctx, "我在拉取检测列表（console）。")
+		result, err := s.edr.ListDetectionsProxy(ctx, edr.ListDetectionsProxyRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		if err != nil {
+			return "", err
+		}
+		return formatDetectionsProxy(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_logs":
 		reporter.Step(ctx, "我在拉取行为日志。")
 		result, err := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: call.ClientID, OSType: call.OSType, Operation: call.Operation, StartTime: call.StartTime, EndTime: call.EndTime, FilterField: call.FilterField, FilterOperator: call.FilterOp, FilterValue: call.FilterValue, Page: positiveOr(call.Page, 1), PageSize: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
@@ -974,6 +1007,55 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return formatVirusHashHosts(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_ioas":
+		reporter.Step(ctx, "我在拉取 IOA 列表。")
+		result, err := s.edr.ListIOAs(ctx, edr.ListIOAsRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		if err != nil {
+			return "", err
+		}
+		return formatIOAs(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_ioa_audit_log":
+		reporter.Step(ctx, "我在拉取 IOA 活动记录。")
+		result, err := s.edr.ListIOAAuditLogs(ctx, edr.ListIOAAuditLogsRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		if err != nil {
+			return "", err
+		}
+		return formatIOAAuditLogs(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_ioa_networks":
+		reporter.Step(ctx, "我在拉取 IOA 网络排除列表。")
+		result, err := s.edr.ListIOANetworks(ctx, edr.ListIOANetworksRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		if err != nil {
+			return "", err
+		}
+		return formatIOANetworks(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_strategies":
+		reporter.Step(ctx, "我在拉取策略列表。")
+		result, err := s.edr.ListStrategies(ctx, edr.ListStrategiesRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize), Type: call.InstructionName})
+		if err != nil {
+			return "", err
+		}
+		return formatStrategies(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_strategy_single":
+		reporter.Step(ctx, "我在拉取单个策略。")
+		result, err := s.edr.GetStrategySingle(ctx, call.InstructionName)
+		if err != nil {
+			return "", err
+		}
+		return formatStrategySingle(result), nil
+	case "edr_strategy_state":
+		reporter.Step(ctx, "我在拉取策略状态统计。")
+		result, err := s.edr.GetStrategyState(ctx)
+		if err != nil {
+			return "", err
+		}
+		return formatStrategyState(result), nil
+	case "edr_host_offline":
+		reporter.Step(ctx, "我在拉取主机离线配置。")
+		result, err := s.edr.GetHostOfflineConf(ctx)
+		if err != nil {
+			return "", err
+		}
+		return formatHostOfflineConf(result), nil
 	default:
 		return "", nil
 	}
@@ -1094,6 +1176,134 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 			return "", err
 		}
 		return fmt.Sprintf("扫描计划 %s 已取消", call.RID), nil
+	case "edr_ioa_add":
+		reporter.Step(ctx, "我正在添加 IOA。")
+		if err := s.edr.AddIOA(ctx, edr.AddIOARequest{
+			CommandLine:   call.Operation,
+			Description:   call.Reason,
+			FileName:     call.IOCFileName,
+			HostType:     call.IOCHostType,
+			Severity:     call.KBQuery,
+		}); err != nil {
+			return "", err
+		}
+		return "IOA 添加成功", nil
+	case "edr_ioa_update":
+		reporter.Step(ctx, "我正在更新 IOA。")
+		if err := s.edr.UpdateIOA(ctx, edr.UpdateIOARequest{
+			ID:          call.IOCID,
+			Description: call.Reason,
+		}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("IOA %s 更新成功", call.IOCID), nil
+	case "edr_ioa_delete":
+		reporter.Step(ctx, "我正在删除 IOA。")
+		if err := s.edr.DeleteIOA(ctx, call.IOCID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("IOA %s 已删除", call.IOCID), nil
+	case "edr_ioa_network_add":
+		reporter.Step(ctx, "我正在添加 IOA 网络排除。")
+		if err := s.edr.AddIOANetwork(ctx, edr.AddIOANetworkRequest{
+			ExclusionName: call.PlanName,
+			IP:           call.ClientIP,
+			HostType:     call.IOCHostType,
+		}); err != nil {
+			return "", err
+		}
+		return "IOA 网络排除添加成功", nil
+	case "edr_ioa_network_update":
+		reporter.Step(ctx, "我正在更新 IOA 网络排除。")
+		if err := s.edr.UpdateIOANetwork(ctx, edr.UpdateIOANetworkRequest{
+			ID:            call.IOCID,
+			ExclusionName: call.PlanName,
+			IP:           call.ClientIP,
+		}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("IOA 网络排除 %s 更新成功", call.IOCID), nil
+	case "edr_ioa_network_delete":
+		reporter.Step(ctx, "我正在删除 IOA 网络排除。")
+		if err := s.edr.DeleteIOANetwork(ctx, call.IOCID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("IOA 网络排除 %s 已删除", call.IOCID), nil
+	case "edr_strategy_create":
+		reporter.Step(ctx, "我正在创建策略。")
+		result, err := s.edr.CreateStrategy(ctx, edr.CreateStrategyRequest{
+			Name:      call.PlanName,
+			Type:      call.InstructionName,
+			RangeType: call.Scope,
+		})
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("策略创建成功，ID: %s", result.StrategyID), nil
+	case "edr_strategy_update":
+		reporter.Step(ctx, "我正在更新策略。")
+		if err := s.edr.UpdateStrategy(ctx, edr.UpdateStrategyRequest{
+			StrategyID: call.RID,
+			Name:       call.PlanName,
+		}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("策略 %s 更新成功", call.RID), nil
+	case "edr_strategy_delete":
+		reporter.Step(ctx, "我正在删除策略。")
+		if err := s.edr.DeleteStrategy(ctx, call.RID, call.InstructionName); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("策略 %s 已删除", call.RID), nil
+	case "edr_strategy_status":
+		reporter.Step(ctx, "我正在更新策略状态。")
+		if err := s.edr.UpdateStrategyStatus(ctx, edr.UpdateStrategyStatusRequest{
+			StrategyID: call.RID,
+			Type:       call.InstructionName,
+			Status:     call.ScanType,
+		}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("策略 %s 状态已更新", call.RID), nil
+	case "edr_host_offline_save":
+		reporter.Step(ctx, "我正在保存主机离线配置。")
+		if err := s.edr.SaveHostOfflineConf(ctx, edr.SaveHostOfflineConfRequest{
+			Status: call.ScanType,
+			Setting: edr.HostOfflineSetting{
+				Timeout: call.Operation,
+			},
+		}); err != nil {
+			return "", err
+		}
+		return "主机离线配置已保存", nil
+	case "edr_add_host_blacklist":
+		reporter.Step(ctx, "我正在将主机加入黑名单。")
+		clientIDs := strings.Split(strings.TrimSpace(call.ClientID), ",")
+		cleaned := make([]string, 0, len(clientIDs))
+		for _, id := range clientIDs {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				cleaned = append(cleaned, id)
+			}
+		}
+		if err := s.edr.AddHostBlacklist(ctx, cleaned, call.Reason); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("已成功将 %d 台主机加入黑名单。", len(cleaned)), nil
+	case "edr_remove_host":
+		reporter.Step(ctx, "我正在从管控中移除主机。")
+		clientIDs := strings.Split(strings.TrimSpace(call.ClientID), ",")
+		cleaned := make([]string, 0, len(clientIDs))
+		for _, id := range clientIDs {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				cleaned = append(cleaned, id)
+			}
+		}
+		if err := s.edr.RemoveHost(ctx, cleaned); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("已成功从管控中移除 %d 台主机。", len(cleaned)), nil
 	default:
 		return "", fmt.Errorf("unsupported confirmed action: %s", call.Name)
 	}
@@ -1101,7 +1311,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 
 func isCriticalTool(name string) bool {
 	switch name {
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_virus_add", "edr_virus_update", "edr_virus_cancel":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_virus_add", "edr_virus_update", "edr_virus_cancel", "edr_ioa_add", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_add", "edr_ioa_network_update", "edr_ioa_network_delete", "edr_strategy_create", "edr_strategy_update", "edr_strategy_delete", "edr_strategy_status", "edr_host_offline_save", "edr_add_host_blacklist", "edr_remove_host":
 		return true
 	default:
 		return false
@@ -1532,6 +1742,50 @@ func formatIncidents(result edr.ListIncidentsResponse, page int, pageSize int) s
 	return strings.Join(lines, "\n")
 }
 
+func formatIncidentR2Summary(result edr.IncidentR2SummaryResponse) string {
+	var lines []string
+	lines = append(lines, fmt.Sprintf("事件 R2 摘要 - %s (ID: %s)", result.IncidentName, result.IncidentID))
+	lines = append(lines, fmt.Sprintf("状态: %d | 评分: %.1f | 主机: %s", result.Status, result.Score, result.HostName))
+	lines = append(lines, fmt.Sprintf("客户端: %s | IP: %s | 用户: %s", result.ClientID, result.ExternalIP, result.Username))
+	lines = append(lines, fmt.Sprintf("操作系统: %s | 客户端版本: %s | 隔离状态: %d", result.OperatingSystem, result.ClientVersion, result.Isolation))
+	if len(result.TNames) > 0 {
+		lines = append(lines, fmt.Sprintf("威胁名称: %s", strings.Join(result.TNames, ", ")))
+	}
+	if len(result.Tags) > 0 {
+		lines = append(lines, fmt.Sprintf("标签: %s", strings.Join(result.Tags, ", ")))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatDetectionsProxy(result edr.ListDetectionsProxyResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到检测记录。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 条检测记录，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
+	for i, item := range result.Results {
+		if i >= 10 {
+			lines = append(lines, fmt.Sprintf("... 还有 %d 条记录", len(result.Results)-10))
+			break
+		}
+		if id, ok := item["id"].(string); ok {
+			lines = append(lines, fmt.Sprintf("- id=%s", id))
+		} else if detectionID, ok := item["detection_id"].(string); ok {
+			lines = append(lines, fmt.Sprintf("- detection_id=%s", detectionID))
+		}
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr detections_proxy %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
 func formatDetections(result edr.ListDetectionsResponse, page int, pageSize int) string {
 	if len(result.Detections) == 0 {
 		return "近期没有查到行为检出。"
@@ -1549,6 +1803,27 @@ func formatDetections(result edr.ListDetectionsResponse, page int, pageSize int)
 	}
 	if totalPages > 1 {
 		lines = append(lines, fmt.Sprintf("翻页示例：/edr detections %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatEventLogAlarms(result edr.ListEventLogAlarmsResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到事件日志告警。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 条事件日志告警，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
+	for _, alarm := range result.Results {
+		lines = append(lines, fmt.Sprintf("- id=%s name=%s risk=%s client_id=%s log_num=%d", alarm.ID, alarm.Name, alarm.RiskLevel, alarm.ClientID, alarm.LogNum))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr event_log_alarms %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -1805,6 +2080,139 @@ func formatTaskResult(result edr.TaskResult) string {
 	if len(lines) == 1 {
 		return "任务结果为空"
 	}
+	return strings.Join(lines, "\n")
+}
+
+func formatIOAs(result edr.ListIOAsResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到 IOA。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 条 IOA，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
+	for _, ioa := range result.Results {
+		lines = append(lines, fmt.Sprintf("- id=%s name=%s severity=%s file=%s cmd=%s", ioa.ExclusionID, ioa.IOAName, ioa.Severity, ioa.FileName, ioa.CommandLine))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioa_list %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatIOAAuditLogs(result edr.ListIOAAuditLogsResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到 IOA 活动记录。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 条 IOA 活动记录，当前第 %d/%d 页（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), pageSize, hasMore)}
+	for _, log := range result.Results {
+		lines = append(lines, fmt.Sprintf("- id=%s ioa=%s hostname=%s file=%s cmd=%s time=%d", log.ID, log.IOAName, log.HostName, log.FileName, log.CommandLine, log.EventTime))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioa_audit_log %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatIOANetworks(result edr.ListIOANetworksResponse, page int, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到 IOA 网络排除。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Results))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 条 IOA 网络排除，当前第 %d/%d 页（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), pageSize, hasMore)}
+	for _, net := range result.Results {
+		lines = append(lines, fmt.Sprintf("- id=%s name=%s ip=%s host_type=%s", net.ID, net.ExclusionName, net.IP, net.HostType))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioa_network_list %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatStrategies(result edr.ListStrategiesResponse, page int, pageSize int) string {
+	if len(result.Items) == 0 {
+		return "当前没有查到策略。"
+	}
+	page = positiveOr(page, 1)
+	pageSize = positiveOr(pageSize, len(result.Items))
+	totalPages := calcTotalPages(result.Total, pageSize)
+	hasMore := "否"
+	if totalPages > 0 && page < totalPages {
+		hasMore = "是"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 条策略，当前第 %d/%d 页（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), pageSize, hasMore)}
+	for _, strategy := range result.Items {
+		statusStr := "未知"
+		if strategy.Status == 1 {
+			statusStr = "启用"
+		} else if strategy.Status == 0 {
+			statusStr = "禁用"
+		}
+		lines = append(lines, fmt.Sprintf("- id=%s name=%s type=%s status=%d(%s) range_type=%d", strategy.StrategyID, strategy.Name, strategy.Type, strategy.Status, statusStr, strategy.RangeType))
+	}
+	if totalPages > 1 {
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr strategy_list %d %d", minInt(page+1, totalPages), pageSize))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatStrategySingle(result edr.Strategy) string {
+	var lines []string
+	lines = append(lines, fmt.Sprintf("策略详情 - id=%s name=%s type=%s", result.StrategyID, result.Name, result.Type))
+	if result.Status == 1 {
+		lines = append(lines, "状态：启用")
+	} else if result.Status == 0 {
+		lines = append(lines, "状态：禁用")
+	}
+	if result.Content != "" {
+		lines = append(lines, fmt.Sprintf("内容：%s", result.Content))
+	}
+	if result.ConfigContent != "" {
+		lines = append(lines, fmt.Sprintf("配置：%s", result.ConfigContent))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatStrategyState(result edr.StrategyState) string {
+	var lines []string
+	lines = append(lines, "策略状态统计：")
+	lines = append(lines, fmt.Sprintf("- 总策略数：%d", result.AllStrategy))
+	lines = append(lines, fmt.Sprintf("- 活跃策略数：%d", result.ActiveStrategy))
+	lines = append(lines, fmt.Sprintf("- 告警终端数：%d", result.AlarmTerminalCount))
+	lines = append(lines, fmt.Sprintf("- 封禁互联网访问数：%d", result.BanInternetAccess))
+	lines = append(lines, fmt.Sprintf("- 检测周期：%d", result.DetectionPeriod))
+	return strings.Join(lines, "\n")
+}
+
+func formatHostOfflineConf(result edr.HostOfflineConf) string {
+	var lines []string
+	lines = append(lines, "主机离线配置：")
+	if result.Status == 1 {
+		lines = append(lines, "状态：开启")
+	} else if result.Status == 2 {
+		lines = append(lines, "状态：关闭")
+	}
+	if result.Setting.Timeout != "" {
+		lines = append(lines, fmt.Sprintf("离线超时时间：%s", result.Setting.Timeout))
+	}
+	lines = append(lines, fmt.Sprintf("组织：%s", result.OrgName))
 	return strings.Join(lines, "\n")
 }
 

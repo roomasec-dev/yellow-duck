@@ -19,10 +19,17 @@ import (
 
 type Client interface {
 	ListHosts(ctx context.Context, req ListHostsRequest) (ListHostsResponse, error)
+	AddHostBlacklist(ctx context.Context, clientIDs []string, reason string) error
+	RemoveHost(ctx context.Context, clientIDs []string) error
 	IsolateHost(ctx context.Context, clientID string) (InstructionResult, error)
 	ReleaseHost(ctx context.Context, clientID string) (InstructionResult, error)
 	ListIncidents(ctx context.Context, req ListIncidentsRequest) (ListIncidentsResponse, error)
+	BatchDealIncident(ctx context.Context, req BatchDealIncidentRequest) (BatchDealIncidentResponse, error)
+	IncidentR2Summary(ctx context.Context, incidentID string) (IncidentR2SummaryResponse, error)
 	ListDetections(ctx context.Context, req ListDetectionsRequest) (ListDetectionsResponse, error)
+	ListDetectionsProxy(ctx context.Context, req ListDetectionsProxyRequest) (ListDetectionsProxyResponse, error)
+	UpdateDetectionStatus(ctx context.Context, req UpdateDetectionStatusRequest) error
+	ListEventLogAlarms(ctx context.Context, req ListEventLogAlarmsRequest) (ListEventLogAlarmsResponse, error)
 	ListLogs(ctx context.Context, req ListLogsRequest) (ListLogsResponse, error)
 	ViewIncident(ctx context.Context, req IncidentViewRequest) (map[string]any, error)
 	ViewDetection(ctx context.Context, req DetectionViewRequest) (map[string]any, error)
@@ -56,6 +63,35 @@ type Client interface {
 	// NGAV Settings
 	GetNGAVConf(ctx context.Context) (map[string]any, error)
 	SwitchNGAVStatus(ctx context.Context, switchStatus string) error
+
+	// Client Setting (Host Offline)
+	GetHostOfflineConf(ctx context.Context) (HostOfflineConf, error)
+	SaveHostOfflineConf(ctx context.Context, req SaveHostOfflineConfRequest) error
+
+	// IOA Configuration
+	ListIOAs(ctx context.Context, req ListIOAsRequest) (ListIOAsResponse, error)
+	AddIOA(ctx context.Context, req AddIOARequest) error
+	UpdateIOA(ctx context.Context, req UpdateIOARequest) error
+	DeleteIOA(ctx context.Context, id string) error
+	ListIOAAuditLogs(ctx context.Context, req ListIOAAuditLogsRequest) (ListIOAAuditLogsResponse, error)
+
+	// IOA Network Exclusion
+	ListIOANetworks(ctx context.Context, req ListIOANetworksRequest) (ListIOANetworksResponse, error)
+	AddIOANetwork(ctx context.Context, req AddIOANetworkRequest) error
+	UpdateIOANetwork(ctx context.Context, req UpdateIOANetworkRequest) error
+	DeleteIOANetwork(ctx context.Context, id string) error
+
+	// Strategy Management
+	GetStrategySingle(ctx context.Context, strategyType string) (Strategy, error)
+	ListStrategies(ctx context.Context, req ListStrategiesRequest) (ListStrategiesResponse, error)
+	GetStrategyDetail(ctx context.Context, req GetStrategyDetailRequest) (Strategy, error)
+	CreateStrategy(ctx context.Context, req CreateStrategyRequest) (CreateStrategyResponse, error)
+	UpdateStrategy(ctx context.Context, req UpdateStrategyRequest) error
+	DeleteStrategy(ctx context.Context, strategyID string, strategyType string) error
+	GetStrategyState(ctx context.Context) (StrategyState, error)
+	SortStrategies(ctx context.Context, sortIDs []string, strategyType string) error
+	UpdateStrategyStatus(ctx context.Context, req UpdateStrategyStatusRequest) error
+	GetDefaultStrategy(ctx context.Context, req GetDefaultStrategyRequest) (Strategy, error)
 }
 
 type OpenAPIClient struct {
@@ -371,66 +407,66 @@ type ProcessDetail struct {
 // Virus Scan Management
 
 type AddVirusScanRequest struct {
-	ScanType         int              `json:"scan_type"`
-	PlanName         string           `json:"plan_name"`
-	PlanType         int              `json:"plan_type"`
-	Scope            int              `json:"scope"`
-	Contents         map[string]any   `json:"contents,omitempty"`
-	ClientID         string           `json:"client_id,omitempty"`
-	ExecuteStartTime int64            `json:"execute_start_time,omitempty"`
-	ExecuteCycle     int              `json:"execute_cycle,omitempty"`
-	CycleSetting     bool             `json:"cycle_setting,omitempty"`
-	GroupIDs         []int            `json:"group_ids,omitempty"`
+	ScanType         int            `json:"scan_type"`
+	PlanName         string         `json:"plan_name"`
+	PlanType         int            `json:"plan_type"`
+	Scope            int            `json:"scope"`
+	Contents         map[string]any `json:"contents,omitempty"`
+	ClientID         string         `json:"client_id,omitempty"`
+	ExecuteStartTime int64          `json:"execute_start_time,omitempty"`
+	ExecuteCycle     int            `json:"execute_cycle,omitempty"`
+	CycleSetting     bool           `json:"cycle_setting,omitempty"`
+	GroupIDs         []int          `json:"group_ids,omitempty"`
 }
 
 type UpdateVirusScanRequest struct {
-	RID              string           `json:"rid"`
-	ScanType         int              `json:"scan_type,omitempty"`
-	PlanName         string           `json:"plan_name,omitempty"`
-	PlanType         int              `json:"plan_type,omitempty"`
-	Scope            int              `json:"scope,omitempty"`
-	Contents         map[string]any   `json:"contents,omitempty"`
-	ClientID         string           `json:"client_id,omitempty"`
-	ExecuteStartTime int64            `json:"execute_start_time,omitempty"`
-	ExecuteCycle     int              `json:"execute_cycle,omitempty"`
-	CycleSetting     bool             `json:"cycle_setting,omitempty"`
-	GroupIDs         []int            `json:"group_ids,omitempty"`
+	RID              string         `json:"rid"`
+	ScanType         int            `json:"scan_type,omitempty"`
+	PlanName         string         `json:"plan_name,omitempty"`
+	PlanType         int            `json:"plan_type,omitempty"`
+	Scope            int            `json:"scope,omitempty"`
+	Contents         map[string]any `json:"contents,omitempty"`
+	ClientID         string         `json:"client_id,omitempty"`
+	ExecuteStartTime int64          `json:"execute_start_time,omitempty"`
+	ExecuteCycle     int            `json:"execute_cycle,omitempty"`
+	CycleSetting     bool           `json:"cycle_setting,omitempty"`
+	GroupIDs         []int          `json:"group_ids,omitempty"`
 }
 
 type ListVirusScansRequest struct {
-	PlanName     string      `json:"plan_name,omitempty"`
-	Scope        int         `json:"scope,omitempty"`
-	PlanType     int         `json:"plan_type,omitempty"`
-	CycleSetting int         `json:"cycle_setting,omitempty"`
-	ScanType     int         `json:"scan_type,omitempty"`
-	UpdateTime   *TimeFilter `json:"update_time,omitempty"`
-	Status       string      `json:"status,omitempty"`
-	OperationUser string     `json:"operation_user,omitempty"`
-	Page         int         `json:"page"`
-	Limit        int         `json:"limit"`
+	PlanName      string      `json:"plan_name,omitempty"`
+	Scope         int         `json:"scope,omitempty"`
+	PlanType      int         `json:"plan_type,omitempty"`
+	CycleSetting  int         `json:"cycle_setting,omitempty"`
+	ScanType      int         `json:"scan_type,omitempty"`
+	UpdateTime    *TimeFilter `json:"update_time,omitempty"`
+	Status        string      `json:"status,omitempty"`
+	OperationUser string      `json:"operation_user,omitempty"`
+	Page          int         `json:"page"`
+	Limit         int         `json:"limit"`
 }
 
 type VirusScan struct {
-	RID              string   `json:"rid"`
-	OrgName          string   `json:"org_name"`
-	ClientID         string   `json:"client_id"`
-	PlanName         string   `json:"plan_name"`
-	PlanType         int      `json:"plan_type"`
-	ExecuteStartTime int64    `json:"execute_start_time"`
-	ExecuteCycle     int      `json:"execute_cycle"`
-	CycleSetting     bool     `json:"cycle_setting"`
-	ExecuteDesc      string   `json:"execute_desc"`
-	Scope            int      `json:"scope"`
-	ScopeContent     string   `json:"scope_content"`
-	Contents         string   `json:"contents"`
-	GroupIDs         []int    `json:"group_ids"`
-	ScanType         int      `json:"scan_type"`
-	CreateTime       int64    `json:"create_time"`
-	UpdateTime       int64    `json:"update_time"`
-	OperationUser    string   `json:"operation_user"`
-	OperationUID     string   `json:"operation_uid"`
-	Status           int      `json:"status"`
-	IsDeleted        int      `json:"is_deleted"`
+	RID              string `json:"rid"`
+	OrgName          string `json:"org_name"`
+	ClientID         string `json:"client_id"`
+	PlanName         string `json:"plan_name"`
+	PlanType         int    `json:"plan_type"`
+	ExecuteStartTime int64  `json:"execute_start_time"`
+	ExecuteCycle     int    `json:"execute_cycle"`
+	CycleSetting     bool   `json:"cycle_setting"`
+	ExecuteDesc      string `json:"execute_desc"`
+	Scope            int    `json:"scope"`
+	ScopeContent     string `json:"scope_content"`
+	Contents         string `json:"contents"`
+	GroupIDs         []int  `json:"group_ids"`
+	ScanType         int    `json:"scan_type"`
+	CreateTime       int64  `json:"create_time"`
+	UpdateTime       int64  `json:"update_time"`
+	OperationUser    string `json:"operation_user"`
+	OperationUID     string `json:"operation_uid"`
+	Status           int    `json:"status"`
+	IsDeleted        int    `json:"is_deleted"`
 }
 
 type ListVirusScansResponse struct {
@@ -453,65 +489,65 @@ type ListVirusScanRecordsRequest struct {
 }
 
 type VirusScanRecord struct {
-	ID               string `json:"id"`
-	TaskID           string `json:"task_id"`
-	ExecutionBatch   string `json:"execution_batch"`
-	RID              string `json:"rid"`
-	OrgName          string `json:"org_name"`
-	ClientID         string `json:"client_id"`
-	HostName         string `json:"host_name"`
-	ScanType         string `json:"scan_type"`
-	Contents         string `json:"contents"`
-	Status           int    `json:"status"`
-	CreateTime       int64  `json:"create_time"`
-	StartTime        int64  `json:"start_time"`
-	EndTime          int64  `json:"end_time"`
-	UpdateTime       int64  `json:"update_time"`
-	VirusFileNum     int    `json:"virus_file_num"`
-	MemoryVirusNum   int    `json:"memory_virus_num"`
-	ResponseTime     int64  `json:"response_time"`
-	PlanName         string `json:"plan_name"`
-	HostStatus       string `json:"host_status"`
+	ID             string `json:"id"`
+	TaskID         string `json:"task_id"`
+	ExecutionBatch string `json:"execution_batch"`
+	RID            string `json:"rid"`
+	OrgName        string `json:"org_name"`
+	ClientID       string `json:"client_id"`
+	HostName       string `json:"host_name"`
+	ScanType       string `json:"scan_type"`
+	Contents       string `json:"contents"`
+	Status         int    `json:"status"`
+	CreateTime     int64  `json:"create_time"`
+	StartTime      int64  `json:"start_time"`
+	EndTime        int64  `json:"end_time"`
+	UpdateTime     int64  `json:"update_time"`
+	VirusFileNum   int    `json:"virus_file_num"`
+	MemoryVirusNum int    `json:"memory_virus_num"`
+	ResponseTime   int64  `json:"response_time"`
+	PlanName       string `json:"plan_name"`
+	HostStatus     string `json:"host_status"`
 }
 
 type ListVirusScanRecordsResponse struct {
-	Total   int              `json:"total"`
+	Total   int               `json:"total"`
 	Results []VirusScanRecord `json:"results"`
 }
 
 // Virus Statistics
 
 type ListVirusByHostRequest struct {
-	ClientID       string      `json:"client_id,omitempty"`
-	Username       string      `json:"username,omitempty"`
-	HostName       string      `json:"host_name,omitempty"`
-	Importance     int         `json:"importance,omitempty"`
-	MacAddress     string      `json:"mac_address,omitempty"`
-	ClientIP       string      `json:"client_ip,omitempty"`
-	RMConnectIP    string      `json:"rmconnectip,omitempty"`
-	Status         int         `json:"status,omitempty"`
+	ClientID        string      `json:"client_id,omitempty"`
+	Username        string      `json:"username,omitempty"`
+	HostName        string      `json:"host_name,omitempty"`
+	Importance      int         `json:"importance,omitempty"`
+	MacAddress      string      `json:"mac_address,omitempty"`
+	ClientIP        string      `json:"client_ip,omitempty"`
+	RMConnectIP     string      `json:"rmconnectip,omitempty"`
+	Status          int         `json:"status,omitempty"`
 	LastCheckedTime *TimeFilter `json:"last_checked_time,omitempty"`
-	Page           int         `json:"page"`
-	Limit          int         `json:"limit"`
+	Page            int         `json:"page"`
+	Limit           int         `json:"limit"`
 }
 
 type VirusByHost struct {
-	HostName       string `json:"host_name"`
-	ClientID       string `json:"client_id"`
-	Status         int    `json:"status"`
-	Username       string `json:"username"`
-	Importance     int    `json:"importance"`
-	ClientIP       string `json:"client_ip"`
-	RMConnectIP    string `json:"rm_connect_ip"`
-	MacAddress     string `json:"mac_address"`
-	VirusFileCount int    `json:"virus_file_count"`
-	VirusMemoryCount int   `json:"virus_memory_count"`
-	LastCheckedTime int64  `json:"last_checked_time"`
-	LastActive     int64  `json:"last_active"`
-	HostStatus     string `json:"host_status"`
-	Path           string `json:"path"`
-	SHA1           string `json:"sha1,omitempty"`
-	MD5            string `json:"md5,omitempty"`
+	HostName         string `json:"host_name"`
+	ClientID         string `json:"client_id"`
+	Status           int    `json:"status"`
+	Username         string `json:"username"`
+	Importance       int    `json:"importance"`
+	ClientIP         string `json:"client_ip"`
+	RMConnectIP      string `json:"rm_connect_ip"`
+	MacAddress       string `json:"mac_address"`
+	VirusFileCount   int    `json:"virus_file_count"`
+	VirusMemoryCount int    `json:"virus_memory_count"`
+	LastCheckedTime  int64  `json:"last_checked_time"`
+	LastActive       int64  `json:"last_active"`
+	HostStatus       string `json:"host_status"`
+	Path             string `json:"path"`
+	SHA1             string `json:"sha1,omitempty"`
+	MD5              string `json:"md5,omitempty"`
 }
 
 type ListVirusByHostResponse struct {
@@ -529,18 +565,18 @@ type ListVirusByHashRequest struct {
 }
 
 type VirusByHash struct {
-	Name       string   `json:"name"`
-	SHA1       string   `json:"sha1"`
-	MD5        string   `json:"md5"`
-	Size       int64     `json:"size"`
-	HostCount  int      `json:"host_count"`
-	ClientIDs  []string `json:"client_ids"`
-	EndTime    int64    `json:"end_time"`
-	ID         string   `json:"id"`
+	Name      string   `json:"name"`
+	SHA1      string   `json:"sha1"`
+	MD5       string   `json:"md5"`
+	Size      int64    `json:"size"`
+	HostCount int      `json:"host_count"`
+	ClientIDs []string `json:"client_ids"`
+	EndTime   int64    `json:"end_time"`
+	ID        string   `json:"id"`
 }
 
 type ListVirusByHashResponse struct {
-	Total   int         `json:"total"`
+	Total   int           `json:"total"`
 	Results []VirusByHash `json:"results"`
 }
 
@@ -562,22 +598,22 @@ type ListVirusHashHostsRequest struct {
 }
 
 type VirusHashHost struct {
-	HostName        string `json:"host_name"`
-	ClientID        string `json:"client_id"`
-	Status          int    `json:"status"`
-	Username        string `json:"username"`
-	Importance      int    `json:"importance"`
-	ClientIP        string `json:"client_ip"`
-	RMConnectIP     string `json:"rm_connect_ip"`
-	MacAddress      string `json:"mac_address"`
-	VirusFileCount  int    `json:"virus_file_count"`
-	VirusMemoryCount int   `json:"virus_memory_count"`
-	LastCheckedTime int64  `json:"last_checked_time"`
-	LastActive      int64  `json:"last_active"`
-	HostStatus      string `json:"host_status"`
-	Path            string `json:"path"`
-	SHA1            string `json:"sha1"`
-	MD5             string `json:"md5"`
+	HostName         string `json:"host_name"`
+	ClientID         string `json:"client_id"`
+	Status           int    `json:"status"`
+	Username         string `json:"username"`
+	Importance       int    `json:"importance"`
+	ClientIP         string `json:"client_ip"`
+	RMConnectIP      string `json:"rm_connect_ip"`
+	MacAddress       string `json:"mac_address"`
+	VirusFileCount   int    `json:"virus_file_count"`
+	VirusMemoryCount int    `json:"virus_memory_count"`
+	LastCheckedTime  int64  `json:"last_checked_time"`
+	LastActive       int64  `json:"last_active"`
+	HostStatus       string `json:"host_status"`
+	Path             string `json:"path"`
+	SHA1             string `json:"sha1"`
+	MD5              string `json:"md5"`
 }
 
 type ListVirusHashHostsResponse struct {
@@ -605,6 +641,284 @@ type QuickTimeVal struct {
 	TimeType string `json:"time_type"`
 }
 
+// Client Setting (Host Offline)
+
+type HostOfflineConf struct {
+	ID         string             `json:"id"`
+	OrgName    string             `json:"org_name"`
+	Status     int                `json:"status"`
+	Type       string             `json:"type"`
+	Setting    HostOfflineSetting `json:"setting"`
+	CreateTime int64              `json:"create_time"`
+	UpdateTime int64              `json:"update_time"`
+}
+
+type HostOfflineSetting struct {
+	Timeout string `json:"timeout"`
+}
+
+type SaveHostOfflineConfRequest struct {
+	Status  int                `json:"status"`
+	Setting HostOfflineSetting `json:"setting"`
+}
+
+// IOA Configuration
+
+type ListIOAsRequest struct {
+	CommandLine  string      `json:"command_line,omitempty"`
+	FileName     string      `json:"file_name,omitempty"`
+	GroupIDs     []int       `json:"group_ids,omitempty"`
+	HostType     string      `json:"host_type,omitempty"`
+	IOAName      string      `json:"ioa_name,omitempty"`
+	LastModified *TimeFilter `json:"last_modified,omitempty"`
+	ModifiedBy   string      `json:"modified_by,omitempty"`
+	Name         string      `json:"name,omitempty"`
+	Page         int         `json:"page"`
+	Limit        int         `json:"limit"`
+	TAID         string      `json:"ta_id,omitempty"`
+	TID          string      `json:"t_id,omitempty"`
+}
+
+type IOA struct {
+	CommandLine  string `json:"command_line"`
+	CreateTime   int64  `json:"create_time"`
+	Description  string `json:"description"`
+	ExclusionID  string `json:"exclusion_id"`
+	FileName     string `json:"file_name"`
+	GroupIDs     []int  `json:"group_ids"`
+	HostType     string `json:"host_type"`
+	IOAID        string `json:"ioa_id"`
+	IOAName      string `json:"ioa_name"`
+	ModifiedByID string `json:"modified_by_id"`
+	OperateUser  string `json:"operate_user"`
+	Severity     string `json:"severity"`
+	TAName       string `json:"ta_name"`
+	TName        string `json:"t_name"`
+	TAID         string `json:"taid"`
+	TID          string `json:"tid"`
+	UpdateTime   int64  `json:"update_time"`
+}
+
+type ListIOAsResponse struct {
+	Total   int   `json:"total"`
+	Results []IOA `json:"results"`
+}
+
+type AddIOARequest struct {
+	CommandLine   string `json:"command_line,omitempty"`
+	Description   string `json:"description,omitempty"`
+	ExclusionName string `json:"exclusion_name,omitempty"`
+	FileName      string `json:"file_name,omitempty"`
+	GroupIDs      []int  `json:"group_ids,omitempty"`
+	HostType      string `json:"host_type,omitempty"`
+	IOAID         string `json:"ioa_id,omitempty"`
+	Severity      string `json:"severity,omitempty"`
+	TAID          string `json:"ta_id,omitempty"`
+	TID           string `json:"t_id,omitempty"`
+}
+
+type UpdateIOARequest struct {
+	ID            string `json:"id"`
+	CommandLine   string `json:"command_line,omitempty"`
+	Description   string `json:"description,omitempty"`
+	ExclusionName string `json:"exclusion_name,omitempty"`
+	FileName      string `json:"file_name,omitempty"`
+	GroupIDs      []int  `json:"group_ids,omitempty"`
+	HostType      string `json:"host_type,omitempty"`
+	TAID          string `json:"ta_id,omitempty"`
+	TID           string `json:"t_id,omitempty"`
+}
+
+type ListIOAAuditLogsRequest struct {
+	CommandLine string      `json:"command_line,omitempty"`
+	EventTime   *TimeFilter `json:"event_time,omitempty"`
+	FileName    string      `json:"file_name,omitempty"`
+	HostName    string      `json:"host_name,omitempty"`
+	IOAName     string      `json:"ioa_name,omitempty"`
+	Page        int         `json:"page"`
+	Limit       int         `json:"limit"`
+}
+
+type IOAAuditLog struct {
+	CommandLine string `json:"command_line"`
+	EventTime   int64  `json:"event_time"`
+	FileName    string `json:"file_name"`
+	HostName    string `json:"host_name"`
+	ID          string `json:"id"`
+	IOAName     string `json:"ioa_name"`
+}
+
+type ListIOAAuditLogsResponse struct {
+	Total   int           `json:"total"`
+	Results []IOAAuditLog `json:"results"`
+}
+
+// IOA Network Exclusion
+
+type ListIOANetworksRequest struct {
+	GroupIDs     []int       `json:"group_ids,omitempty"`
+	HostType     string      `json:"host_type,omitempty"`
+	IP           string      `json:"ip,omitempty"`
+	LastModified *TimeFilter `json:"last_modified,omitempty"`
+	ModifiedBy   string      `json:"modified_by,omitempty"`
+	Name         string      `json:"name,omitempty"`
+	Page         int         `json:"page"`
+	Limit        int         `json:"limit"`
+}
+
+type IOANetwork struct {
+	CreateTime    int64  `json:"create_time"`
+	ExclusionName string `json:"exclusion_name"`
+	GroupIDs      []int  `json:"group_ids"`
+	HostType      string `json:"host_type"`
+	ID            string `json:"id"`
+	IP            string `json:"ip"`
+	IsSystem      bool   `json:"is_system"`
+	ModifiedBy    string `json:"modified_by"`
+	ModifiedByID  string `json:"modified_by_id"`
+	OperateUser   string `json:"operate_user"`
+	OrgName       string `json:"org_name"`
+	UpdateTime    int64  `json:"update_time"`
+}
+
+type ListIOANetworksResponse struct {
+	Total   int          `json:"total"`
+	Results []IOANetwork `json:"results"`
+}
+
+type AddIOANetworkRequest struct {
+	ExclusionName string `json:"exclusion_name"`
+	GroupIDs      []int  `json:"group_ids,omitempty"`
+	HostType      string `json:"host_type,omitempty"`
+	IP            string `json:"ip,omitempty"`
+}
+
+type UpdateIOANetworkRequest struct {
+	ID            string `json:"id"`
+	ExclusionName string `json:"exclusion_name,omitempty"`
+	GroupIDs      []int  `json:"group_ids,omitempty"`
+	HostType      string `json:"host_type,omitempty"`
+	IP            string `json:"ip,omitempty"`
+}
+
+// Strategy Management
+
+type Strategy struct {
+	ConfigContent  string          `json:"config_content,omitempty"`
+	Content        string          `json:"content,omitempty"`
+	CreateTime     int64           `json:"create_time,omitempty"`
+	ExcludeObjects *ExcludeObjects `json:"exclude_objects,omitempty"`
+	Excludes       []string        `json:"excludes,omitempty"`
+	GroupIDs       []int           `json:"group_ids,omitempty"`
+	GroupInfos     []GroupInfo     `json:"group_infos,omitempty"`
+	IncludesObject []IncludeObject `json:"includes_object,omitempty"`
+	IsDefault      string          `json:"is_default,omitempty"`
+	LastUpdateTime int64           `json:"last_update_time,omitempty"`
+	Name           string          `json:"name,omitempty"`
+	OperatorID     string          `json:"operator_id,omitempty"`
+	OperatorName   string          `json:"operator_name,omitempty"`
+	RangeType      int             `json:"range_type,omitempty"`
+	Status         int             `json:"status,omitempty"`
+	StrategyID     string          `json:"strategy_id,omitempty"`
+	Type           string          `json:"type,omitempty"`
+	VersionID      string          `json:"version_id,omitempty"`
+}
+
+type ExcludeObjects struct {
+	ClientIDs  []string `json:"client_ids,omitempty"`
+	Departs    []string `json:"departs,omitempty"`
+	HostGroups []string `json:"host_groups,omitempty"`
+	UserGroups []string `json:"user_groups,omitempty"`
+	Users      []string `json:"users,omitempty"`
+}
+
+type GroupInfo struct {
+	GID       int    `json:"gid"`
+	GroupName string `json:"group_name"`
+	GroupType string `json:"group_type"`
+	Status    int    `json:"status"`
+}
+
+type IncludeObject struct {
+	Object []string `json:"object,omitempty"`
+	Type   string   `json:"type,omitempty"`
+}
+
+type ListStrategiesRequest struct {
+	Content        string      `json:"content,omitempty"`
+	CreateTime     *TimeFilter `json:"create_time,omitempty"`
+	GroupIDs       []int       `json:"group_ids,omitempty"`
+	Includes       []string    `json:"includes,omitempty"`
+	LastUpdateTime *TimeFilter `json:"last_update_time,omitempty"`
+	Limit          int         `json:"limit"`
+	Name           string      `json:"name,omitempty"`
+	Page           int         `json:"page"`
+	RangeType      int         `json:"range_type,omitempty"`
+	Status         int         `json:"status,omitempty"`
+	StrategyID     string      `json:"strategy_id,omitempty"`
+	Type           string      `json:"type"`
+}
+
+type ListStrategiesResponse struct {
+	Items []Strategy `json:"items"`
+	Total int        `json:"total"`
+}
+
+type GetStrategyDetailRequest struct {
+	StrategyID string `json:"strategy_id"`
+	Type       string `json:"type"`
+}
+
+type CreateStrategyRequest struct {
+	Name           string          `json:"name"`
+	Type           string          `json:"type"`
+	Content        string          `json:"content,omitempty"`
+	RangeType      int             `json:"range_type"`
+	GroupIDs       []int           `json:"group_ids,omitempty"`
+	ConfigContent  string          `json:"config_content,omitempty"`
+	Status         int             `json:"status,omitempty"`
+	Includes       []string        `json:"includes,omitempty"`
+	Excludes       []string        `json:"excludes,omitempty"`
+	ExcludeObjects *ExcludeObjects `json:"exclude_objects,omitempty"`
+}
+
+type CreateStrategyResponse struct {
+	StrategyID string `json:"strategy_id"`
+}
+
+type UpdateStrategyRequest struct {
+	StrategyID     string          `json:"strategy_id"`
+	Name           string          `json:"name,omitempty"`
+	Type           string          `json:"type,omitempty"`
+	Content        string          `json:"content,omitempty"`
+	RangeType      int             `json:"range_type,omitempty"`
+	GroupIDs       []int           `json:"group_ids,omitempty"`
+	ConfigContent  string          `json:"config_content,omitempty"`
+	Status         int             `json:"status,omitempty"`
+	Includes       []string        `json:"includes,omitempty"`
+	Excludes       []string        `json:"excludes,omitempty"`
+	ExcludeObjects *ExcludeObjects `json:"exclude_objects,omitempty"`
+}
+
+type StrategyState struct {
+	ActiveStrategy     int `json:"active_strategy"`
+	AllStrategy        int `json:"all_strategy"`
+	AlarmTerminalCount int `json:"alarm_terminal_count"`
+	BanInternetAccess  int `json:"ban_internet_access"`
+	DetectionPeriod    int `json:"detection_period"`
+}
+
+type UpdateStrategyStatusRequest struct {
+	StrategyID string `json:"strategy_id,omitempty"`
+	Type       string `json:"type,omitempty"`
+	Status     int    `json:"status"`
+}
+
+type GetDefaultStrategyRequest struct {
+	StrategyID string `json:"strategy_id"`
+	Type       string `json:"type"`
+}
+
 type ListDetectionsRequest struct {
 	Page     int
 	PageSize int
@@ -613,6 +927,76 @@ type ListDetectionsRequest struct {
 type ListDetectionsResponse struct {
 	Total      int         `json:"total"`
 	Detections []Detection `json:"data"`
+}
+
+type ListDetectionsProxyRequest struct {
+	Page            int         `json:"page"`
+	Limit           int         `json:"limit"`
+	From            string      `json:"from,omitempty"`
+	ThreatLevel     string      `json:"threat_level,omitempty"`
+	TAID            string      `json:"ta_id,omitempty"`
+	TID             string      `json:"t_id,omitempty"`
+	Hash            string      `json:"hash,omitempty"`
+	PName           string      `json:"p_name,omitempty"`
+	DetectTime      *TimeFilter `json:"detect_time,omitempty"`
+	Hostname        string      `json:"hostname,omitempty"`
+	ClientID        string      `json:"client_id,omitempty"`
+	Username        string      `json:"username,omitempty"`
+	DealStatus      string      `json:"deal_status,omitempty"`
+	IncidentID      string      `json:"incident_id,omitempty"`
+	DealStatusArray []int       `json:"deal_status_array,omitempty"`
+	StartTime       *TimeFilter `json:"start_time,omitempty"`
+	RootName        string      `json:"root_name,omitempty"`
+	MainPName       string      `json:"main_p_name,omitempty"`
+	MalwareName     string      `json:"malware_name,omitempty"`
+	DetectionSource string      `json:"detection_source,omitempty"`
+	ViewType        string      `json:"view_type,omitempty"`
+	DetectionIDs    []string    `json:"detection_ids,omitempty"`
+	RMConnectIP     string      `json:"rm_connect_ip,omitempty"`
+	OrgConnectIP    string      `json:"org_connect_ip,omitempty"`
+	ClientIP        string      `json:"client_ip,omitempty"`
+}
+
+type ListDetectionsProxyResponse struct {
+	Total   int              `json:"total"`
+	Results []map[string]any `json:"results"`
+}
+
+type UpdateDetectionStatusRequest struct {
+	IDs        []string `json:"ids"`
+	DealStatus int      `json:"deal_status"`
+}
+
+type ListEventLogAlarmsRequest struct {
+	AlarmName   string      `json:"alarm_name,omitempty"`
+	RiskLevel   string      `json:"risk_level,omitempty"`
+	ClientID    string      `json:"client_id,omitempty"`
+	HostTokenID string      `json:"host_token_id,omitempty"`
+	Channel     string      `json:"channel,omitempty"`
+	HostStatus  string      `json:"host_status,omitempty"`
+	DateTime    *TimeFilter `json:"date_time,omitempty"`
+	Page        int         `json:"page"`
+	Limit       int         `json:"limit"`
+	IsExport    int         `json:"is_export,omitempty"`
+}
+
+type EventLogAlarm struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	OrgName       string `json:"org_name"`
+	RuleID        string `json:"rule_id"`
+	Filter        any    `json:"filter"`
+	LogNum        int    `json:"log_num"`
+	RiskLevel     string `json:"risk_level"`
+	ClientID      string `json:"client_id"`
+	TokenID       string `json:"token_id"`
+	CreateTime    int64  `json:"create_time"`
+	CreateTimeUTC string `json:"create_time_utc"`
+}
+
+type ListEventLogAlarmsResponse struct {
+	Total   int             `json:"total"`
+	Results []EventLogAlarm `json:"results"`
 }
 
 type Detection struct {
@@ -635,6 +1019,66 @@ type ListIncidentsRequest struct {
 type ListIncidentsResponse struct {
 	Total     int        `json:"total"`
 	Incidents []Incident `json:"data"`
+}
+
+type BatchDealIncidentRequest struct {
+	IDs     []string `json:"ids"`
+	Allow   bool     `json:"allow"`
+	Status  int      `json:"status"`
+	Scene   string   `json:"scene"`
+	Comment string   `json:"comment,omitempty"`
+}
+
+type BatchDealIncidentResponse struct {
+	IncidentName   string   `json:"incident_name"`
+	Status         int      `json:"status"`
+	TotalDetection int      `json:"total_detection"`
+	TotalIncident  int      `json:"total_incident"`
+	IncidentNames  []string `json:"incident_names"`
+}
+
+type IncidentR2SummaryRequest struct {
+	IncidentID string `json:"incident_id"`
+}
+
+type IncidentR2SummaryResponse struct {
+	ID              string   `json:"id"`
+	ClientID        string   `json:"client_id"`
+	IncidentID      string   `json:"incident_id"`
+	IncidentName    string   `json:"incident_name"`
+	Status          int      `json:"status"`
+	Score           float64  `json:"score"`
+	Comment         string   `json:"comment"`
+	Remarks         string   `json:"remarks"`
+	Tags            []string `json:"tags"`
+	TTP             TTPInfo  `json:"ttp"`
+	Release         int      `json:"release"`
+	Actors          []string `json:"actors"`
+	MultiHost       bool     `json:"multihost"`
+	Scene           int      `json:"scene"`
+	AssociatedHosts []string `json:"associated_hosts"`
+	HostID          string   `json:"host_id"`
+	HostName        string   `json:"host_name"`
+	OperatingSystem string   `json:"operating_system"`
+	Username        string   `json:"username"`
+	ExternalIP      string   `json:"external_ip"`
+	ConnectionIP    string   `json:"connection_ip"`
+	ClientVersion   string   `json:"client_version"`
+	Isolation       int      `json:"isolation"`
+	HostStatus      string   `json:"host_status"`
+	Actor           string   `json:"actor"`
+	ActorType       string   `json:"actor_type"`
+	TNames          []string `json:"t_names"`
+	StartTime       int64    `json:"start_time"`
+	EndTime         int64    `json:"end_time"`
+	KeepAliveStatus int      `json:"keep_alive_status"`
+	Platform        int      `json:"platform"`
+}
+
+type TTPInfo struct {
+	Target    string `json:"target"`
+	Technique string `json:"technique"`
+	Course    string `json:"course"`
 }
 
 type Incident struct {
@@ -729,6 +1173,35 @@ func (c *OpenAPIClient) ListHosts(ctx context.Context, req ListHostsRequest) (Li
 	return envelope.Data, nil
 }
 
+func (c *OpenAPIClient) AddHostBlacklist(ctx context.Context, clientIDs []string, reason string) error {
+	payload := map[string]any{
+		"client_ids": clientIDs,
+		"reason":     reason,
+	}
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/hosts/add_blacklist", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("add host blacklist failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) RemoveHost(ctx context.Context, clientIDs []string) error {
+	payload := map[string]any{
+		"client_ids": clientIDs,
+	}
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/hosts/remove_host", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("remove host failed: %s", envelope.Message)
+	}
+	return nil
+}
+
 func (c *OpenAPIClient) IsolateHost(ctx context.Context, clientID string) (InstructionResult, error) {
 	return c.sendInstruction(ctx, clientID, "quarantine_network", "AI 主 Chat 隔离主机")
 }
@@ -764,6 +1237,52 @@ func (c *OpenAPIClient) ListDetections(ctx context.Context, req ListDetectionsRe
 	return envelope.Data, nil
 }
 
+func (c *OpenAPIClient) ListEventLogAlarms(ctx context.Context, req ListEventLogAlarmsRequest) (ListEventLogAlarmsResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+	}
+	if req.AlarmName != "" {
+		payload["alarm_name"] = req.AlarmName
+	}
+	if req.RiskLevel != "" {
+		payload["risk_level"] = req.RiskLevel
+	}
+	if req.ClientID != "" {
+		payload["client_id"] = req.ClientID
+	}
+	if req.HostTokenID != "" {
+		payload["host_token_id"] = req.HostTokenID
+	}
+	if req.Channel != "" {
+		payload["channel"] = req.Channel
+	}
+	if req.HostStatus != "" {
+		payload["host_status"] = req.HostStatus
+	}
+	if req.DateTime != nil {
+		payload["date_time"] = req.DateTime
+	}
+	if req.IsExport > 0 {
+		payload["is_export"] = req.IsExport
+	}
+
+	var envelope apiEnvelope[ListEventLogAlarmsResponse]
+	if err := c.postPlatform(ctx, "/detection/alarms/events_log/alarm_list", payload, &envelope); err != nil {
+		return ListEventLogAlarmsResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListEventLogAlarmsResponse{}, fmt.Errorf("event log alarms list failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
 func (c *OpenAPIClient) ListIncidents(ctx context.Context, req ListIncidentsRequest) (ListIncidentsResponse, error) {
 	if req.Page <= 0 {
 		req.Page = 1
@@ -795,6 +1314,146 @@ func (c *OpenAPIClient) ListIncidents(ctx context.Context, req ListIncidentsRequ
 		return ListIncidentsResponse{}, fmt.Errorf("platform incidents failed: %s", envelope.Message)
 	}
 	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) BatchDealIncident(ctx context.Context, req BatchDealIncidentRequest) (BatchDealIncidentResponse, error) {
+	payload := map[string]any{
+		"ids":    req.IDs,
+		"allow":  req.Allow,
+		"status": req.Status,
+		"scene":  req.Scene,
+	}
+	if req.Comment != "" {
+		payload["comment"] = req.Comment
+	}
+	var envelope apiEnvelope[BatchDealIncidentResponse]
+	if err := c.post(ctx, "/incident/batch_deal", payload, &envelope); err != nil {
+		return BatchDealIncidentResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return BatchDealIncidentResponse{}, fmt.Errorf("batch deal incident failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) IncidentR2Summary(ctx context.Context, incidentID string) (IncidentR2SummaryResponse, error) {
+	payload := map[string]any{
+		"incident_id": incidentID,
+	}
+	var envelope apiEnvelope[IncidentR2SummaryResponse]
+	if err := c.post(ctx, "/incident/r2/summary", payload, &envelope); err != nil {
+		return IncidentR2SummaryResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return IncidentR2SummaryResponse{}, fmt.Errorf("incident r2 summary failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) ListDetectionsProxy(ctx context.Context, req ListDetectionsProxyRequest) (ListDetectionsProxyResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+	}
+	if req.From != "" {
+		payload["from"] = req.From
+	}
+	if req.ThreatLevel != "" {
+		payload["threat_level"] = req.ThreatLevel
+	}
+	if req.TAID != "" {
+		payload["ta_id"] = req.TAID
+	}
+	if req.TID != "" {
+		payload["t_id"] = req.TID
+	}
+	if req.Hash != "" {
+		payload["hash"] = req.Hash
+	}
+	if req.PName != "" {
+		payload["p_name"] = req.PName
+	}
+	if req.DetectTime != nil {
+		payload["detect_time"] = req.DetectTime
+	}
+	if req.Hostname != "" {
+		payload["hostname"] = req.Hostname
+	}
+	if req.ClientID != "" {
+		payload["client_id"] = req.ClientID
+	}
+	if req.Username != "" {
+		payload["username"] = req.Username
+	}
+	if req.DealStatus != "" {
+		payload["deal_status"] = req.DealStatus
+	}
+	if req.IncidentID != "" {
+		payload["incident_id"] = req.IncidentID
+	}
+	if len(req.DealStatusArray) > 0 {
+		payload["deal_status_array"] = req.DealStatusArray
+	}
+	if req.StartTime != nil {
+		payload["start_time"] = req.StartTime
+	}
+	if req.RootName != "" {
+		payload["root_name"] = req.RootName
+	}
+	if req.MainPName != "" {
+		payload["main_p_name"] = req.MainPName
+	}
+	if req.MalwareName != "" {
+		payload["malware_name"] = req.MalwareName
+	}
+	if req.DetectionSource != "" {
+		payload["detection_source"] = req.DetectionSource
+	}
+	if req.ViewType != "" {
+		payload["view_type"] = req.ViewType
+	}
+	if len(req.DetectionIDs) > 0 {
+		payload["detection_ids"] = req.DetectionIDs
+	}
+	if req.RMConnectIP != "" {
+		payload["rm_connect_ip"] = req.RMConnectIP
+	}
+	if req.OrgConnectIP != "" {
+		payload["org_connect_ip"] = req.OrgConnectIP
+	}
+	if req.ClientIP != "" {
+		payload["client_ip"] = req.ClientIP
+	}
+
+	var envelope apiEnvelope[ListDetectionsProxyResponse]
+	if err := c.post(ctx, "/detection/get_list", payload, &envelope); err != nil {
+		return ListDetectionsProxyResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListDetectionsProxyResponse{}, fmt.Errorf("detection proxy list failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) UpdateDetectionStatus(ctx context.Context, req UpdateDetectionStatusRequest) error {
+	payload := map[string]any{
+		"ids":         req.IDs,
+		"deal_status": req.DealStatus,
+	}
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/detection/deal_status", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("update detection status failed: %s", envelope.Message)
+	}
+	return nil
 }
 
 func (c *OpenAPIClient) ListLogs(ctx context.Context, req ListLogsRequest) (ListLogsResponse, error) {
@@ -1760,6 +2419,562 @@ func (c *OpenAPIClient) SwitchNGAVStatus(ctx context.Context, switchStatus strin
 		return fmt.Errorf("switch ngav status failed: %s", envelope.Message)
 	}
 	return nil
+}
+
+// Client Setting (Host Offline)
+
+func (c *OpenAPIClient) GetHostOfflineConf(ctx context.Context) (HostOfflineConf, error) {
+	var envelope apiEnvelope[HostOfflineConf]
+	if err := c.get(ctx, "/client_setting/host_offline", nil, &envelope); err != nil {
+		return HostOfflineConf{}, err
+	}
+	if envelope.Error != 0 {
+		return HostOfflineConf{}, fmt.Errorf("get host offline conf failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) SaveHostOfflineConf(ctx context.Context, req SaveHostOfflineConfRequest) error {
+	payload := map[string]any{
+		"status":  req.Status,
+		"setting": req.Setting,
+	}
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/client_setting/host_offline", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("save host offline conf failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+// IOA Configuration
+
+func (c *OpenAPIClient) ListIOAs(ctx context.Context, req ListIOAsRequest) (ListIOAsResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+	}
+	if req.CommandLine != "" {
+		payload["command_line"] = req.CommandLine
+	}
+	if req.FileName != "" {
+		payload["file_name"] = req.FileName
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+	if req.HostType != "" {
+		payload["host_type"] = req.HostType
+	}
+	if req.IOAName != "" {
+		payload["ioa_name"] = req.IOAName
+	}
+	if req.LastModified != nil {
+		payload["last_modified"] = req.LastModified
+	}
+	if req.ModifiedBy != "" {
+		payload["modified_by"] = req.ModifiedBy
+	}
+	if req.Name != "" {
+		payload["name"] = req.Name
+	}
+	if req.TAID != "" {
+		payload["ta_id"] = req.TAID
+	}
+	if req.TID != "" {
+		payload["t_id"] = req.TID
+	}
+
+	var envelope apiEnvelope[ListIOAsResponse]
+	if err := c.post(ctx, "/configure/ioa/list", payload, &envelope); err != nil {
+		return ListIOAsResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListIOAsResponse{}, fmt.Errorf("list ioas failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) AddIOA(ctx context.Context, req AddIOARequest) error {
+	payload := map[string]any{}
+	if req.CommandLine != "" {
+		payload["command_line"] = req.CommandLine
+	}
+	if req.Description != "" {
+		payload["description"] = req.Description
+	}
+	if req.ExclusionName != "" {
+		payload["exclusion_name"] = req.ExclusionName
+	}
+	if req.FileName != "" {
+		payload["file_name"] = req.FileName
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+	if req.HostType != "" {
+		payload["host_type"] = req.HostType
+	}
+	if req.IOAID != "" {
+		payload["ioa_id"] = req.IOAID
+	}
+	if req.Severity != "" {
+		payload["severity"] = req.Severity
+	}
+	if req.TAID != "" {
+		payload["ta_id"] = req.TAID
+	}
+	if req.TID != "" {
+		payload["t_id"] = req.TID
+	}
+
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/configure/ioa/add", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("add ioa failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) UpdateIOA(ctx context.Context, req UpdateIOARequest) error {
+	payload := map[string]any{
+		"id": req.ID,
+	}
+	if req.CommandLine != "" {
+		payload["command_line"] = req.CommandLine
+	}
+	if req.Description != "" {
+		payload["description"] = req.Description
+	}
+	if req.ExclusionName != "" {
+		payload["exclusion_name"] = req.ExclusionName
+	}
+	if req.FileName != "" {
+		payload["file_name"] = req.FileName
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+	if req.HostType != "" {
+		payload["host_type"] = req.HostType
+	}
+	if req.TAID != "" {
+		payload["ta_id"] = req.TAID
+	}
+	if req.TID != "" {
+		payload["t_id"] = req.TID
+	}
+
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/configure/ioa/update", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("update ioa failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) DeleteIOA(ctx context.Context, id string) error {
+	payload := map[string]any{"id": id}
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/configure/ioa/delete", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("delete ioa failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) ListIOAAuditLogs(ctx context.Context, req ListIOAAuditLogsRequest) (ListIOAAuditLogsResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+	}
+	if req.CommandLine != "" {
+		payload["command_line"] = req.CommandLine
+	}
+	if req.EventTime != nil {
+		payload["event_time"] = req.EventTime
+	}
+	if req.FileName != "" {
+		payload["file_name"] = req.FileName
+	}
+	if req.HostName != "" {
+		payload["host_name"] = req.HostName
+	}
+	if req.IOAName != "" {
+		payload["ioa_name"] = req.IOAName
+	}
+
+	var envelope apiEnvelope[ListIOAAuditLogsResponse]
+	if err := c.post(ctx, "/configure/ioa/audit_log", payload, &envelope); err != nil {
+		return ListIOAAuditLogsResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListIOAAuditLogsResponse{}, fmt.Errorf("list ioa audit logs failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+// IOA Network Exclusion
+
+func (c *OpenAPIClient) ListIOANetworks(ctx context.Context, req ListIOANetworksRequest) (ListIOANetworksResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+	if req.HostType != "" {
+		payload["host_type"] = req.HostType
+	}
+	if req.IP != "" {
+		payload["ip"] = req.IP
+	}
+	if req.LastModified != nil {
+		payload["last_modified"] = req.LastModified
+	}
+	if req.ModifiedBy != "" {
+		payload["modified_by"] = req.ModifiedBy
+	}
+	if req.Name != "" {
+		payload["name"] = req.Name
+	}
+
+	var envelope apiEnvelope[ListIOANetworksResponse]
+	if err := c.post(ctx, "/configure/ioa_network/list", payload, &envelope); err != nil {
+		return ListIOANetworksResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListIOANetworksResponse{}, fmt.Errorf("list ioa networks failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) AddIOANetwork(ctx context.Context, req AddIOANetworkRequest) error {
+	payload := map[string]any{
+		"exclusion_name": req.ExclusionName,
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+	if req.HostType != "" {
+		payload["host_type"] = req.HostType
+	}
+	if req.IP != "" {
+		payload["ip"] = req.IP
+	}
+
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/configure/ioa_network/add", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("add ioa network failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) UpdateIOANetwork(ctx context.Context, req UpdateIOANetworkRequest) error {
+	payload := map[string]any{
+		"id": req.ID,
+	}
+	if req.ExclusionName != "" {
+		payload["exclusion_name"] = req.ExclusionName
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+	if req.HostType != "" {
+		payload["host_type"] = req.HostType
+	}
+	if req.IP != "" {
+		payload["ip"] = req.IP
+	}
+
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/configure/ioa_network/update", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("update ioa network failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) DeleteIOANetwork(ctx context.Context, id string) error {
+	payload := map[string]any{"id": id}
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/configure/ioa_network/delete", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("delete ioa network failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+// Strategy Management
+
+func (c *OpenAPIClient) GetStrategySingle(ctx context.Context, strategyType string) (Strategy, error) {
+	var envelope apiEnvelope[Strategy]
+	if err := c.get(ctx, fmt.Sprintf("/strategy/%s/single", strategyType), nil, &envelope); err != nil {
+		return Strategy{}, err
+	}
+	if envelope.Error != 0 {
+		return Strategy{}, fmt.Errorf("get strategy single failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) ListStrategies(ctx context.Context, req ListStrategiesRequest) (ListStrategiesResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+		"type":  req.Type,
+	}
+	if req.Content != "" {
+		payload["content"] = req.Content
+	}
+	if req.CreateTime != nil {
+		payload["create_time"] = req.CreateTime
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+	if len(req.Includes) > 0 {
+		payload["includes"] = req.Includes
+	}
+	if req.LastUpdateTime != nil {
+		payload["last_update_time"] = req.LastUpdateTime
+	}
+	if req.Name != "" {
+		payload["name"] = req.Name
+	}
+	if req.RangeType > 0 {
+		payload["range_type"] = req.RangeType
+	}
+	if req.Status > 0 {
+		payload["status"] = req.Status
+	}
+	if req.StrategyID != "" {
+		payload["strategy_id"] = req.StrategyID
+	}
+
+	var envelope apiEnvelope[ListStrategiesResponse]
+	if err := c.post(ctx, "/strategy/list", payload, &envelope); err != nil {
+		return ListStrategiesResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListStrategiesResponse{}, fmt.Errorf("list strategies failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) GetStrategyDetail(ctx context.Context, req GetStrategyDetailRequest) (Strategy, error) {
+	payload := map[string]any{
+		"strategy_id": req.StrategyID,
+		"type":        req.Type,
+	}
+	var envelope apiEnvelope[Strategy]
+	if err := c.post(ctx, "/strategy/detail", payload, &envelope); err != nil {
+		return Strategy{}, err
+	}
+	if envelope.Error != 0 {
+		return Strategy{}, fmt.Errorf("get strategy detail failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) CreateStrategy(ctx context.Context, req CreateStrategyRequest) (CreateStrategyResponse, error) {
+	payload := map[string]any{
+		"name":       req.Name,
+		"type":       req.Type,
+		"range_type": req.RangeType,
+	}
+	if req.Content != "" {
+		payload["content"] = req.Content
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+	if req.ConfigContent != "" {
+		payload["config_content"] = req.ConfigContent
+	}
+	if req.Status > 0 {
+		payload["status"] = req.Status
+	}
+	if len(req.Includes) > 0 {
+		payload["includes"] = req.Includes
+	}
+	if len(req.Excludes) > 0 {
+		payload["excludes"] = req.Excludes
+	}
+	if req.ExcludeObjects != nil {
+		payload["exclude_objects"] = req.ExcludeObjects
+	}
+
+	var envelope apiEnvelope[CreateStrategyResponse]
+	if err := c.post(ctx, "/strategy/create", payload, &envelope); err != nil {
+		return CreateStrategyResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return CreateStrategyResponse{}, fmt.Errorf("create strategy failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) UpdateStrategy(ctx context.Context, req UpdateStrategyRequest) error {
+	payload := map[string]any{
+		"strategy_id": req.StrategyID,
+	}
+	if req.Name != "" {
+		payload["name"] = req.Name
+	}
+	if req.Type != "" {
+		payload["type"] = req.Type
+	}
+	if req.Content != "" {
+		payload["content"] = req.Content
+	}
+	if req.RangeType > 0 {
+		payload["range_type"] = req.RangeType
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+	if req.ConfigContent != "" {
+		payload["config_content"] = req.ConfigContent
+	}
+	if req.Status > 0 {
+		payload["status"] = req.Status
+	}
+	if len(req.Includes) > 0 {
+		payload["includes"] = req.Includes
+	}
+	if len(req.Excludes) > 0 {
+		payload["excludes"] = req.Excludes
+	}
+	if req.ExcludeObjects != nil {
+		payload["exclude_objects"] = req.ExcludeObjects
+	}
+
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/strategy/update", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("update strategy failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) DeleteStrategy(ctx context.Context, strategyID string, strategyType string) error {
+	payload := map[string]any{
+		"strategy_id": strategyID,
+		"type":        strategyType,
+	}
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/strategy/delete", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("delete strategy failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) GetStrategyState(ctx context.Context) (StrategyState, error) {
+	var envelope apiEnvelope[StrategyState]
+	if err := c.get(ctx, "/strategy/state", nil, &envelope); err != nil {
+		return StrategyState{}, err
+	}
+	if envelope.Error != 0 {
+		return StrategyState{}, fmt.Errorf("get strategy state failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) SortStrategies(ctx context.Context, sortIDs []string, strategyType string) error {
+	payload := map[string]any{
+		"sort_ids": sortIDs,
+		"type":     strategyType,
+	}
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/strategy/sort", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("sort strategies failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) UpdateStrategyStatus(ctx context.Context, req UpdateStrategyStatusRequest) error {
+	payload := map[string]any{
+		"status": req.Status,
+	}
+	if req.StrategyID != "" {
+		payload["strategy_id"] = req.StrategyID
+	}
+	if req.Type != "" {
+		payload["type"] = req.Type
+	}
+
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/strategy/status", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("update strategy status failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) GetDefaultStrategy(ctx context.Context, req GetDefaultStrategyRequest) (Strategy, error) {
+	payload := map[string]any{
+		"strategy_id": req.StrategyID,
+		"type":        req.Type,
+	}
+	var envelope apiEnvelope[Strategy]
+	if err := c.post(ctx, "/strategy/get_default", payload, &envelope); err != nil {
+		return Strategy{}, err
+	}
+	if envelope.Error != 0 {
+		return Strategy{}, fmt.Errorf("get default strategy failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
 }
 
 func (c *OpenAPIClient) get(ctx context.Context, path string, payload any, out any) error {

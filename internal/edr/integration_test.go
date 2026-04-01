@@ -200,8 +200,10 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 	t.Run("isolate_file_delete", func(t *testing.T) {
 		// 先获取一条隔离文件的 GUID
-		result, err := client.ListIsolateFiles(ctx, ListIsolateFilesRequest{Page: 1, Limit: 1})
-		t.Logf("isolate_file_delete result %+v", result)
+		result, err := client.ListIsolateFiles(ctx, ListIsolateFilesRequest{Page: 1, Limit: 3})
+		// t.Logf("isolate_file_delete result %+v", result)
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("isolate_file_delete raw json:\n%s", string(raw))
 		if err != nil {
 			t.Fatalf("list isolate files failed: %v", err)
 		}
@@ -272,6 +274,63 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		}
 	})
 
+	t.Run("incident_r2_summary", func(t *testing.T) {
+		// 先获取一个事件 ID
+		incidents, err := client.ListIncidents(ctx, ListIncidentsRequest{Page: 1, PageSize: 1})
+		if err != nil {
+			t.Fatalf("list incidents failed: %v", err)
+		}
+		if len(incidents.Incidents) == 0 {
+			t.Skip("no incident to get r2 summary")
+		}
+		incidentID := incidents.Incidents[0].IncidentID
+		clientID := incidents.Incidents[0].ClientID
+		fullIncidentID := incidentID
+		if clientID != "" {
+			fullIncidentID = clientID + "-" + incidentID
+		}
+		t.Logf("getting incident r2 summary: id=%s", fullIncidentID)
+
+		result, err := client.IncidentR2Summary(ctx, fullIncidentID)
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("incident_r2_summary raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("incident r2 summary failed: %v", err)
+		}
+		t.Logf("incident_r2_summary done: id=%s", result.ID)
+	})
+
+	t.Run("batch_deal_incident", func(t *testing.T) {
+		// 先获取一个事件
+		incidents, err := client.ListIncidents(ctx, ListIncidentsRequest{Page: 1, PageSize: 1})
+		if err != nil {
+			t.Fatalf("list incidents failed: %v", err)
+		}
+		if len(incidents.Incidents) == 0 {
+			t.Skip("no incident to batch deal")
+		}
+		incidentID := incidents.Incidents[0].IncidentID
+		clientID := incidents.Incidents[0].ClientID
+		fullIncidentID := incidentID
+		if clientID != "" {
+			fullIncidentID = clientID + "-" + incidentID
+		}
+		t.Logf("batch dealing incident: id=%s", fullIncidentID)
+
+		result, err := client.BatchDealIncident(ctx, BatchDealIncidentRequest{
+			IDs:    []string{fullIncidentID},
+			Allow:  false,
+			Status: 2, // 2 = 已处理
+			Scene:  "manual",
+		})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("batch_deal_incident raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("batch deal incident failed: %v", err)
+		}
+		t.Logf("batch_deal_incident done: total=%d", result.TotalIncident)
+	})
+
 	t.Run("detection_view", func(t *testing.T) {
 		result, err := client.ViewDetection(ctx, DetectionViewRequest{
 			DetectionID: "2a1443b624944ca6a628ec8d0c42c2d9-{f79084fb-1e1b-11f1-8b8f-000c2973d451}-20260312220845",
@@ -286,6 +345,42 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		if len(result) == 0 {
 			t.Fatal("detection view returned empty result")
 		}
+	})
+
+	t.Run("detections_proxy_list", func(t *testing.T) {
+		result, err := client.ListDetectionsProxy(ctx, ListDetectionsProxyRequest{Page: 1, Limit: 10})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("detections_proxy_list raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("detections proxy list failed: %v", err)
+		}
+		t.Logf("detections_proxy_list done: total=%d", result.Total)
+	})
+
+	t.Run("update_detection_status", func(t *testing.T) {
+		// 先获取一个检测记录
+		result, err := client.ListDetectionsProxy(ctx, ListDetectionsProxyRequest{Page: 1, Limit: 1})
+		if err != nil {
+			t.Fatalf("list detections proxy failed: %v", err)
+		}
+		if len(result.Results) == 0 {
+			t.Skip("no detection to update status")
+		}
+		// 获取第一个检测的 id
+		detectionID, ok := result.Results[0]["id"].(string)
+		if !ok || detectionID == "" {
+			t.Skip("no detection id found")
+		}
+		t.Logf("updating detection status: id=%s", detectionID)
+
+		err = client.UpdateDetectionStatus(ctx, UpdateDetectionStatusRequest{
+			IDs:        []string{detectionID},
+			DealStatus: 1, // 1 = 已处理
+		})
+		if err != nil {
+			t.Fatalf("update detection status failed: %v", err)
+		}
+		t.Logf("update_detection_status done: id=%s", detectionID)
 	})
 
 	// Virus Scan tests
@@ -457,6 +552,356 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			t.Fatalf("switch ngav status failed: %v", err)
 		}
 		t.Logf("settings_switch_ngav_status done")
+	})
+
+	// Client Setting (Host Offline) tests
+	t.Run("client_setting_get_host_offline", func(t *testing.T) {
+		result, err := client.GetHostOfflineConf(ctx)
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("client_setting_get_host_offline raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("get host offline conf failed: %v", err)
+		}
+		t.Logf("client_setting_get_host_offline done: status=%d", result.Status)
+	})
+
+	t.Run("client_setting_save_host_offline", func(t *testing.T) {
+		err := client.SaveHostOfflineConf(ctx, SaveHostOfflineConfRequest{
+			Status: 1,
+			Setting: HostOfflineSetting{
+				Timeout: "10m",
+			},
+		})
+		if err != nil {
+			t.Fatalf("save host offline conf failed: %v", err)
+		}
+		t.Logf("client_setting_save_host_offline done")
+	})
+
+	// IOA Configuration tests
+	t.Run("ioa_list", func(t *testing.T) {
+		result, err := client.ListIOAs(ctx, ListIOAsRequest{Page: 1, Limit: 10})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("ioa_list raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("list ioas failed: %v", err)
+		}
+		if result.Total < 0 {
+			t.Fatalf("unexpected total: %+v", result)
+		}
+		t.Logf("ioa_list done: total=%d", result.Total)
+	})
+
+	t.Run("ioa_add", func(t *testing.T) {
+		err := client.AddIOA(ctx, AddIOARequest{
+			CommandLine:   "test_cmd",
+			Description:   "integration test ioa",
+			ExclusionName: "test_ioa",
+			FileName:      "test.exe",
+			HostType:      "ALL",
+			Severity:      "high",
+		})
+		if err != nil {
+			t.Logf("add ioa failed (may already exist): %v", err)
+		}
+		t.Logf("ioa_add done")
+	})
+
+	t.Run("ioa_update", func(t *testing.T) {
+		// 先获取一个 IOA
+		result, err := client.ListIOAs(ctx, ListIOAsRequest{Page: 1, Limit: 1})
+		if err != nil {
+			t.Fatalf("list ioas failed: %v", err)
+		}
+		if len(result.Results) == 0 {
+			t.Skip("no ioa to update")
+		}
+		ioaID := result.Results[0].ExclusionID
+		t.Logf("updating ioa: id=%s", ioaID)
+
+		err = client.UpdateIOA(ctx, UpdateIOARequest{
+			ID:          ioaID,
+			Description: "updated integration test ioa",
+		})
+		if err != nil {
+			t.Fatalf("update ioa failed: %v", err)
+		}
+		t.Logf("ioa_update done: id=%s", ioaID)
+	})
+
+	t.Run("ioa_delete", func(t *testing.T) {
+		// 先获取一个 IOA
+		result, err := client.ListIOAs(ctx, ListIOAsRequest{Page: 1, Limit: 1})
+		if err != nil {
+			t.Fatalf("list ioas failed: %v", err)
+		}
+		if len(result.Results) == 0 {
+			t.Skip("no ioa to delete")
+		}
+		ioaID := result.Results[0].ExclusionID
+		t.Logf("deleting ioa: id=%s", ioaID)
+
+		err = client.DeleteIOA(ctx, ioaID)
+		if err != nil {
+			t.Fatalf("delete ioa failed: %v", err)
+		}
+		t.Logf("ioa_delete done: id=%s", ioaID)
+	})
+
+	t.Run("ioa_audit_log", func(t *testing.T) {
+		result, err := client.ListIOAAuditLogs(ctx, ListIOAAuditLogsRequest{Page: 1, Limit: 10})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("ioa_audit_log raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("list ioa audit logs failed: %v", err)
+		}
+		t.Logf("ioa_audit_log done: total=%d", result.Total)
+	})
+
+	// IOA Network Exclusion tests
+	t.Run("ioa_network_list", func(t *testing.T) {
+		result, err := client.ListIOANetworks(ctx, ListIOANetworksRequest{Page: 1, Limit: 10})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("ioa_network_list raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("list ioa networks failed: %v", err)
+		}
+		t.Logf("ioa_network_list done: total=%d", result.Total)
+	})
+
+	t.Run("ioa_network_add", func(t *testing.T) {
+		err := client.AddIOANetwork(ctx, AddIOANetworkRequest{
+			ExclusionName: "test_network",
+			HostType:      "ALL",
+			IP:            "192.168.1.1",
+		})
+		if err != nil {
+			t.Logf("add ioa network failed (may already exist): %v", err)
+		}
+		t.Logf("ioa_network_add done")
+	})
+
+	t.Run("ioa_network_update", func(t *testing.T) {
+		// 先获取一个 IOA Network
+		result, err := client.ListIOANetworks(ctx, ListIOANetworksRequest{Page: 1, Limit: 1})
+		if err != nil {
+			t.Fatalf("list ioa networks failed: %v", err)
+		}
+		if len(result.Results) == 0 {
+			t.Skip("no ioa network to update")
+		}
+		networkID := result.Results[0].ID
+		t.Logf("updating ioa network: id=%s", networkID)
+
+		err = client.UpdateIOANetwork(ctx, UpdateIOANetworkRequest{
+			ID:            networkID,
+			ExclusionName: "updated_network",
+		})
+		if err != nil {
+			t.Fatalf("update ioa network failed: %v", err)
+		}
+		t.Logf("ioa_network_update done: id=%s", networkID)
+	})
+
+	t.Run("ioa_network_delete", func(t *testing.T) {
+		// 先获取一个 IOA Network
+		result, err := client.ListIOANetworks(ctx, ListIOANetworksRequest{Page: 1, Limit: 1})
+		if err != nil {
+			t.Fatalf("list ioa networks failed: %v", err)
+		}
+		if len(result.Results) == 0 {
+			t.Skip("no ioa network to delete")
+		}
+		networkID := result.Results[0].ID
+		t.Logf("deleting ioa network: id=%s", networkID)
+
+		err = client.DeleteIOANetwork(ctx, networkID)
+		if err != nil {
+			t.Fatalf("delete ioa network failed: %v", err)
+		}
+		t.Logf("ioa_network_delete done: id=%s", networkID)
+	})
+
+	// Strategy Management tests
+	t.Run("strategy_state", func(t *testing.T) {
+		result, err := client.GetStrategyState(ctx)
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("strategy_state raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("get strategy state failed: %v", err)
+		}
+		t.Logf("strategy_state done: all_strategy=%d active_strategy=%d", result.AllStrategy, result.ActiveStrategy)
+	})
+
+	t.Run("strategy_list", func(t *testing.T) {
+		result, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 10, Type: "virus_scan_settings"})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("strategy_list raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("list strategies failed: %v", err)
+		}
+		t.Logf("strategy_list done: total=%d", result.Total)
+	})
+
+	t.Run("strategy_single", func(t *testing.T) {
+		result, err := client.GetStrategySingle(ctx, "virus_scan_settings")
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("strategy_single raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("get strategy single failed: %v", err)
+		}
+		t.Logf("strategy_single done: name=%s", result.Name)
+	})
+
+	t.Run("strategy_detail", func(t *testing.T) {
+		// 先获取一个策略
+		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 1, Type: "virus_scan_settings"})
+		if err != nil {
+			t.Fatalf("list strategies failed: %v", err)
+		}
+		if len(listResult.Items) == 0 {
+			t.Skip("no strategy to get detail")
+		}
+		strategyID := listResult.Items[0].StrategyID
+		strategyType := listResult.Items[0].Type
+		t.Logf("getting strategy detail: id=%s type=%s", strategyID, strategyType)
+
+		result, err := client.GetStrategyDetail(ctx, GetStrategyDetailRequest{
+			StrategyID: strategyID,
+			Type:       strategyType,
+		})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("strategy_detail raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("get strategy detail failed: %v", err)
+		}
+		t.Logf("strategy_detail done: name=%s", result.Name)
+	})
+
+	t.Run("strategy_create", func(t *testing.T) {
+		result, err := client.CreateStrategy(ctx, CreateStrategyRequest{
+			Name:      "integration test strategy",
+			Type:      "virus_scan_settings",
+			RangeType: 1,
+			Status:    1,
+		})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("strategy_create raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("create strategy failed: %v", err)
+		}
+		t.Logf("strategy_create done: strategy_id=%s", result.StrategyID)
+	})
+
+	t.Run("strategy_update", func(t *testing.T) {
+		// 先获取一个策略
+		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 1, Type: "virus_scan_settings"})
+		if err != nil {
+			t.Fatalf("list strategies failed: %v", err)
+		}
+		if len(listResult.Items) == 0 {
+			t.Skip("no strategy to update")
+		}
+		strategyID := listResult.Items[0].StrategyID
+		t.Logf("updating strategy: id=%s", strategyID)
+
+		err = client.UpdateStrategy(ctx, UpdateStrategyRequest{
+			StrategyID: strategyID,
+			Name:       "updated integration test strategy",
+		})
+		if err != nil {
+			t.Fatalf("update strategy failed: %v", err)
+		}
+		t.Logf("strategy_update done: id=%s", strategyID)
+	})
+
+	t.Run("strategy_delete", func(t *testing.T) {
+		// 先创建一个策略再删除
+		createResult, err := client.CreateStrategy(ctx, CreateStrategyRequest{
+			Name:      "integration test strategy to delete",
+			Type:      "virus_scan_settings",
+			RangeType: 1,
+			Status:    1,
+		})
+		if err != nil {
+			t.Fatalf("create strategy failed: %v", err)
+		}
+		t.Logf("created strategy: id=%s", createResult.StrategyID)
+
+		err = client.DeleteStrategy(ctx, createResult.StrategyID, "virus_scan_settings")
+		if err != nil {
+			t.Fatalf("delete strategy failed: %v", err)
+		}
+		t.Logf("strategy_delete done: id=%s", createResult.StrategyID)
+	})
+
+	t.Run("strategy_sort", func(t *testing.T) {
+		// 先获取策略列表
+		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 10, Type: "virus_scan_settings"})
+		if err != nil {
+			t.Fatalf("list strategies failed: %v", err)
+		}
+		if len(listResult.Items) == 0 {
+			t.Skip("no strategy to sort")
+		}
+
+		var sortIDs []string
+		for _, item := range listResult.Items {
+			sortIDs = append(sortIDs, item.StrategyID)
+		}
+
+		err = client.SortStrategies(ctx, sortIDs, "virus_scan_settings")
+		if err != nil {
+			t.Fatalf("sort strategies failed: %v", err)
+		}
+		t.Logf("strategy_sort done")
+	})
+
+	t.Run("strategy_status", func(t *testing.T) {
+		// 先获取一个策略
+		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 1, Type: "virus_scan_settings"})
+		if err != nil {
+			t.Fatalf("list strategies failed: %v", err)
+		}
+		if len(listResult.Items) == 0 {
+			t.Skip("no strategy to update status")
+		}
+		strategyID := listResult.Items[0].StrategyID
+		t.Logf("updating strategy status: id=%s", strategyID)
+
+		err = client.UpdateStrategyStatus(ctx, UpdateStrategyStatusRequest{
+			StrategyID: strategyID,
+			Type:       "virus_scan_settings",
+			Status:     1,
+		})
+		if err != nil {
+			t.Fatalf("update strategy status failed: %v", err)
+		}
+		t.Logf("strategy_status done: id=%s", strategyID)
+	})
+
+	t.Run("strategy_get_default", func(t *testing.T) {
+		// 先获取一个策略
+		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 1, Type: "virus_scan_settings"})
+		if err != nil {
+			t.Fatalf("list strategies failed: %v", err)
+		}
+		if len(listResult.Items) == 0 {
+			t.Skip("no strategy to get default")
+		}
+		strategyID := listResult.Items[0].StrategyID
+		t.Logf("getting default strategy: id=%s", strategyID)
+
+		result, err := client.GetDefaultStrategy(ctx, GetDefaultStrategyRequest{
+			StrategyID: strategyID,
+			Type:       "virus_scan_settings",
+		})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("strategy_get_default raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("get default strategy failed: %v", err)
+		}
+		t.Logf("strategy_get_default done: name=%s", result.Name)
 	})
 }
 

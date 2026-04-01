@@ -65,13 +65,13 @@ func (s *Service) analyzeByModel(ctx context.Context, text string) (Decision, er
 	}
 
 	systemPrompt := "你是 EDR 意图路由器。请把用户输入路由成结构化 JSON。\n" +
-		"可选 action 只有：none, hosts, incidents, detections, logs, isolate, release, iocs, tasks, task_result, send_instruction, virus_scan, virus_scan_record, virus_add, virus_update, virus_cancel, virus_by_host, virus_by_hash, virus_hash_hosts。\n" +
+		"可选 action 只有：none, hosts, incidents, detections, logs, isolate, release, iocs, tasks, task_result, send_instruction, virus_scan, virus_scan_record, virus_add, virus_update, virus_cancel, virus_by_host, virus_by_hash, virus_hash_hosts, ioa, ioa_network, strategy, host_offline。\n" +
 		"如果是查询主机，尽量提取 hostname 或 client_ip。\n" +
 		"如果是查事件、检出、日志，按最接近的 action 返回。\n" +
 		"如果用户提到第几页、page、每页多少条，也尽量提取 page 和 page_size。\n" +
-		"如果是高危写操作（隔离/恢复/取消扫描计划/新增扫描/更新扫描），needs_confirmation=true。\n" +
+		"如果是高危写操作（隔离/恢复/取消扫描计划/新增扫描/更新扫描/增删改IOA/增删改策略），needs_confirmation=true。\n" +
 		"只输出 JSON，不要 markdown，不要解释。JSON 结构：{" +
-		"\"action\":\"none|hosts|incidents|detections|logs|isolate|release|iocs|tasks|task_result|send_instruction|virus_scan|virus_scan_record|virus_add|virus_update|virus_cancel|virus_by_host|virus_by_hash|virus_hash_hosts\"," +
+		"\"action\":\"none|hosts|incidents|detections|logs|isolate|release|iocs|tasks|task_result|send_instruction|virus_scan|virus_scan_record|virus_add|virus_update|virus_cancel|virus_by_host|virus_by_hash|virus_hash_hosts|ioa|ioa_network|strategy|host_offline\"," +
 		"\"confidence\":0.0," +
 		"\"hostname\":\"\"," +
 		"\"client_id\":\"\"," +
