@@ -60,10 +60,6 @@ type Client interface {
 	ListVirusByHash(ctx context.Context, req ListVirusByHashRequest) (ListVirusByHashResponse, error)
 	ListVirusHashHosts(ctx context.Context, req ListVirusHashHostsRequest) (ListVirusHashHostsResponse, error)
 
-	// NGAV Settings
-	GetNGAVConf(ctx context.Context) (map[string]any, error)
-	SwitchNGAVStatus(ctx context.Context, switchStatus string) error
-
 	// Client Setting (Host Offline)
 	GetHostOfflineConf(ctx context.Context) (HostOfflineConf, error)
 	SaveHostOfflineConf(ctx context.Context, req SaveHostOfflineConfRequest) error
@@ -2394,31 +2390,6 @@ func (c *OpenAPIClient) ListVirusHashHosts(ctx context.Context, req ListVirusHas
 		return ListVirusHashHostsResponse{}, fmt.Errorf("list virus hash hosts failed: %s", envelope.Message)
 	}
 	return envelope.Data, nil
-}
-
-// NGAV Settings
-
-func (c *OpenAPIClient) GetNGAVConf(ctx context.Context) (map[string]any, error) {
-	var envelope apiEnvelope[map[string]any]
-	if err := c.get(ctx, "/settings/get_ngav_conf", nil, &envelope); err != nil {
-		return nil, err
-	}
-	if envelope.Error != 0 {
-		return nil, fmt.Errorf("get ngav conf failed: %s", envelope.Message)
-	}
-	return envelope.Data, nil
-}
-
-func (c *OpenAPIClient) SwitchNGAVStatus(ctx context.Context, switchStatus string) error {
-	payload := map[string]any{"switch": switchStatus}
-	var envelope apiEnvelope[any]
-	if err := c.post(ctx, "/settings/switch_ngav_status", payload, &envelope); err != nil {
-		return err
-	}
-	if envelope.Error != 0 {
-		return fmt.Errorf("switch ngav status failed: %s", envelope.Message)
-	}
-	return nil
 }
 
 // Client Setting (Host Offline)

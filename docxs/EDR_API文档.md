@@ -1334,56 +1334,6 @@ Content-Type: `application/json`
 
 ---
 
-## Proxy Settings
-
-### 获取 NGAV 配置
-
-**GET** `/open_api/rm/v1/settings/get_ngav_conf`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/settings/get_ngav_conf
-
-> Downstream: ../ratp-console/services/console
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 切换 NGAV 状态
-
-**POST** `/open_api/rm/v1/settings/switch_ngav_status`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/settings/switch_ngav_status
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **switch**: string (enum: on, off) (enum: on, off) (required) 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
 ## Proxy Strategy
 
 ### 获取单个策略

@@ -445,19 +445,6 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		}
 	})
 
-	// NGAV Settings tests
-	t.Run("settings_get_ngav_conf", func(t *testing.T) {
-		result, err := client.GetNGAVConf(ctx)
-		raw, _ := json.MarshalIndent(result, "", "  ")
-		t.Logf("settings_get_ngav_conf raw json:\n%s", string(raw))
-		if err != nil {
-			t.Fatalf("get ngav conf failed: %v", err)
-		}
-		if result == nil {
-			t.Fatal("ngav conf returned nil")
-		}
-	})
-
 	// Virus Scan write operations tests
 	t.Run("virus_scan_add", func(t *testing.T) {
 		// 先获取一台在线主机的 client_id
@@ -536,22 +523,6 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			t.Fatalf("cancel virus scan failed: %v", err)
 		}
 		t.Logf("virus_scan_cancel done: rid=%s", rid)
-	})
-
-	t.Run("settings_switch_ngav_status", func(t *testing.T) {
-		// 先获取当前 NGAV 配置
-		conf, err := client.GetNGAVConf(ctx)
-		if err != nil {
-			t.Fatalf("get ngav conf failed: %v", err)
-		}
-		t.Logf("current ngav conf: %+v", conf)
-
-		// 切换状态
-		err = client.SwitchNGAVStatus(ctx, "off")
-		if err != nil {
-			t.Fatalf("switch ngav status failed: %v", err)
-		}
-		t.Logf("settings_switch_ngav_status done")
 	})
 
 	// Client Setting (Host Offline) tests
