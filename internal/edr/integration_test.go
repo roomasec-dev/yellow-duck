@@ -258,7 +258,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		}
 		t.Logf("sending instruction to client_id=%s", clientID)
 
-		result, err := client.SendInstruction(ctx, clientID, "quarantine_network", "integration test 隔离网络")
+		result, err := client.SendInstruction(ctx, clientID, "list_ps")
 		t.Logf("send_instruction result %+v", result)
 		if err != nil {
 			t.Fatalf("send instruction failed: %v", err)

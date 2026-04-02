@@ -46,7 +46,7 @@ type Client interface {
 
 	ListTasks(ctx context.Context, req ListTasksRequest) (ListTasksResponse, error)
 	GetTaskResult(ctx context.Context, taskID string) (TaskResult, error)
-	SendInstruction(ctx context.Context, clientID string, instructionName string, taskName string) (InstructionResult, error)
+	SendInstruction(ctx context.Context, clientID string, instructionName string) (InstructionResult, error)
 
 	// Virus Scan
 	AddVirusScan(ctx context.Context, req AddVirusScanRequest) error
@@ -217,7 +217,7 @@ type Host struct {
 type InstructionResult struct {
 	TaskID   string `json:"task_id"`
 	HostName string `json:"host_name"`
-	Repeat   string `json:"repeat"`
+	Repeat   bool   `json:"repeat"`
 }
 
 // Isolate File Management
@@ -1199,11 +1199,11 @@ func (c *OpenAPIClient) RemoveHost(ctx context.Context, clientIDs []string) erro
 }
 
 func (c *OpenAPIClient) IsolateHost(ctx context.Context, clientID string) (InstructionResult, error) {
-	return c.sendInstruction(ctx, clientID, "quarantine_network", "AI 主 Chat 隔离主机")
+	return c.sendInstruction(ctx, clientID, "quarantine_network")
 }
 
 func (c *OpenAPIClient) ReleaseHost(ctx context.Context, clientID string) (InstructionResult, error) {
-	return c.sendInstruction(ctx, clientID, "recover_network", "AI 主 Chat 恢复主机")
+	return c.sendInstruction(ctx, clientID, "recover_network")
 }
 
 func (c *OpenAPIClient) ListDetections(ctx context.Context, req ListDetectionsRequest) (ListDetectionsResponse, error) {
@@ -1838,8 +1838,8 @@ func (c *OpenAPIClient) GetTaskResult(ctx context.Context, taskID string) (TaskR
 	return envelope.Data, nil
 }
 
-func (c *OpenAPIClient) SendInstruction(ctx context.Context, clientID string, instructionName string, taskName string) (InstructionResult, error) {
-	return c.sendInstruction(ctx, clientID, instructionName, taskName)
+func (c *OpenAPIClient) SendInstruction(ctx context.Context, clientID string, instructionName string) (InstructionResult, error) {
+	return c.sendInstruction(ctx, clientID, instructionName)
 }
 
 func (c *OpenAPIClient) ViewIncident(ctx context.Context, req IncidentViewRequest) (map[string]any, error) {
@@ -1928,13 +1928,11 @@ func shortenForError(text string) string {
 	return text[:200] + "..."
 }
 
-func (c *OpenAPIClient) sendInstruction(ctx context.Context, clientID string, instructionName string, taskName string) (InstructionResult, error) {
+func (c *OpenAPIClient) sendInstruction(ctx context.Context, clientID string, instructionName string) (InstructionResult, error) {
 	payload := map[string]any{
 		"client_id":        clientID,
 		"instruction_name": instructionName,
-		"instruction_type": 0,
-		"task_name":        taskName,
-		"is_online":        "1",
+		"is_online":        1,
 	}
 
 	var envelope apiEnvelope[InstructionResult]
@@ -2007,7 +2005,9 @@ func (c *OpenAPIClient) postWithHeaders(ctx context.Context, url string, headers
 		return fmt.Errorf("edr http %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	rawBody, _ := io.ReadAll(resp.Body)
+	// fmt.Printf("===edr raw response: %s\n", string(rawBody))
+	if err := json.NewDecoder(bytes.NewReader(rawBody)).Decode(out); err != nil {
 		return fmt.Errorf("decode edr response: %w", err)
 	}
 	return nil

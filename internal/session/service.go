@@ -1081,14 +1081,14 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 		if err != nil {
 			return "", err
 		}
-		return s.msg(locale, "confirm_isolate_done", map[string]string{"task_id": result.TaskID, "host": result.HostName, "repeat": result.Repeat}), nil
+		return s.msg(locale, "confirm_isolate_done", map[string]string{"task_id": result.TaskID, "host": result.HostName, "repeat": strconv.FormatBool(result.Repeat)}), nil
 	case "edr_release":
 		reporter.Step(ctx, "我在下发恢复动作，并等待任务回执。")
 		result, err := s.edr.ReleaseHost(ctx, call.ClientID)
 		if err != nil {
 			return "", err
 		}
-		return s.msg(locale, "confirm_release_done", map[string]string{"task_id": result.TaskID, "host": result.HostName, "repeat": result.Repeat}), nil
+		return s.msg(locale, "confirm_release_done", map[string]string{"task_id": result.TaskID, "host": result.HostName, "repeat": strconv.FormatBool(result.Repeat)}), nil
 	case "edr_ioc_add":
 		reporter.Step(ctx, "我在添加 IOC。")
 		if err := s.edr.AddIOC(ctx, edr.AddIOCRequest{Action: call.IOCAction, Hash: call.IOCHash, Description: call.IOCDescription, ExpirationDate: call.IOCExpirationDate, FileName: call.IOCFileName, HostType: call.IOCHostType}); err != nil {
@@ -1143,7 +1143,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 			return "", fmt.Errorf("发送指令需要提供 instruction_name")
 		}
 		reporter.Step(ctx, "我正在下发指令到目标主机。")
-		result, err := s.edr.SendInstruction(ctx, call.ClientID, call.InstructionName, "AI 助手下发指令")
+		result, err := s.edr.SendInstruction(ctx, call.ClientID, call.InstructionName)
 		if err != nil {
 			return "", err
 		}
@@ -1526,7 +1526,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 			return "", fmt.Errorf("发送指令需要提供指令名称，如「发送指令 list_ps」")
 		}
 		reporter.Step(ctx, "我正在下发指令到目标主机。")
-		result, callErr := s.edr.SendInstruction(ctx, decision.ClientID, decision.InstructionName, "AI 助手下发指令")
+		result, callErr := s.edr.SendInstruction(ctx, decision.ClientID, decision.InstructionName)
 		err = callErr
 		if err == nil {
 			toolResult = fmt.Sprintf("指令已下发成功，任务ID: %s", result.TaskID)
