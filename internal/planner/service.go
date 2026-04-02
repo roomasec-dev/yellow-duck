@@ -64,7 +64,7 @@ type ToolCall struct {
 	IsolateFileReleaseAll bool   `json:"isolate_file_release_all,omitempty"`
 	PlanName              string `json:"plan_name,omitempty"`
 	ScanType              int    `json:"scan_type,omitempty"`
-	PlanType             int    `json:"plan_type,omitempty"`
+	PlanType              int    `json:"plan_type,omitempty"`
 	Scope                 int    `json:"scope,omitempty"`
 	RID                   string `json:"rid,omitempty"`
 }
@@ -230,7 +230,7 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"14.1 如果用户在删除隔离文件记录（彻底删除），优先规划 edr_delete_isolate_files，需要填 isolate_file_guids。注意：删除是彻底移除记录，放行是解除隔离让文件恢复正常使用，两者完全不同。\n" +
 		"15. 如果用户在查看指令任务列表，优先规划 edr_tasks。\n" +
 		"16. 如果用户在查看任务结果/详情，优先规划 edr_task_result，需要提取 task_id。\n" +
-		"17. 如果用户要求发送指令到主机（如 list_ps、kill_ps 等），优先规划 edr_send_instruction，需要同时填 client_id（或 hostname/client_ip 定位）和 instruction_name。\n" +
+		"17. 如果用户要求发送指令到主机（如 list_ps、kill_ps 等），优先规划 edr_send_instruction，需要同时填 client_id 和 instruction_name。\n" +
 		"18. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
 		"只输出 JSON，不要 markdown。结构：{\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"instruction_name\":\"\",\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"ioc_description\":\"\",\"ioc_expiration_date\":\"\",\"ioc_file_name\":\"\",\"ioc_host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false}]}"
 	if memoryText != "" {

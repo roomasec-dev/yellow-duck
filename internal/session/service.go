@@ -1179,11 +1179,11 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 	case "edr_ioa_add":
 		reporter.Step(ctx, "我正在添加 IOA。")
 		if err := s.edr.AddIOA(ctx, edr.AddIOARequest{
-			CommandLine:   call.Operation,
-			Description:   call.Reason,
-			FileName:     call.IOCFileName,
-			HostType:     call.IOCHostType,
-			Severity:     call.KBQuery,
+			CommandLine: call.Operation,
+			Description: call.Reason,
+			FileName:    call.IOCFileName,
+			HostType:    call.IOCHostType,
+			Severity:    call.KBQuery,
 		}); err != nil {
 			return "", err
 		}
@@ -1207,8 +1207,8 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 		reporter.Step(ctx, "我正在添加 IOA 网络排除。")
 		if err := s.edr.AddIOANetwork(ctx, edr.AddIOANetworkRequest{
 			ExclusionName: call.PlanName,
-			IP:           call.ClientIP,
-			HostType:     call.IOCHostType,
+			IP:            call.ClientIP,
+			HostType:      call.IOCHostType,
 		}); err != nil {
 			return "", err
 		}
@@ -1218,7 +1218,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 		if err := s.edr.UpdateIOANetwork(ctx, edr.UpdateIOANetworkRequest{
 			ID:            call.IOCID,
 			ExclusionName: call.PlanName,
-			IP:           call.ClientIP,
+			IP:            call.ClientIP,
 		}); err != nil {
 			return "", err
 		}
@@ -1863,12 +1863,12 @@ func (*Service) formatIsolateFiles(result edr.ListIsolateFilesResponse, page int
 	lines := []string{fmt.Sprintf("共找到 %d 条隔离文件，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
 	for _, f := range result.Results {
 		status := "未知"
-		if f.RecoverStatus == 0 {
-			status = "隔离中"
-		} else if f.RecoverStatus == 1 {
-			status = "已申请恢复"
+		if f.RecoverStatus == 1 {
+			status = "已隔离"
 		} else if f.RecoverStatus == 2 {
-			status = "已恢复"
+			status = "已释放"
+		} else if f.RecoverStatus == 3 {
+			status = "已清除"
 		}
 		lines = append(lines, fmt.Sprintf("- GUID=%s 主机=%s 文件=%s MD5=%s SHA1=%s 状态=%s ClientID=%s 组织=%s", f.GUID, f.Hostname, f.FileName, f.MD5, f.SHA1, status, f.ClientID, f.OrgName))
 	}

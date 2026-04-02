@@ -209,7 +209,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		if len(result.Results) == 0 {
 			t.Skip("no isolate files to release")
 		}
-		// 循环查找第一个 recoverStatus=1 的隔离文件
+		// 循环查找第一个 recoverStatus=1 的隔离文件, 1: 已隔离， 2：已释放， 3：已清除
 		var guid string
 		for _, f := range result.Results {
 			if f.RecoverStatus == 1 {
