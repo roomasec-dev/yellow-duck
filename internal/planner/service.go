@@ -223,7 +223,7 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"12. 如果用户在查看、列表、搜索 IOC（威胁指标/hash/哈希），优先规划 edr_iocs；如果用户需要查某条 IOC 的详情，优先规划 edr_ioc_detail。\n" +
 		"12.1 对 edr_iocs，用户说第几页、每页多少条时要把 page 和 page_size 填进 tool_calls。在回复 IOC 列表结果时，优先引用每条记录的 id 字段（而不是 hash 字段），格式如“id=xxx”。\n" +
 		"12.2 如果用户想新增 IOC（加黑名单/加白名单），优先规划 edr_ioc_add，ioc_action 填 block 或 allow，ioc_hash 填 MD5/SHA1，ioc_host_type 填 ALL 或具体客户端 ID，ioc_file_name 填文件名（如有）。\n" +
-		"12.3 如果用户想修改已有 IOC，优先规划 edr_ioc_update，需要同时填 ioc_id 和要改的字段（ioc_action、ioc_hash、ioc_host_type 等）。\n" +
+		"12.3 如果用户想修改已有 IOC，优先规划 edr_ioc_update，需要同时填 ioc_id（必填）和 hash（必填），以及要改的字段（ioc_action、ioc_host_type、ioc_description、ioc_expiration_date 等）。\n" +
 		"12.4 如果用户想删除 IOC，优先规划 edr_ioc_delete，需要填 ioc_id。\n" +
 		"13. 如果用户在查看隔离文件列表，优先规划 edr_isolate_files。\n" +
 		"14. 如果用户在放行隔离文件（解除隔离/恢复文件），优先规划 edr_release_isolate_files，需要填 isolate_file_guids（多个用英文逗号分隔）；如果同时要把 hash 加排除名单，isolate_file_add_exclusion=true。\n" +

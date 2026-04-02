@@ -1841,7 +1841,7 @@ func (*Service) formatIOCs(ctx context.Context, result edr.ListIOCsResponse, pag
 	}
 	lines := []string{fmt.Sprintf("共找到 %d 条 IOC，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
 	for _, ioc := range result.Results {
-		lines = append(lines, fmt.Sprintf("- id=%s action=%s filename=%s desc=%s", ioc.ExclusionID, ioc.Action, ioc.FileName, ioc.Description))
+		lines = append(lines, fmt.Sprintf("- id=%s hash=%s action=%s filename=%s desc=%s", ioc.ExclusionID, ioc.Hash, ioc.Action, ioc.FileName, ioc.Description))
 	}
 	if totalPages > 1 {
 		lines = append(lines, fmt.Sprintf("翻页示例：/edr iocs %d %d", minInt(page+1, totalPages), pageSize))
