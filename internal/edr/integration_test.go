@@ -127,7 +127,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 	t.Run("ioc_update", func(t *testing.T) {
 		// 先添加一条 IOC，再更新它，最后删除它
-		testHash := strings.ToUpper("382919d25113457f96e6428548e492033253aad2")
+		testHash := strings.ToUpper("382919d25113457f96e6428548e492033253aad3")
 		addReq := AddIOCRequest{
 			Action:      "Allow",
 			Hash:        testHash,
@@ -140,28 +140,27 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		}
 		t.Logf("ioc_add done: hash=%s", testHash)
 
-		// // 查找该 IOC 的 id
-		// listResult, err := client.ListIOCs(ctx, ListIOCsRequest{Hash: testHash, Limit: 100})
-		// if err != nil {
-		// 	t.Fatalf("list iocs after add failed: %v", err)
-		// }
-		// var iocID string
-		// for _, i := range listResult.Results {
-		// 	if i.Hash == testHash {
-		// 		iocID = i.ExclusionID.(string)
-		// 		break
-		// 	}
-		// }
-		// if iocID == "" {
-		// 	t.Fatalf("ioc not found after add: hash=%s", testHash)
-		// }
-		// t.Logf("found ioc id: %s", iocID)
-
-		var iocID = "8616adda9b9047b8abd8466ff533c02c"
+		// 查找该 IOC 的 id
+		listResult, err := client.ListIOCs(ctx, ListIOCsRequest{Hash: testHash, Limit: 100})
+		if err != nil {
+			t.Fatalf("list iocs after add failed: %v", err)
+		}
+		var iocID string
+		for _, i := range listResult.Results {
+			if i.Hash == testHash {
+				iocID = i.ExclusionID.(string)
+				break
+			}
+		}
+		if iocID == "" {
+			t.Fatalf("ioc not found after add: hash=%s", testHash)
+		}
+		t.Logf("found ioc id: %s", iocID)
 
 		// 更新 IOC
 		updateReq := UpdateIOCRequest{
 			ID:          iocID,
+			Hash:        testHash,
 			Description: "updated integration test ioc lalala",
 		}
 		if err := client.UpdateIOC(ctx, updateReq); err != nil {
