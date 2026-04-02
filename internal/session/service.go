@@ -768,9 +768,9 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 
 func callNeedsGroundedEDRAnswer(name string) bool {
 	switch name {
-	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_virus_scans", "edr_virus_scan_records", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts":
+	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_plan_list", "edr_plan_task", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts", "edr_instruction_policy_list":
 		return true
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_virus_add", "edr_virus_update", "edr_virus_cancel":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_instruction_policy_update", "edr_instruction_policy_save_status", "edr_instruction_policy_delete", "edr_instruction_policy_sort", "edr_instruction_policy_add":
 		return false
 	default:
 		return false
@@ -972,20 +972,20 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return formatTaskResult(result), nil
-	case "edr_virus_scans":
-		reporter.Step(ctx, "我在拉取扫描计划列表。")
-		result, err := s.edr.ListVirusScans(ctx, edr.ListVirusScansRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+	case "edr_plan_list":
+		reporter.Step(ctx, "我在拉取计划列表。")
+		result, err := s.edr.ListPlans(ctx, edr.ListPlansRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize), Type: call.Operation})
 		if err != nil {
 			return "", err
 		}
-		return formatVirusScans(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
-	case "edr_virus_scan_records":
-		reporter.Step(ctx, "我在拉取扫描记录。")
-		result, err := s.edr.ListVirusScanRecords(ctx, edr.ListVirusScanRecordsRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		return formatPlans(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_plan_task":
+		reporter.Step(ctx, "我在拉取计划任务记录。")
+		result, err := s.edr.GetPlanTask(ctx, call.RID)
 		if err != nil {
 			return "", err
 		}
-		return formatVirusScanRecords(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+		return formatPlanTasks(result), nil
 	case "edr_virus_by_host":
 		reporter.Step(ctx, "我在按主机查询病毒信息。")
 		result, err := s.edr.ListVirusByHost(ctx, edr.ListVirusByHostRequest{HostName: call.Hostname, ClientID: call.ClientID, Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
@@ -1007,6 +1007,13 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return formatVirusHashHosts(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
+	case "edr_instruction_policy_list":
+		reporter.Step(ctx, "我在拉取自动响应策略列表。")
+		result, err := s.edr.ListInstructionPolicies(ctx, edr.ListInstructionPoliciesRequest{PolicyType: call.Page, Status: call.PageSize})
+		if err != nil {
+			return "", err
+		}
+		return formatInstructionPolicies(result), nil
 	case "edr_ioas":
 		reporter.Step(ctx, "我在拉取 IOA 列表。")
 		result, err := s.edr.ListIOAs(ctx, edr.ListIOAsRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
@@ -1148,34 +1155,73 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 			return "", err
 		}
 		return fmt.Sprintf("指令已下发成功，任务ID: %s", result.TaskID), nil
-	case "edr_virus_add":
-		reporter.Step(ctx, "我正在创建扫描计划。")
-		if err := s.edr.AddVirusScan(ctx, edr.AddVirusScanRequest{
+	case "edr_plan_add":
+		reporter.Step(ctx, "我正在创建计划。")
+		if err := s.edr.AddPlan(ctx, edr.AddPlanRequest{
 			PlanName: call.PlanName,
 			ScanType: call.ScanType,
 			PlanType: call.PlanType,
 			Scope:    call.Scope,
-			ClientID: call.ClientID,
+			Type:     "kill_plan",
 		}); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("扫描计划「%s」创建成功", call.PlanName), nil
-	case "edr_virus_update":
-		reporter.Step(ctx, "我正在更新扫描计划。")
-		if err := s.edr.UpdateVirusScan(ctx, edr.UpdateVirusScanRequest{
+		return fmt.Sprintf("计划「%s」创建成功", call.PlanName), nil
+	case "edr_plan_edit":
+		reporter.Step(ctx, "我正在编辑计划。")
+		if err := s.edr.EditPlan(ctx, edr.EditPlanRequest{
 			RID:      call.RID,
 			PlanName: call.PlanName,
 			ScanType: call.ScanType,
 		}); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("扫描计划 %s 更新成功", call.RID), nil
-	case "edr_virus_cancel":
-		reporter.Step(ctx, "我正在取消扫描计划。")
-		if err := s.edr.CancelVirusScan(ctx, call.RID); err != nil {
+		return fmt.Sprintf("计划 %s 编辑成功", call.RID), nil
+	case "edr_plan_cancel":
+		reporter.Step(ctx, "我正在取消计划。")
+		if err := s.edr.CancelPlan(ctx, call.RID); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("扫描计划 %s 已取消", call.RID), nil
+		return fmt.Sprintf("计划 %s 已取消", call.RID), nil
+	case "edr_instruction_policy_add":
+		reporter.Step(ctx, "我正在添加自动响应策略。")
+		result, err := s.edr.AddInstructionPolicy(ctx, edr.AddInstructionPolicyRequest{
+			Name: call.PlanName,
+		})
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("自动响应策略 %s 创建成功", result.RID), nil
+	case "edr_instruction_policy_update":
+		reporter.Step(ctx, "我正在更新自动响应策略。")
+		if err := s.edr.UpdateInstructionPolicy(ctx, edr.UpdateInstructionPolicyRequest{
+			RID: call.RID,
+			Name: call.PlanName,
+		}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("自动响应策略 %s 更新成功", call.RID), nil
+	case "edr_instruction_policy_delete":
+		reporter.Step(ctx, "我正在删除自动响应策略。")
+		if _, err := s.edr.DeleteInstructionPolicy(ctx, call.RID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("自动响应策略 %s 已删除", call.RID), nil
+	case "edr_instruction_policy_save_status":
+		reporter.Step(ctx, "我正在更新自动响应策略状态。")
+		if _, err := s.edr.SaveInstructionPolicyStatus(ctx, edr.SaveInstructionPolicyStatusRequest{
+			RID: call.RID,
+		}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("自动响应策略 %s 状态已更新", call.RID), nil
+	case "edr_instruction_policy_sort":
+		reporter.Step(ctx, "我正在排序自动响应策略。")
+		// 需要解析rids，这里暂时用空的
+		if err := s.edr.SortInstructionPolicies(ctx, nil); err != nil {
+			return "", err
+		}
+		return "自动响应策略排序已保存", nil
 	case "edr_ioa_add":
 		reporter.Step(ctx, "我正在添加 IOA。")
 		if err := s.edr.AddIOA(ctx, edr.AddIOARequest{
@@ -1311,7 +1357,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 
 func isCriticalTool(name string) bool {
 	switch name {
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_virus_add", "edr_virus_update", "edr_virus_cancel", "edr_ioa_add", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_add", "edr_ioa_network_update", "edr_ioa_network_delete", "edr_strategy_create", "edr_strategy_update", "edr_strategy_delete", "edr_strategy_status", "edr_host_offline_save", "edr_add_host_blacklist", "edr_remove_host":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_ioa_add", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_add", "edr_ioa_network_update", "edr_ioa_network_delete", "edr_strategy_create", "edr_strategy_update", "edr_strategy_delete", "edr_strategy_status", "edr_host_offline_save", "edr_add_host_blacklist", "edr_remove_host":
 		return true
 	default:
 		return false
@@ -1531,23 +1577,24 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		if err == nil {
 			toolResult = fmt.Sprintf("指令已下发成功，任务ID: %s", result.TaskID)
 		}
-	case "virus_scan":
-		reporter.Step(ctx, "我在拉取扫描计划列表。")
+	case "plan_list":
+		reporter.Step(ctx, "我在拉取计划列表。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
-		result, callErr := s.edr.ListVirusScans(ctx, edr.ListVirusScansRequest{Page: page, Limit: pageSize})
+		result, callErr := s.edr.ListPlans(ctx, edr.ListPlansRequest{Page: page, Limit: pageSize, Type: "kill_plan"})
 		err = callErr
 		if err == nil {
-			toolResult = formatVirusScans(result, page, pageSize)
+			toolResult = formatPlans(result, page, pageSize)
 		}
-	case "virus_scan_record":
-		reporter.Step(ctx, "我在拉取扫描记录。")
-		page := positiveOr(decision.Page, 1)
-		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
-		result, callErr := s.edr.ListVirusScanRecords(ctx, edr.ListVirusScanRecordsRequest{Page: page, Limit: pageSize})
+	case "plan_task":
+		reporter.Step(ctx, "我在拉取计划任务记录。")
+		if decision.RID == "" {
+			return "", fmt.Errorf("查询计划任务需要提供计划ID（rid）")
+		}
+		result, callErr := s.edr.GetPlanTask(ctx, decision.RID)
 		err = callErr
 		if err == nil {
-			toolResult = formatVirusScanRecords(result, page, pageSize)
+			toolResult = formatPlanTasks(result)
 		}
 	case "virus_by_host":
 		reporter.Step(ctx, "我在按主机查询病毒信息。")
@@ -1576,54 +1623,54 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		if err == nil {
 			toolResult = formatVirusHashHosts(result, page, pageSize)
 		}
-	case "virus_add":
+	case "plan_add":
 		if decision.PlanName == "" {
-			return "", fmt.Errorf("创建扫描计划需要提供计划名称（plan_name），请使用类似「创建扫描计划 plan_name=xxx」的格式")
+			return "", fmt.Errorf("创建计划需要提供计划名称（plan_name），请使用类似「创建计划 plan_name=xxx」的格式")
 		}
 		if decision.ScanType == 0 {
-			return "", fmt.Errorf("创建扫描计划需要提供扫描类型（scan_type）：1-快速扫描 2-全盘扫描 3-自定义路径扫描，请使用类似「创建扫描计划 plan_name=xxx scan_type=1」的格式")
+			return "", fmt.Errorf("创建计划需要提供操作类型（scan_type）：1-快速扫描 2-全盘扫描 3-自定义路径扫描 4-漏洞修复 5-安装软件 6-卸载软件 7-更新软件 8-发送文件，请使用类似「创建计划 plan_name=xxx scan_type=1」的格式")
 		}
 		if decision.PlanType == 0 {
-			return "", fmt.Errorf("创建扫描计划需要提供执行方式（plan_type）：1-立即执行 2-计划执行，请使用类似「创建扫描计划 plan_name=xxx scan_type=1 plan_type=1」的格式")
+			return "", fmt.Errorf("创建计划需要提供执行方式（plan_type）：1-立即执行 2-定时执行 3-周期执行，请使用类似「创建计划 plan_name=xxx scan_type=1 plan_type=1」的格式")
 		}
 		if decision.Scope == 0 {
-			return "", fmt.Errorf("创建扫描计划需要提供扫描范围（scope）：1-特定主机 2-主机组 3-全网主机，请使用类似「创建扫描计划 plan_name=xxx scan_type=1 plan_type=1 scope=1」的格式")
+			return "", fmt.Errorf("创建计划需要提供范围（scope）：1-特定主机 2-主机组 3-全网主机，请使用类似「创建计划 plan_name=xxx scan_type=1 plan_type=1 scope=1」的格式")
 		}
-		reporter.Step(ctx, "我正在创建扫描计划。")
-		callErr := s.edr.AddVirusScan(ctx, edr.AddVirusScanRequest{
+		reporter.Step(ctx, "我正在创建计划。")
+		callErr := s.edr.AddPlan(ctx, edr.AddPlanRequest{
 			PlanName: decision.PlanName,
 			ScanType: decision.ScanType,
 			PlanType: decision.PlanType,
 			Scope:    decision.Scope,
-			ClientID: decision.ClientID,
+			Type:     "kill_plan",
 		})
 		err = callErr
 		if err == nil {
-			toolResult = fmt.Sprintf("扫描计划「%s」创建成功", decision.PlanName)
+			toolResult = fmt.Sprintf("计划「%s」创建成功", decision.PlanName)
 		}
-	case "virus_update":
+	case "plan_edit":
 		if decision.RID == "" {
-			return "", fmt.Errorf("更新扫描计划需要提供计划ID（rid），请使用类似「更新扫描计划 rid=xxx」的格式")
+			return "", fmt.Errorf("编辑计划需要提供计划ID（rid），请使用类似「编辑计划 rid=xxx」的格式")
 		}
-		reporter.Step(ctx, "我正在更新扫描计划。")
-		callErr := s.edr.UpdateVirusScan(ctx, edr.UpdateVirusScanRequest{
+		reporter.Step(ctx, "我正在编辑计划。")
+		callErr := s.edr.EditPlan(ctx, edr.EditPlanRequest{
 			RID:      decision.RID,
 			PlanName: decision.PlanName,
 			ScanType: decision.ScanType,
 		})
 		err = callErr
 		if err == nil {
-			toolResult = fmt.Sprintf("扫描计划 %s 更新成功", decision.RID)
+			toolResult = fmt.Sprintf("计划 %s 编辑成功", decision.RID)
 		}
-	case "virus_cancel":
+	case "plan_cancel":
 		if decision.RID == "" {
-			return "", fmt.Errorf("取消扫描计划需要提供计划ID（rid），请使用类似「取消扫描计划 rid=xxx」的格式")
+			return "", fmt.Errorf("取消计划需要提供计划ID（rid），请使用类似「取消计划 rid=xxx」的格式")
 		}
-		reporter.Step(ctx, "我正在取消扫描计划。")
-		callErr := s.edr.CancelVirusScan(ctx, decision.RID)
+		reporter.Step(ctx, "我正在取消计划。")
+		callErr := s.edr.CancelPlan(ctx, decision.RID)
 		err = callErr
 		if err == nil {
-			toolResult = fmt.Sprintf("扫描计划 %s 已取消", decision.RID)
+			toolResult = fmt.Sprintf("计划 %s 已取消", decision.RID)
 		}
 	default:
 		return "", fmt.Errorf("unsupported routed edr action: %s", decision.Action)
@@ -1878,21 +1925,21 @@ func (*Service) formatIsolateFiles(result edr.ListIsolateFilesResponse, page int
 	return strings.Join(lines, "\n")
 }
 
-func formatVirusScans(result edr.ListVirusScansResponse, page int, pageSize int) string {
-	if len(result.Results) == 0 {
-		return "当前没有查到扫描计划。"
+func formatPlans(result edr.ListPlansResponse, page int, pageSize int) string {
+	if len(result.Items) == 0 {
+		return "当前没有查到计划。"
 	}
 	page = positiveOr(page, 1)
-	pageSize = positiveOr(pageSize, len(result.Results))
+	pageSize = positiveOr(pageSize, len(result.Items))
 	totalPages := calcTotalPages(result.Total, pageSize)
 	hasMore := "否"
 	if totalPages > 0 && page < totalPages {
 		hasMore = "是"
 	}
-	lines := []string{fmt.Sprintf("共找到 %d 个扫描计划，当前第 %d/%d 页，本页 %d 个（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
-	for _, scan := range result.Results {
+	lines := []string{fmt.Sprintf("共找到 %d 个计划，当前第 %d/%d 页，本页 %d 个（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Items), pageSize, hasMore)}
+	for _, plan := range result.Items {
 		statusStr := "未知"
-		switch scan.Status {
+		switch plan.Status {
 		case 0:
 			statusStr = "未执行"
 		case 1:
@@ -1902,42 +1949,82 @@ func formatVirusScans(result edr.ListVirusScansResponse, page int, pageSize int)
 		case 3:
 			statusStr = "已取消"
 		}
-		lines = append(lines, fmt.Sprintf("- rid=%s name=%s scope=%d status=%d(%s) user=%s", scan.RID, scan.PlanName, scan.Scope, scan.Status, statusStr, scan.OperationUser))
+		scanTypeStr := "未知"
+		switch plan.ScanType {
+		case 1:
+			scanTypeStr = "快速扫描"
+		case 2:
+			scanTypeStr = "全盘扫描"
+		case 3:
+			scanTypeStr = "自定义路径扫描"
+		case 4:
+			scanTypeStr = "漏洞修复"
+		case 5:
+			scanTypeStr = "安装软件"
+		case 6:
+			scanTypeStr = "卸载软件"
+		case 7:
+			scanTypeStr = "更新软件"
+		case 8:
+			scanTypeStr = "发送文件"
+		}
+		lines = append(lines, fmt.Sprintf("- rid=%s name=%s type=%s scan_type=%s scope=%d status=%d(%s) user=%s", plan.RID, plan.PlanName, plan.Type, scanTypeStr, plan.Scope, plan.Status, statusStr, plan.OperationUser))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus_scan %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr plan_list %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
 
-func formatVirusScanRecords(result edr.ListVirusScanRecordsResponse, page int, pageSize int) string {
-	if len(result.Results) == 0 {
-		return "当前没有查到扫描记录。"
+func formatPlanTasks(result edr.PlanTaskResponse) string {
+	if len(result.Items) == 0 {
+		return "当前没有查到计划任务记录。"
 	}
-	page = positiveOr(page, 1)
-	pageSize = positiveOr(pageSize, len(result.Results))
-	totalPages := calcTotalPages(result.Total, pageSize)
-	hasMore := "否"
-	if totalPages > 0 && page < totalPages {
-		hasMore = "是"
-	}
-	lines := []string{fmt.Sprintf("共找到 %d 条扫描记录，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
-	for _, record := range result.Results {
+	lines := []string{fmt.Sprintf("共找到 %d 条计划任务记录：", result.Total)}
+	for _, task := range result.Items {
 		statusStr := "未知"
-		switch record.Status {
+		switch task.Status {
 		case 0:
-			statusStr = "未执行"
+			statusStr = "待执行"
 		case 1:
 			statusStr = "执行中"
 		case 2:
-			statusStr = "已完成"
+			statusStr = "执行完成"
 		case 3:
-			statusStr = "已取消"
+			statusStr = "执行失败"
 		}
-		lines = append(lines, fmt.Sprintf("- id=%s hostname=%s scan_type=%s status=%d(%s) virus_file=%d virus_mem=%d", record.ID, record.HostName, record.ScanType, record.Status, statusStr, record.VirusFileNum, record.MemoryVirusNum))
+		lines = append(lines, fmt.Sprintf("- task_id=%s hostname=%s status=%d(%s) result=%s", task.TaskID, task.HostName, task.Status, statusStr, task.Result))
 	}
-	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus_scan_record %d %d", minInt(page+1, totalPages), pageSize))
+	return strings.Join(lines, "\n")
+}
+
+func formatInstructionPolicies(result edr.ListInstructionPoliciesResponse) string {
+	if len(result.Result) == 0 {
+		return "当前没有查到自动响应策略。"
+	}
+	lines := []string{fmt.Sprintf("共找到 %d 条自动响应策略：", len(result.Result))}
+	for _, policy := range result.Result {
+		statusStr := "未知"
+		switch policy.Status {
+		case 1:
+			statusStr = "启用"
+		case 2:
+			statusStr = "禁用"
+		}
+		policyTypeStr := "内置策略"
+		if policy.PolicyType == 2 {
+			policyTypeStr = "自定义策略"
+		}
+		scopeStr := "未知"
+		switch policy.Scope {
+		case 1:
+			scopeStr = "特定主机"
+		case 2:
+			scopeStr = "主机组"
+		case 3:
+			scopeStr = "全网"
+		}
+		lines = append(lines, fmt.Sprintf("- rid=%s name=%s type=%s status=%d(%s) scope=%d(%s) user=%s", policy.RID, policy.Name, policyTypeStr, policy.Status, statusStr, policy.Scope, scopeStr, policy.OperationUser))
 	}
 	return strings.Join(lines, "\n")
 }

@@ -65,13 +65,13 @@ func (s *Service) analyzeByModel(ctx context.Context, text string) (Decision, er
 	}
 
 	systemPrompt := "你是 EDR 意图路由器。请把用户输入路由成结构化 JSON。\n" +
-		"可选 action 只有：none, hosts, incidents, detections, logs, isolate, release, iocs, tasks, task_result, send_instruction, virus_scan, virus_scan_record, virus_add, virus_update, virus_cancel, virus_by_host, virus_by_hash, virus_hash_hosts, ioa, ioa_network, strategy, host_offline。\n" +
+		"可选 action 只有：none, hosts, incidents, detections, logs, isolate, release, iocs, tasks, task_result, send_instruction, virus_by_host, virus_by_hash, virus_hash_hosts, ioa, ioa_network, strategy, host_offline, plan_list, plan_add, plan_edit, plan_cancel, plan_task, instruction_policy_list, instruction_policy_update, instruction_policy_save_status, instruction_policy_delete, instruction_policy_sort, instruction_policy_add。\n" +
 		"如果是查询主机，尽量提取 hostname 或 client_ip。\n" +
 		"如果是查事件、检出、日志，按最接近的 action 返回。\n" +
 		"如果用户提到第几页、page、每页多少条，也尽量提取 page 和 page_size。\n" +
-		"如果是高危写操作（隔离/恢复/取消扫描计划/新增扫描/更新扫描/增删改IOA/增删改策略），needs_confirmation=true。\n" +
+		"如果是高危写操作（隔离/恢复/增删改IOA/增删改策略/新建计划/编辑计划/取消计划/增删改自动响应策略），needs_confirmation=true。\n" +
 		"只输出 JSON，不要 markdown，不要解释。JSON 结构：{" +
-		"\"action\":\"none|hosts|incidents|detections|logs|isolate|release|iocs|tasks|task_result|send_instruction|virus_scan|virus_scan_record|virus_add|virus_update|virus_cancel|virus_by_host|virus_by_hash|virus_hash_hosts|ioa|ioa_network|strategy|host_offline\"," +
+		"\"action\":\"none|hosts|incidents|detections|logs|isolate|release|iocs|tasks|task_result|send_instruction|virus_by_host|virus_by_hash|virus_hash_hosts|ioa|ioa_network|strategy|host_offline|plan_list|plan_add|plan_edit|plan_cancel|plan_task|instruction_policy_list|instruction_policy_update|instruction_policy_save_status|instruction_policy_delete|instruction_policy_sort|instruction_policy_add\"," +
 		"\"confidence\":0.0," +
 		"\"hostname\":\"\"," +
 		"\"client_id\":\"\"," +
@@ -194,31 +194,32 @@ func heuristicDecision(text string) Decision {
 	case containsAny(plain, "任务", "tasks", "指令任务", "查询任务"):
 		decision.Action = "tasks"
 		decision.Confidence = 0.7
-	case containsAny(plain, "扫描计划", "病毒扫描", "scan_plan", "virus_scan"):
-		decision.Action = "virus_scan"
+	case containsAny(plain, "计划列表", "计划记录", "查看计划", "查询计划"):
+		decision.Action = "plan_list"
 		decision.Confidence = 0.8
-	case containsAny(plain, "扫描记录", "scan_record", "病毒查杀记录"):
-		decision.Action = "virus_scan_record"
-		decision.Confidence = 0.8
-	case containsAny(plain, "新增扫描", "添加扫描", "创建扫描计划", "新建扫描计划"):
-		decision.Action = "virus_add"
+	case containsAny(plain, "新建计划", "新增计划", "创建计划", "添加计划"):
+		decision.Action = "plan_add"
 		decision.Confidence = 0.9
 		decision.NeedsConfirmation = true
 		decision.PlanName = extractPlanName(text)
 		decision.ScanType = extractScanType(text)
 		decision.PlanType = extractPlanType(text)
 		decision.Scope = extractScope(text)
-	case containsAny(plain, "修改扫描", "更新扫描计划", "编辑扫描计划"):
-		decision.Action = "virus_update"
+	case containsAny(plain, "编辑计划", "修改计划", "更新计划"):
+		decision.Action = "plan_edit"
 		decision.Confidence = 0.9
 		decision.NeedsConfirmation = true
 		decision.RID = extractRID(text)
 		decision.PlanName = extractPlanName(text)
 		decision.ScanType = extractScanType(text)
-	case containsAny(plain, "取消扫描", "删除扫描计划", "停止扫描"):
-		decision.Action = "virus_cancel"
+	case containsAny(plain, "取消计划", "删除计划", "停止计划"):
+		decision.Action = "plan_cancel"
 		decision.Confidence = 0.9
 		decision.NeedsConfirmation = true
+		decision.RID = extractRID(text)
+	case containsAny(plain, "计划任务", "任务记录", "plan_task"):
+		decision.Action = "plan_task"
+		decision.Confidence = 0.8
 		decision.RID = extractRID(text)
 	case containsAny(plain, "主机病毒", "染毒主机", "中毒主机", "病毒主机"):
 		decision.Action = "virus_by_host"
@@ -228,6 +229,28 @@ func heuristicDecision(text string) Decision {
 		decision.Confidence = 0.8
 	case containsAny(plain, "hash关联主机", "哈希主机", "md5主机", "sha1主机"):
 		decision.Action = "virus_hash_hosts"
+		decision.Confidence = 0.8
+	case containsAny(plain, "自动响应策略列表", "自动响应列表", "instruction_policy_list", "响应策略列表"):
+		decision.Action = "instruction_policy_list"
+		decision.Confidence = 0.8
+	case containsAny(plain, "新建自动响应策略", "新增自动响应策略", "添加自动响应策略", "instruction_policy_add"):
+		decision.Action = "instruction_policy_add"
+		decision.Confidence = 0.9
+		decision.NeedsConfirmation = true
+	case containsAny(plain, "编辑自动响应策略", "修改自动响应策略", "更新自动响应策略", "instruction_policy_update"):
+		decision.Action = "instruction_policy_update"
+		decision.Confidence = 0.9
+		decision.NeedsConfirmation = true
+	case containsAny(plain, "删除自动响应策略", "移除自动响应策略", "instruction_policy_delete"):
+		decision.Action = "instruction_policy_delete"
+		decision.Confidence = 0.9
+		decision.NeedsConfirmation = true
+	case containsAny(plain, "启用自动响应策略", "禁用自动响应策略", "启停自动响应策略", "instruction_policy_save_status"):
+		decision.Action = "instruction_policy_save_status"
+		decision.Confidence = 0.9
+		decision.NeedsConfirmation = true
+	case containsAny(plain, "排序自动响应策略", "自动响应策略排序", "instruction_policy_sort"):
+		decision.Action = "instruction_policy_sort"
 		decision.Confidence = 0.8
 	}
 	return decision
@@ -311,7 +334,7 @@ func containsAny(text string, keywords ...string) bool {
 func extractPlanName(text string) string {
 	patterns := []string{
 		`(?:计划名|plan_name|计划名称)[=:]\s*([^\s,，]+)`,
-		`(?:新建|创建|添加)[^\s]*\s+(\S+)扫描`,
+		`(?:新建|创建|添加)[^\s]*\s+(\S+)(?:计划|扫描)`,
 	}
 	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)
@@ -333,8 +356,18 @@ func extractScanType(text string) int {
 		return 1
 	case containsAny(plain, "全盘扫描", "全盘", "full"):
 		return 2
-	case containsAny(plain, "自定义扫描", "自定义路径", "custom"):
+	case containsAny(plain, "自定义扫描", "自定义路径", "custom", "自定义路径扫描"):
 		return 3
+	case containsAny(plain, "漏洞修复", "leak_repair"):
+		return 4
+	case containsAny(plain, "安装软件", "distribute_software"):
+		return 5
+	case containsAny(plain, "卸载软件"):
+		return 6
+	case containsAny(plain, "更新软件"):
+		return 7
+	case containsAny(plain, "发送文件", "distribute_file"):
+		return 8
 	}
 	return 0
 }
@@ -344,8 +377,10 @@ func extractPlanType(text string) int {
 	switch {
 	case containsAny(plain, "立即执行", "立即", "立刻"):
 		return 1
-	case containsAny(plain, "计划执行", "定时", "schedule"):
+	case containsAny(plain, "定时执行", "定时", "schedule"):
 		return 2
+	case containsAny(plain, "周期执行", "周期", "循环"):
+		return 3
 	}
 	return 0
 }
@@ -366,7 +401,7 @@ func extractScope(text string) int {
 func extractRID(text string) string {
 	patterns := []string{
 		`(?:rid|plan_id|计划ID)[=:]\s*([a-zA-Z0-9\-_]+)`,
-		`(?:扫描计划|计划)\s*ID[:\s=]*([a-zA-Z0-9\-_]+)`,
+		`(?:计划)\s*ID[:\s=]*([a-zA-Z0-9\-_]+)`,
 	}
 	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)

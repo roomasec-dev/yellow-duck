@@ -101,23 +101,21 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		t.Logf("ioc_add done: hash=%s", testHash)
 
 		// 查找该 IOC 的 id
-		// listResult, err := client.ListIOCs(ctx, ListIOCsRequest{Hash: testHash, Limit: 100})
-		// if err != nil {
-		// 	t.Fatalf("list iocs after add failed: %v", err)
-		// }
-		// var iocID string
-		// for _, i := range listResult.Results {
-		// 	if i.Hash == testHash {
-		// 		iocID = i.ExclusionID.(string)
-		// 		break
-		// 	}
-		// }
-		// if iocID == "" {
-		// 	t.Fatalf("ioc not found after add: hash=%s", testHash)
-		// }
-		// t.Logf("found ioc id: %s", iocID)
-
-		var iocID = "1ac26fb991ee46448031e17f21d99304"
+		listResult, err := client.ListIOCs(ctx, ListIOCsRequest{Hash: testHash, Limit: 100})
+		if err != nil {
+			t.Fatalf("list iocs after add failed: %v", err)
+		}
+		var iocID string
+		for _, i := range listResult.Results {
+			if i.Hash == testHash {
+				iocID = i.ExclusionID.(string)
+				break
+			}
+		}
+		if iocID == "" {
+			t.Fatalf("ioc not found after add: hash=%s", testHash)
+		}
+		t.Logf("found ioc id: %s", iocID)
 
 		if err := client.DeleteIOC(ctx, iocID); err != nil {
 			t.Fatalf("delete ioc failed: %v", err)
@@ -293,16 +291,16 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			t.Skip("no incident to get r2 summary")
 		}
 		incidentID := incidents.Incidents[0].IncidentID
-		clientID := incidents.Incidents[0].ClientID
+		// clientID := incidents.Incidents[0].ClientID
 		fullIncidentID := incidentID
-		if clientID != "" {
-			fullIncidentID = clientID + "-" + incidentID
-		}
+		// if clientID != "" {
+		// 	fullIncidentID = clientID + "-" + incidentID
+		// }
 		t.Logf("getting incident r2 summary: id=%s", fullIncidentID)
 
 		result, err := client.IncidentR2Summary(ctx, fullIncidentID)
-		raw, _ := json.MarshalIndent(result, "", "  ")
-		t.Logf("incident_r2_summary raw json:\n%s", string(raw))
+		// raw, _ := json.MarshalIndent(result, "", "  ")
+		// t.Logf("incident_r2_summary raw json:\n%s", string(raw))
 		if err != nil {
 			t.Fatalf("incident r2 summary failed: %v", err)
 		}
@@ -392,31 +390,6 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		t.Logf("update_detection_status done: id=%s", detectionID)
 	})
 
-	// Virus Scan tests
-	t.Run("virus_scan_list", func(t *testing.T) {
-		result, err := client.ListVirusScans(ctx, ListVirusScansRequest{Page: 1, Limit: 10})
-		raw, _ := json.MarshalIndent(result, "", "  ")
-		t.Logf("virus_scan_list raw json:\n%s", string(raw))
-		if err != nil {
-			t.Fatalf("virus scan list failed: %v", err)
-		}
-		if result.Total < 0 {
-			t.Fatalf("unexpected total: %+v", result)
-		}
-	})
-
-	t.Run("virus_scan_scan_record", func(t *testing.T) {
-		result, err := client.ListVirusScanRecords(ctx, ListVirusScanRecordsRequest{Page: 1, Limit: 10})
-		raw, _ := json.MarshalIndent(result, "", "  ")
-		t.Logf("virus_scan_scan_record raw json:\n%s", string(raw))
-		if err != nil {
-			t.Fatalf("virus scan records failed: %v", err)
-		}
-		if result.Total < 0 {
-			t.Fatalf("unexpected total: %+v", result)
-		}
-	})
-
 	// Virus Statistics tests
 	t.Run("virus_host_list", func(t *testing.T) {
 		result, err := client.ListVirusByHost(ctx, ListVirusByHostRequest{Page: 1, Limit: 10})
@@ -454,8 +427,20 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		}
 	})
 
-	// Virus Scan write operations tests
-	t.Run("virus_scan_add", func(t *testing.T) {
+	// Plan Management tests
+	t.Run("plan_list", func(t *testing.T) {
+		result, err := client.ListPlans(ctx, ListPlansRequest{Page: 1, Limit: 10, Type: "kill_plan"})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("plan_list raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("plan list failed: %v", err)
+		}
+		if result.Total < 0 {
+			t.Fatalf("unexpected total: %+v", result)
+		}
+	})
+
+	t.Run("plan_add", func(t *testing.T) {
 		// 先获取一台在线主机的 client_id
 		hosts, err := client.ListHosts(ctx, ListHostsRequest{Page: 1, Limit: 10})
 		if err != nil {
@@ -469,69 +454,91 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			}
 		}
 		if clientID == "" {
-			t.Skip("no online host to create virus scan")
+			t.Skip("no online host to create plan")
 		}
 
 		// 创建快速扫描计划
-		err = client.AddVirusScan(ctx, AddVirusScanRequest{
-			ScanType: 1, // 1 快速扫描
-			PlanName: "integration test scan",
-			PlanType: 1, // 1 立即执行
-			Scope:    1, // 1 特定主机
-			ClientID: clientID,
+		err = client.AddPlan(ctx, AddPlanRequest{
+			ScanType:        1, // 1 快速扫描
+			PlanName:        "integration test plan",
+			PlanType:        1, // 1 立即执行
+			Scope:           1, // 1 特定主机
+			Type:            "kill_plan",
+			DeviceClientIDs: []string{clientID},
 		})
 		if err != nil {
-			t.Fatalf("add virus scan failed: %v", err)
+			t.Fatalf("add plan failed: %v", err)
 		}
-		t.Logf("virus_scan_add done: client_id=%s", clientID)
+		t.Logf("plan_add done: client_id=%s", clientID)
 	})
 
-	t.Run("virus_scan_update", func(t *testing.T) {
-		// 先获取一个现有的扫描计划
-		result, err := client.ListVirusScans(ctx, ListVirusScansRequest{Page: 1, Limit: 1})
+	t.Run("plan_edit", func(t *testing.T) {
+		// 先获取一个现有的计划
+		result, err := client.ListPlans(ctx, ListPlansRequest{Page: 1, Limit: 1, Type: "kill_plan"})
 		if err != nil {
-			t.Fatalf("list virus scans failed: %v", err)
+			t.Fatalf("list plans failed: %v", err)
 		}
-		if len(result.Results) == 0 {
-			t.Skip("no virus scan to update")
+		if len(result.Items) == 0 {
+			t.Skip("no plan to edit")
 		}
-		rid := result.Results[0].RID
-		t.Logf("updating virus scan: rid=%s", rid)
+		rid := result.Items[0].RID
+		t.Logf("editing plan: rid=%s", rid)
 
-		// 更新扫描计划名称
-		err = client.UpdateVirusScan(ctx, UpdateVirusScanRequest{
+		// 更新计划名称
+		err = client.EditPlan(ctx, EditPlanRequest{
 			RID:      rid,
-			PlanName: "updated integration test scan",
+			PlanName: "updated integration test plan",
 		})
 		if err != nil {
-			t.Fatalf("update virus scan failed: %v", err)
+			t.Fatalf("edit plan failed: %v", err)
 		}
-		t.Logf("virus_scan_update done: rid=%s", rid)
+		t.Logf("plan_edit done: rid=%s", rid)
 	})
 
-	t.Run("virus_scan_cancel", func(t *testing.T) {
-		// 先获取一个现有的扫描计划
-		result, err := client.ListVirusScans(ctx, ListVirusScansRequest{Page: 1, Limit: 10})
+	t.Run("plan_cancel", func(t *testing.T) {
+		// 先获取一个现有的计划
+		result, err := client.ListPlans(ctx, ListPlansRequest{Page: 1, Limit: 10, Type: "kill_plan"})
 		if err != nil {
-			t.Fatalf("list virus scans failed: %v", err)
+			t.Fatalf("list plans failed: %v", err)
 		}
 		var rid string
-		for _, scan := range result.Results {
-			if scan.Status == 0 || scan.Status == 1 {
-				rid = scan.RID
+		for _, plan := range result.Items {
+			if plan.Status == 0 || plan.Status == 1 {
+				rid = plan.RID
 				break
 			}
 		}
 		if rid == "" {
-			t.Skip("no virus scan to cancel")
+			t.Skip("no plan to cancel")
 		}
-		t.Logf("canceling virus scan: rid=%s", rid)
+		t.Logf("canceling plan: rid=%s", rid)
 
-		err = client.CancelVirusScan(ctx, rid)
+		err = client.CancelPlan(ctx, rid)
 		if err != nil {
-			t.Fatalf("cancel virus scan failed: %v", err)
+			t.Fatalf("cancel plan failed: %v", err)
 		}
-		t.Logf("virus_scan_cancel done: rid=%s", rid)
+		t.Logf("plan_cancel done: rid=%s", rid)
+	})
+
+	t.Run("plan_task", func(t *testing.T) {
+		// 先获取一个现有的计划
+		result, err := client.ListPlans(ctx, ListPlansRequest{Page: 1, Limit: 1, Type: "kill_plan"})
+		if err != nil {
+			t.Fatalf("list plans failed: %v", err)
+		}
+		if len(result.Items) == 0 {
+			t.Skip("no plan to get task")
+		}
+		rid := result.Items[0].RID
+		t.Logf("getting plan task: rid=%s", rid)
+
+		taskResult, err := client.GetPlanTask(ctx, rid)
+		raw, _ := json.MarshalIndent(taskResult, "", "  ")
+		t.Logf("plan_task raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("get plan task failed: %v", err)
+		}
+		t.Logf("plan_task done: total=%d", taskResult.Total)
 	})
 
 	// Client Setting (Host Offline) tests
@@ -882,6 +889,100 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			t.Fatalf("get default strategy failed: %v", err)
 		}
 		t.Logf("strategy_get_default done: name=%s", result.Name)
+	})
+
+	// Instruction Policy (Auto Response) tests
+	t.Run("instruction_policy_list", func(t *testing.T) {
+		result, err := client.ListInstructionPolicies(ctx, ListInstructionPoliciesRequest{PolicyType: 2})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("instruction_policy_list raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("list instruction policies failed: %v", err)
+		}
+		t.Logf("instruction_policy_list done: count=%d", len(result.Result))
+	})
+
+	t.Run("instruction_policy_add", func(t *testing.T) {
+		result, err := client.AddInstructionPolicy(ctx, AddInstructionPolicyRequest{
+			Name:       "integration test policy",
+			PolicyType: 2,
+			Scope:      3,
+			Action:     []int{2},
+		})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("instruction_policy_add raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("add instruction policy failed: %v", err)
+		}
+		t.Logf("instruction_policy_add done: rid=%s", result.RID)
+	})
+
+	t.Run("instruction_policy_update", func(t *testing.T) {
+		// 先获取一个策略
+		listResult, err := client.ListInstructionPolicies(ctx, ListInstructionPoliciesRequest{PolicyType: 2})
+		if err != nil {
+			t.Fatalf("list instruction policies failed: %v", err)
+		}
+		if len(listResult.Result) == 0 {
+			t.Skip("no instruction policy to update")
+		}
+		policy := listResult.Result[0]
+		t.Logf("updating instruction policy: rid=%s", policy.RID)
+
+		err = client.UpdateInstructionPolicy(ctx, UpdateInstructionPolicyRequest{
+			RID:        policy.RID,
+			Name:       policy.Name + "_updated",
+			PolicyType: policy.PolicyType,
+			Scope:      policy.Scope,
+			Action:     policy.Action,
+		})
+		if err != nil {
+			t.Fatalf("update instruction policy failed: %v", err)
+		}
+		t.Logf("instruction_policy_update done: rid=%s", policy.RID)
+	})
+
+	t.Run("instruction_policy_save_status", func(t *testing.T) {
+		// 先获取一个策略
+		listResult, err := client.ListInstructionPolicies(ctx, ListInstructionPoliciesRequest{PolicyType: 2})
+		if err != nil {
+			t.Fatalf("list instruction policies failed: %v", err)
+		}
+		if len(listResult.Result) == 0 {
+			t.Skip("no instruction policy to save status")
+		}
+		policy := listResult.Result[0]
+		t.Logf("saving instruction policy status: rid=%s", policy.RID)
+
+		_, err = client.SaveInstructionPolicyStatus(ctx, SaveInstructionPolicyStatusRequest{
+			RID: policy.RID,
+		})
+		if err != nil {
+			t.Fatalf("save instruction policy status failed: %v", err)
+		}
+		t.Logf("instruction_policy_save_status done: rid=%s", policy.RID)
+	})
+
+	t.Run("instruction_policy_delete", func(t *testing.T) {
+		// 先创建一个策略再删除
+		createResult, err := client.AddInstructionPolicy(ctx, AddInstructionPolicyRequest{
+			Name:       "integration test policy to delete",
+			PolicyType: 2,
+			Scope:      3,
+			Action:     []int{2},
+		})
+		if err != nil {
+			t.Fatalf("add instruction policy failed: %v", err)
+		}
+		t.Logf("created instruction policy: rid=%s", createResult.RID)
+
+		deleteResult, err := client.DeleteInstructionPolicy(ctx, createResult.RID)
+		raw, _ := json.MarshalIndent(deleteResult, "", "  ")
+		t.Logf("instruction_policy_delete raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("delete instruction policy failed: %v", err)
+		}
+		t.Logf("instruction_policy_delete done: rid=%s", createResult.RID)
 	})
 }
 

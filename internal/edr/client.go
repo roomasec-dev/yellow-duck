@@ -48,17 +48,17 @@ type Client interface {
 	GetTaskResult(ctx context.Context, taskID string) (TaskResult, error)
 	SendInstruction(ctx context.Context, clientID string, instructionName string) (InstructionResult, error)
 
-	// Virus Scan
-	AddVirusScan(ctx context.Context, req AddVirusScanRequest) error
-	UpdateVirusScan(ctx context.Context, req UpdateVirusScanRequest) error
-	CancelVirusScan(ctx context.Context, rid string) error
-	ListVirusScans(ctx context.Context, req ListVirusScansRequest) (ListVirusScansResponse, error)
-	ListVirusScanRecords(ctx context.Context, req ListVirusScanRecordsRequest) (ListVirusScanRecordsResponse, error)
-
 	// Virus Statistics
 	ListVirusByHost(ctx context.Context, req ListVirusByHostRequest) (ListVirusByHostResponse, error)
 	ListVirusByHash(ctx context.Context, req ListVirusByHashRequest) (ListVirusByHashResponse, error)
 	ListVirusHashHosts(ctx context.Context, req ListVirusHashHostsRequest) (ListVirusHashHostsResponse, error)
+
+	// Plan Management
+	AddPlan(ctx context.Context, req AddPlanRequest) error
+	EditPlan(ctx context.Context, req EditPlanRequest) error
+	CancelPlan(ctx context.Context, rid string) error
+	ListPlans(ctx context.Context, req ListPlansRequest) (ListPlansResponse, error)
+	GetPlanTask(ctx context.Context, rid string) (PlanTaskResponse, error)
 
 	// Client Setting (Host Offline)
 	GetHostOfflineConf(ctx context.Context) (HostOfflineConf, error)
@@ -88,6 +88,14 @@ type Client interface {
 	SortStrategies(ctx context.Context, sortIDs []string, strategyType string) error
 	UpdateStrategyStatus(ctx context.Context, req UpdateStrategyStatusRequest) error
 	GetDefaultStrategy(ctx context.Context, req GetDefaultStrategyRequest) (Strategy, error)
+
+	// Instruction Policy (Auto Response)
+	ListInstructionPolicies(ctx context.Context, req ListInstructionPoliciesRequest) (ListInstructionPoliciesResponse, error)
+	UpdateInstructionPolicy(ctx context.Context, req UpdateInstructionPolicyRequest) error
+	SaveInstructionPolicyStatus(ctx context.Context, req SaveInstructionPolicyStatusRequest) (SaveInstructionPolicyStatusResponse, error)
+	DeleteInstructionPolicy(ctx context.Context, rid string) (DeleteInstructionPolicyResponse, error)
+	SortInstructionPolicies(ctx context.Context, rids []string) error
+	AddInstructionPolicy(ctx context.Context, req AddInstructionPolicyRequest) (AddInstructionPolicyResponse, error)
 }
 
 type OpenAPIClient struct {
@@ -402,115 +410,6 @@ type ProcessDetail struct {
 
 // Virus Scan Management
 
-type AddVirusScanRequest struct {
-	ScanType         int            `json:"scan_type"`
-	PlanName         string         `json:"plan_name"`
-	PlanType         int            `json:"plan_type"`
-	Scope            int            `json:"scope"`
-	Contents         map[string]any `json:"contents,omitempty"`
-	ClientID         string         `json:"client_id,omitempty"`
-	ExecuteStartTime int64          `json:"execute_start_time,omitempty"`
-	ExecuteCycle     int            `json:"execute_cycle,omitempty"`
-	CycleSetting     bool           `json:"cycle_setting,omitempty"`
-	GroupIDs         []int          `json:"group_ids,omitempty"`
-}
-
-type UpdateVirusScanRequest struct {
-	RID              string         `json:"rid"`
-	ScanType         int            `json:"scan_type,omitempty"`
-	PlanName         string         `json:"plan_name,omitempty"`
-	PlanType         int            `json:"plan_type,omitempty"`
-	Scope            int            `json:"scope,omitempty"`
-	Contents         map[string]any `json:"contents,omitempty"`
-	ClientID         string         `json:"client_id,omitempty"`
-	ExecuteStartTime int64          `json:"execute_start_time,omitempty"`
-	ExecuteCycle     int            `json:"execute_cycle,omitempty"`
-	CycleSetting     bool           `json:"cycle_setting,omitempty"`
-	GroupIDs         []int          `json:"group_ids,omitempty"`
-}
-
-type ListVirusScansRequest struct {
-	PlanName      string      `json:"plan_name,omitempty"`
-	Scope         int         `json:"scope,omitempty"`
-	PlanType      int         `json:"plan_type,omitempty"`
-	CycleSetting  int         `json:"cycle_setting,omitempty"`
-	ScanType      int         `json:"scan_type,omitempty"`
-	UpdateTime    *TimeFilter `json:"update_time,omitempty"`
-	Status        string      `json:"status,omitempty"`
-	OperationUser string      `json:"operation_user,omitempty"`
-	Page          int         `json:"page"`
-	Limit         int         `json:"limit"`
-}
-
-type VirusScan struct {
-	RID              string `json:"rid"`
-	OrgName          string `json:"org_name"`
-	ClientID         string `json:"client_id"`
-	PlanName         string `json:"plan_name"`
-	PlanType         int    `json:"plan_type"`
-	ExecuteStartTime int64  `json:"execute_start_time"`
-	ExecuteCycle     int    `json:"execute_cycle"`
-	CycleSetting     bool   `json:"cycle_setting"`
-	ExecuteDesc      string `json:"execute_desc"`
-	Scope            int    `json:"scope"`
-	ScopeContent     string `json:"scope_content"`
-	Contents         string `json:"contents"`
-	GroupIDs         []int  `json:"group_ids"`
-	ScanType         int    `json:"scan_type"`
-	CreateTime       int64  `json:"create_time"`
-	UpdateTime       int64  `json:"update_time"`
-	OperationUser    string `json:"operation_user"`
-	OperationUID     string `json:"operation_uid"`
-	Status           int    `json:"status"`
-	IsDeleted        int    `json:"is_deleted"`
-}
-
-type ListVirusScansResponse struct {
-	Total   int         `json:"total"`
-	Results []VirusScan `json:"results"`
-}
-
-type ListVirusScanRecordsRequest struct {
-	RID            string      `json:"rid,omitempty"`
-	TaskID         string      `json:"task_id,omitempty"`
-	ExecutionBatch string      `json:"execution_batch,omitempty"`
-	HostName       string      `json:"host_name,omitempty"`
-	ClientID       string      `json:"client_id,omitempty"`
-	ScanType       string      `json:"scan_type,omitempty"`
-	Status         string      `json:"status,omitempty"`
-	StartTime      *TimeFilter `json:"start_time,omitempty"`
-	EndTime        *TimeFilter `json:"end_time,omitempty"`
-	Page           int         `json:"page"`
-	Limit          int         `json:"limit"`
-}
-
-type VirusScanRecord struct {
-	ID             string `json:"id"`
-	TaskID         string `json:"task_id"`
-	ExecutionBatch string `json:"execution_batch"`
-	RID            string `json:"rid"`
-	OrgName        string `json:"org_name"`
-	ClientID       string `json:"client_id"`
-	HostName       string `json:"host_name"`
-	ScanType       string `json:"scan_type"`
-	Contents       string `json:"contents"`
-	Status         int    `json:"status"`
-	CreateTime     int64  `json:"create_time"`
-	StartTime      int64  `json:"start_time"`
-	EndTime        int64  `json:"end_time"`
-	UpdateTime     int64  `json:"update_time"`
-	VirusFileNum   int    `json:"virus_file_num"`
-	MemoryVirusNum int    `json:"memory_virus_num"`
-	ResponseTime   int64  `json:"response_time"`
-	PlanName       string `json:"plan_name"`
-	HostStatus     string `json:"host_status"`
-}
-
-type ListVirusScanRecordsResponse struct {
-	Total   int               `json:"total"`
-	Results []VirusScanRecord `json:"results"`
-}
-
 // Virus Statistics
 
 type ListVirusByHostRequest struct {
@@ -635,6 +534,251 @@ type QuickTimeVal struct {
 	TimeNum  int    `json:"time_num"`
 	TimeSpan string `json:"time_span"`
 	TimeType string `json:"time_type"`
+}
+
+// Plan Management
+
+type AddPlanRequest struct {
+	RID              string         `json:"rid,omitempty"`
+	ScanType         int            `json:"scan_type"`
+	PlanName         string         `json:"plan_name,omitempty"`
+	PlanType         int            `json:"plan_type"`
+	Scope            int            `json:"scope"`
+	Contents         map[string]any `json:"contents,omitempty"`
+	ExecuteStartTime int64          `json:"execute_start_time,omitempty"`
+	ExecuteCycle     int            `json:"execute_cycle,omitempty"`
+	RepeatCycle      []int          `json:"repeat_cycle,omitempty"`
+	ExecutionTime    string         `json:"execution_time,omitempty"`
+	GroupIDs         []int          `json:"group_ids,omitempty"`
+	Type             string         `json:"type"`
+	DeviceClientIDs  []string       `json:"device_client_ids,omitempty"`
+	ExpiredSetting   int            `json:"expired_setting,omitempty"`
+	ExpiredTime      int64          `json:"expired_time,omitempty"`
+	SearchContent    []string       `json:"search_content,omitempty"`
+}
+
+type EditPlanRequest struct {
+	RID              string         `json:"rid,omitempty"`
+	ScanType         int            `json:"scan_type,omitempty"`
+	PlanName         string         `json:"plan_name,omitempty"`
+	PlanType         int            `json:"plan_type,omitempty"`
+	Scope            int            `json:"scope,omitempty"`
+	Contents         map[string]any `json:"contents,omitempty"`
+	ExecuteStartTime int64          `json:"execute_start_time,omitempty"`
+	ExecuteCycle     int            `json:"execute_cycle,omitempty"`
+	RepeatCycle      []int          `json:"repeat_cycle,omitempty"`
+	ExecutionTime    string         `json:"execution_time,omitempty"`
+	GroupIDs         []int          `json:"group_ids,omitempty"`
+	Type             string         `json:"type,omitempty"`
+	DeviceClientIDs  []string       `json:"device_client_ids,omitempty"`
+	ExpiredSetting   int            `json:"expired_setting,omitempty"`
+	ExpiredTime      int64          `json:"expired_time,omitempty"`
+	SearchContent    []string       `json:"search_content,omitempty"`
+}
+
+type ListPlansRequest struct {
+	ScanType      int    `json:"scan_type,omitempty"`
+	PlanType      int    `json:"plan_type,omitempty"`
+	Type          string `json:"type,omitempty"`
+	SearchContent string `json:"search_content,omitempty"`
+	Page          int    `json:"page"`
+	Limit         int    `json:"limit"`
+}
+
+type Plan struct {
+	RID              string         `json:"rid"`
+	OrgName          string         `json:"org_name"`
+	PlanName         string         `json:"plan_name"`
+	PlanType         int            `json:"plan_type"`
+	ScanType         int            `json:"scan_type"`
+	Scope            int            `json:"scope"`
+	ScopeContent     string         `json:"scope_content"`
+	Contents         map[string]any `json:"contents"`
+	ExecuteStartTime int64          `json:"execute_start_time"`
+	ExecuteCycle     int            `json:"execute_cycle"`
+	RepeatCycle      []int          `json:"repeat_cycle"`
+	ExecutionTime    string         `json:"execution_time"`
+	GroupIDs         []int          `json:"group_ids"`
+	Type             string         `json:"type"`
+	DeviceClientIDs  []string       `json:"device_client_ids"`
+	ExpiredSetting   int            `json:"expired_setting"`
+	ExpiredTime      int64          `json:"expired_time"`
+	SearchContent    []string       `json:"search_content"`
+	CreateTime       int64          `json:"create_time"`
+	UpdateTime       int64          `json:"update_time"`
+	OperationUser    string         `json:"operation_user"`
+	OperationUID     string         `json:"operation_uid"`
+	Status           int            `json:"status"`
+	IsDeleted        int            `json:"is_deleted"`
+}
+
+type ListPlansResponse struct {
+	Total int    `json:"total"`
+	Items []Plan `json:"items"`
+}
+
+type PlanTask struct {
+	TaskID      string `json:"task_id"`
+	RID         string `json:"rid"`
+	ClientID    string `json:"client_id"`
+	HostName    string `json:"host_name"`
+	Status      int    `json:"status"`
+	CreateTime  int64  `json:"create_time"`
+	UpdateTime  int64  `json:"update_time"`
+	ExecuteTime int64  `json:"execute_time"`
+	EndTime     int64  `json:"end_time"`
+	Result      string `json:"result"`
+}
+
+type PlanTaskResponse struct {
+	Total int        `json:"total"`
+	Items []PlanTask `json:"items"`
+}
+
+// Instruction Policy (Auto Response)
+
+type ListInstructionPoliciesRequest struct {
+	PolicyType    int        `json:"policy_type,omitempty"`
+	Name          string     `json:"name,omitempty"`
+	OperationUser string     `json:"operation_user,omitempty"`
+	Scopes        string     `json:"scopes,omitempty"`
+	Action        int        `json:"action,omitempty"`
+	Status        int        `json:"status,omitempty"`
+	CreateTime    *TimeFilter `json:"create_time,omitempty"`
+	UpdateTime    *TimeFilter `json:"update_time,omitempty"`
+}
+
+type InstructionPolicy struct {
+	RID           string                    `json:"rid"`
+	PolicyType    int                       `json:"policy_type"`
+	Name          string                    `json:"name"`
+	NameEn        string                    `json:"name_en"`
+	ConditionList InstructionPolicyCondition `json:"condition_list"`
+	OperatorList  InstructionPolicyCondition `json:"operator_list,omitempty"`
+	Action        []int                     `json:"action"`
+	FuncList      []string                  `json:"func_list,omitempty"`
+	ClientID      string                    `json:"client_id"`
+	Scope         int                       `json:"scope"`
+	ScopeContent  string                    `json:"scope_content"`
+	GroupIDs      []int                     `json:"group_ids"`
+	TQGroup       TQGroup                   `json:"tq_group"`
+	OperationUser string                    `json:"operation_user"`
+	OperationUID  string                    `json:"operation_uid,omitempty"`
+	CreateTime    int64                     `json:"create_time"`
+	UpdateTime    int64                     `json:"update_time"`
+	Status        int                       `json:"status"`
+	TaskNum       int                       `json:"task_num"`
+	TaskStartTime int64                     `json:"task_start_time"`
+	TaskEndTime   int64                     `json:"task_end_time"`
+	Index         int                       `json:"index,omitempty"`
+	HitContinue   string                    `json:"hit_continue,omitempty"`
+	IsDeleted     int                       `json:"is_deleted,omitempty"`
+	SubType       string                    `json:"sub_type,omitempty"`
+	HaveResp      bool                      `json:"have_resp,omitempty"`
+}
+
+type InstructionPolicyCondition struct {
+	Sets   []InstructionPolicySet `json:"sets"`
+	Version string                 `json:"version"`
+	Metas  map[string]any         `json:"metas"`
+}
+
+type InstructionPolicySet struct {
+	SubSetsLogical string                  `json:"sub_sets_logical"`
+	SubSets        []InstructionPolicySet  `json:"sub_sets,omitempty"`
+	AccessRules    []InstructionPolicyRule `json:"access_rules,omitempty"`
+	Metas          map[string]any         `json:"metas"`
+}
+
+type InstructionPolicyRule struct {
+	Key          string `json:"key"`
+	Value        string `json:"value"`
+	CompareMethod string `json:"compare_method"`
+}
+
+type TQGroup struct {
+	Groups   []int   `json:"groups"`
+	ShowData string  `json:"show_data"`
+}
+
+type ListInstructionPoliciesResponse struct {
+	Result []InstructionPolicy `json:"result"`
+}
+
+type UpdateInstructionPolicyRequest struct {
+	RID           string                    `json:"rid"`
+	Name          string                   `json:"name"`
+	ConditionList InstructionPolicyCondition `json:"condition_list"`
+	Action        []int                    `json:"action"`
+	Scope         int                      `json:"scope"`
+	ClientID      string                   `json:"client_id"`
+	GroupIDs      []int                    `json:"group_ids"`
+	PolicyType    int                      `json:"policy_type"`
+	TQGroup       TQGroup                  `json:"tq_group"`
+	ScopeContent  string                   `json:"scope_content"`
+	OperationUser string                   `json:"operation_user"`
+	CreateTime    int64                    `json:"create_time"`
+	UpdateTime    int64                    `json:"update_time"`
+	Status        int                      `json:"status"`
+	TaskNum       int                      `json:"task_num"`
+	TaskStartTime int64                    `json:"task_start_time"`
+	TaskEndTime   int64                    `json:"task_end_time"`
+	Index         int                      `json:"index"`
+}
+
+type SaveInstructionPolicyStatusRequest struct {
+	RID  string   `json:"rid"`
+	RIDs []string `json:"rids"`
+}
+
+type SaveInstructionPolicyStatusResponse struct {
+	Name string `json:"name"`
+}
+
+type DeleteInstructionPolicyResponse struct {
+	RID         string                    `json:"rid"`
+	HitContinue string                   `json:"hit_continue"`
+	IsDeleted   int                      `json:"is_deleted"`
+	PolicyType  int                      `json:"policy_type"`
+	SubType     string                   `json:"sub_type"`
+	HaveResp    bool                     `json:"have_resp"`
+	Name        string                   `json:"name"`
+	NameEn      string                   `json:"name_en"`
+	ConditionList InstructionPolicyCondition `json:"condition_list"`
+	OperatorList InstructionPolicyCondition `json:"operator_list"`
+	Action      []int                    `json:"action"`
+	FuncList    []string                 `json:"func_list"`
+	ClientID    string                   `json:"client_id"`
+	GroupIDs    []int                    `json:"group_ids"`
+	Scope       int                      `json:"scope"`
+	TQGroup     TQGroup                  `json:"tq_group"`
+	ScopeContent string                  `json:"scope_content"`
+	OperationUser string                 `json:"operation_user"`
+	OperationUID string                 `json:"operation_uid"`
+	CreateTime  int64                   `json:"create_time"`
+	UpdateTime  int64                   `json:"update_time"`
+}
+
+type AddInstructionPolicyRequest struct {
+	Name          string                    `json:"name"`
+	ConditionList InstructionPolicyCondition `json:"condition_list"`
+	Action        []int                    `json:"action"`
+	Scope         int                      `json:"scope"`
+	ClientID      string                   `json:"client_id"`
+	GroupIDs      []int                    `json:"group_ids"`
+	PolicyType    int                      `json:"policy_type"`
+	TQGroup       TQGroup                  `json:"tq_group"`
+	ScopeContent  string                   `json:"scope_content"`
+	OperationUser string                   `json:"operation_user"`
+	Status        int                      `json:"status"`
+	TaskNum       int                      `json:"task_num"`
+	TaskStartTime int64                    `json:"task_start_time"`
+	TaskEndTime   int64                    `json:"task_end_time"`
+	Index         int                      `json:"index"`
+}
+
+type AddInstructionPolicyResponse struct {
+	RID string `json:"rid"`
 }
 
 // Client Setting (Host Offline)
@@ -1960,6 +2104,58 @@ func (c *OpenAPIClient) post(ctx context.Context, path string, payload any, out 
 	return c.postWithHeaders(ctx, c.baseURL+path, headers, payload, out)
 }
 
+func (c *OpenAPIClient) put(ctx context.Context, path string, payload any, out any) error {
+	headers := make(map[string]string, len(c.headers)+1)
+	for key, value := range c.headers {
+		headers[key] = value
+	}
+	if headers["Authorization"] == "" && c.cfg.Platform.Enabled {
+		token, err := c.platformTokenValue(ctx)
+		if err != nil {
+			return err
+		}
+		headers["Authorization"] = token
+	}
+	return c.putWithHeaders(ctx, c.baseURL+path, headers, payload, out)
+}
+
+func (c *OpenAPIClient) putWithHeaders(ctx context.Context, url string, headers map[string]string, payload any, out any) error {
+	var body []byte
+	if payload != nil {
+		var err error
+		body, err = json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("marshal edr payload: %w", err)
+		}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create edr request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("execute edr request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("edr http %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
+	rawBody, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(rawBody, out); err != nil {
+		return fmt.Errorf("unmarshal edr response: %w", err)
+	}
+	return nil
+}
+
 func (c *OpenAPIClient) postPlatform(ctx context.Context, path string, payload any, out any) error {
 	token, err := c.platformTokenValue(ctx)
 	if err != nil {
@@ -2006,7 +2202,7 @@ func (c *OpenAPIClient) postWithHeaders(ctx context.Context, url string, headers
 	}
 
 	rawBody, _ := io.ReadAll(resp.Body)
-	// fmt.Printf("===edr raw response: %s\n", string(rawBody))
+	fmt.Printf("===edr raw response: %s\n", string(rawBody))
 	if err := json.NewDecoder(bytes.NewReader(rawBody)).Decode(out); err != nil {
 		return fmt.Errorf("decode edr response: %w", err)
 	}
@@ -2057,196 +2253,6 @@ func (c *OpenAPIClient) invalidatePlatformToken() {
 	defer c.tokenMu.Unlock()
 	c.platformToken = ""
 	c.tokenExpiresAt = time.Time{}
-}
-
-// Virus Scan Management
-
-func (c *OpenAPIClient) AddVirusScan(ctx context.Context, req AddVirusScanRequest) error {
-	payload := map[string]any{
-		"scan_type": req.ScanType,
-		"plan_name": req.PlanName,
-		"plan_type": req.PlanType,
-		"scope":     req.Scope,
-	}
-	if req.Contents != nil {
-		payload["contents"] = req.Contents
-	}
-	if req.ClientID != "" {
-		payload["client_id"] = req.ClientID
-	}
-	if req.ExecuteStartTime > 0 {
-		payload["execute_start_time"] = req.ExecuteStartTime
-	}
-	if req.ExecuteCycle > 0 {
-		payload["execute_cycle"] = req.ExecuteCycle
-	}
-	if req.CycleSetting {
-		payload["cycle_setting"] = req.CycleSetting
-	}
-	if len(req.GroupIDs) > 0 {
-		payload["group_ids"] = req.GroupIDs
-	}
-
-	var envelope apiEnvelope[any]
-	if err := c.post(ctx, "/virus_scan/add", payload, &envelope); err != nil {
-		return err
-	}
-	if envelope.Error != 0 {
-		return fmt.Errorf("add virus scan failed: %s", envelope.Message)
-	}
-	return nil
-}
-
-func (c *OpenAPIClient) UpdateVirusScan(ctx context.Context, req UpdateVirusScanRequest) error {
-	payload := map[string]any{
-		"rid": req.RID,
-	}
-	if req.ScanType > 0 {
-		payload["scan_type"] = req.ScanType
-	}
-	if req.PlanName != "" {
-		payload["plan_name"] = req.PlanName
-	}
-	if req.PlanType > 0 {
-		payload["plan_type"] = req.PlanType
-	}
-	if req.Scope > 0 {
-		payload["scope"] = req.Scope
-	}
-	if req.Contents != nil {
-		payload["contents"] = req.Contents
-	}
-	if req.ClientID != "" {
-		payload["client_id"] = req.ClientID
-	}
-	if req.ExecuteStartTime > 0 {
-		payload["execute_start_time"] = req.ExecuteStartTime
-	}
-	if req.ExecuteCycle > 0 {
-		payload["execute_cycle"] = req.ExecuteCycle
-	}
-	if req.CycleSetting {
-		payload["cycle_setting"] = req.CycleSetting
-	}
-	if len(req.GroupIDs) > 0 {
-		payload["group_ids"] = req.GroupIDs
-	}
-
-	var envelope apiEnvelope[any]
-	if err := c.post(ctx, "/virus_scan/update", payload, &envelope); err != nil {
-		return err
-	}
-	if envelope.Error != 0 {
-		return fmt.Errorf("update virus scan failed: %s", envelope.Message)
-	}
-	return nil
-}
-
-func (c *OpenAPIClient) CancelVirusScan(ctx context.Context, rid string) error {
-	payload := map[string]any{"rid": rid}
-	var envelope apiEnvelope[any]
-	if err := c.post(ctx, "/virus_scan/cancel", payload, &envelope); err != nil {
-		return err
-	}
-	if envelope.Error != 0 {
-		return fmt.Errorf("cancel virus scan failed: %s", envelope.Message)
-	}
-	return nil
-}
-
-func (c *OpenAPIClient) ListVirusScans(ctx context.Context, req ListVirusScansRequest) (ListVirusScansResponse, error) {
-	if req.Page <= 0 {
-		req.Page = 1
-	}
-	if req.Limit <= 0 {
-		req.Limit = c.cfg.DefaultPageSize
-	}
-	payload := map[string]any{
-		"page":  req.Page,
-		"limit": req.Limit,
-	}
-	if req.PlanName != "" {
-		payload["plan_name"] = req.PlanName
-	}
-	if req.Scope > 0 {
-		payload["scope"] = req.Scope
-	}
-	if req.PlanType > 0 {
-		payload["plan_type"] = req.PlanType
-	}
-	if req.CycleSetting > 0 {
-		payload["cycle_setting"] = req.CycleSetting
-	}
-	if req.ScanType > 0 {
-		payload["scan_type"] = req.ScanType
-	}
-	if req.UpdateTime != nil {
-		payload["update_time"] = req.UpdateTime
-	}
-	if req.Status != "" {
-		payload["status"] = req.Status
-	}
-	if req.OperationUser != "" {
-		payload["operation_user"] = req.OperationUser
-	}
-
-	var envelope apiEnvelope[ListVirusScansResponse]
-	if err := c.post(ctx, "/virus_scan/list", payload, &envelope); err != nil {
-		return ListVirusScansResponse{}, err
-	}
-	if envelope.Error != 0 {
-		return ListVirusScansResponse{}, fmt.Errorf("list virus scans failed: %s", envelope.Message)
-	}
-	return envelope.Data, nil
-}
-
-func (c *OpenAPIClient) ListVirusScanRecords(ctx context.Context, req ListVirusScanRecordsRequest) (ListVirusScanRecordsResponse, error) {
-	if req.Page <= 0 {
-		req.Page = 1
-	}
-	if req.Limit <= 0 {
-		req.Limit = c.cfg.DefaultPageSize
-	}
-	payload := map[string]any{
-		"page":  req.Page,
-		"limit": req.Limit,
-	}
-	if req.RID != "" {
-		payload["rid"] = req.RID
-	}
-	if req.TaskID != "" {
-		payload["task_id"] = req.TaskID
-	}
-	if req.ExecutionBatch != "" {
-		payload["execution_batch"] = req.ExecutionBatch
-	}
-	if req.HostName != "" {
-		payload["host_name"] = req.HostName
-	}
-	if req.ClientID != "" {
-		payload["client_id"] = req.ClientID
-	}
-	if req.ScanType != "" {
-		payload["scan_type"] = req.ScanType
-	}
-	if req.Status != "" {
-		payload["status"] = req.Status
-	}
-	if req.StartTime != nil {
-		payload["start_time"] = req.StartTime
-	}
-	if req.EndTime != nil {
-		payload["end_time"] = req.EndTime
-	}
-
-	var envelope apiEnvelope[ListVirusScanRecordsResponse]
-	if err := c.post(ctx, "/virus_scan/scan_record", payload, &envelope); err != nil {
-		return ListVirusScanRecordsResponse{}, err
-	}
-	if envelope.Error != 0 {
-		return ListVirusScanRecordsResponse{}, fmt.Errorf("list virus scan records failed: %s", envelope.Message)
-	}
-	return envelope.Data, nil
 }
 
 // Virus Statistics
@@ -2388,6 +2394,319 @@ func (c *OpenAPIClient) ListVirusHashHosts(ctx context.Context, req ListVirusHas
 	}
 	if envelope.Error != 0 {
 		return ListVirusHashHostsResponse{}, fmt.Errorf("list virus hash hosts failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+// Plan Management
+
+func (c *OpenAPIClient) AddPlan(ctx context.Context, req AddPlanRequest) error {
+	payload := map[string]any{
+		"scan_type": req.ScanType,
+		"plan_type": req.PlanType,
+		"scope":     req.Scope,
+		"type":      req.Type,
+	}
+	if req.RID != "" {
+		payload["rid"] = req.RID
+	}
+	if req.PlanName != "" {
+		payload["plan_name"] = req.PlanName
+	}
+	if req.Contents != nil {
+		payload["contents"] = req.Contents
+	}
+	if req.ExecuteStartTime > 0 {
+		payload["execute_start_time"] = req.ExecuteStartTime
+	}
+	if req.ExecuteCycle > 0 {
+		payload["execute_cycle"] = req.ExecuteCycle
+	}
+	if len(req.RepeatCycle) > 0 {
+		payload["repeat_cycle"] = req.RepeatCycle
+	}
+	if req.ExecutionTime != "" {
+		payload["execution_time"] = req.ExecutionTime
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+	if len(req.DeviceClientIDs) > 0 {
+		payload["device_client_ids"] = req.DeviceClientIDs
+	}
+	if req.ExpiredSetting > 0 {
+		payload["expired_setting"] = req.ExpiredSetting
+	}
+	if req.ExpiredTime > 0 {
+		payload["expired_time"] = req.ExpiredTime
+	}
+	if len(req.SearchContent) > 0 {
+		payload["search_content"] = req.SearchContent
+	}
+
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/plan/add", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("add plan failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) EditPlan(ctx context.Context, req EditPlanRequest) error {
+	payload := map[string]any{}
+	if req.RID != "" {
+		payload["rid"] = req.RID
+	}
+	if req.ScanType > 0 {
+		payload["scan_type"] = req.ScanType
+	}
+	if req.PlanName != "" {
+		payload["plan_name"] = req.PlanName
+	}
+	if req.PlanType > 0 {
+		payload["plan_type"] = req.PlanType
+	}
+	if req.Scope > 0 {
+		payload["scope"] = req.Scope
+	}
+	if req.Contents != nil {
+		payload["contents"] = req.Contents
+	}
+	if req.ExecuteStartTime > 0 {
+		payload["execute_start_time"] = req.ExecuteStartTime
+	}
+	if req.ExecuteCycle > 0 {
+		payload["execute_cycle"] = req.ExecuteCycle
+	}
+	if len(req.RepeatCycle) > 0 {
+		payload["repeat_cycle"] = req.RepeatCycle
+	}
+	if req.ExecutionTime != "" {
+		payload["execution_time"] = req.ExecutionTime
+	}
+	if len(req.GroupIDs) > 0 {
+		payload["group_ids"] = req.GroupIDs
+	}
+	if req.Type != "" {
+		payload["type"] = req.Type
+	}
+	if len(req.DeviceClientIDs) > 0 {
+		payload["device_client_ids"] = req.DeviceClientIDs
+	}
+	if req.ExpiredSetting > 0 {
+		payload["expired_setting"] = req.ExpiredSetting
+	}
+	if req.ExpiredTime > 0 {
+		payload["expired_time"] = req.ExpiredTime
+	}
+	if len(req.SearchContent) > 0 {
+		payload["search_content"] = req.SearchContent
+	}
+
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/plan/edit", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("edit plan failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) CancelPlan(ctx context.Context, rid string) error {
+	var envelope apiEnvelope[any]
+	if err := c.put(ctx, "/plan/cancel/"+rid, nil, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("cancel plan failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) ListPlans(ctx context.Context, req ListPlansRequest) (ListPlansResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+	}
+	if req.Type != "" {
+		payload["type"] = req.Type
+	}
+	if req.ScanType > 0 {
+		payload["scan_type"] = req.ScanType
+	}
+	if req.PlanType > 0 {
+		payload["plan_type"] = req.PlanType
+	}
+	if req.SearchContent != "" {
+		payload["search_content"] = req.SearchContent
+	}
+
+	var envelope apiEnvelope[ListPlansResponse]
+	if err := c.post(ctx, "/plan/list", payload, &envelope); err != nil {
+		return ListPlansResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListPlansResponse{}, fmt.Errorf("list plans failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) GetPlanTask(ctx context.Context, rid string) (PlanTaskResponse, error) {
+	var envelope apiEnvelope[PlanTaskResponse]
+	if err := c.get(ctx, "/plan/task/"+rid, nil, &envelope); err != nil {
+		return PlanTaskResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return PlanTaskResponse{}, fmt.Errorf("get plan task failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+// Instruction Policy (Auto Response)
+
+func (c *OpenAPIClient) ListInstructionPolicies(ctx context.Context, req ListInstructionPoliciesRequest) (ListInstructionPoliciesResponse, error) {
+	payload := map[string]any{}
+	if req.PolicyType > 0 {
+		payload["policy_type"] = req.PolicyType
+	}
+	if req.Name != "" {
+		payload["name"] = req.Name
+	}
+	if req.OperationUser != "" {
+		payload["operation_user"] = req.OperationUser
+	}
+	if req.Scopes != "" {
+		payload["scopes"] = req.Scopes
+	}
+	if req.Action > 0 {
+		payload["action"] = req.Action
+	}
+	if req.Status > 0 {
+		payload["status"] = req.Status
+	}
+
+	var envelope apiEnvelope[ListInstructionPoliciesResponse]
+	if err := c.post(ctx, "/instruction_policy/list", payload, &envelope); err != nil {
+		return ListInstructionPoliciesResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListInstructionPoliciesResponse{}, fmt.Errorf("list instruction policies failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) UpdateInstructionPolicy(ctx context.Context, req UpdateInstructionPolicyRequest) error {
+	payload := map[string]any{
+		"rid":            req.RID,
+		"name":           req.Name,
+		"condition_list": req.ConditionList,
+		"action":         req.Action,
+		"scope":          req.Scope,
+		"client_id":      req.ClientID,
+		"group_ids":      req.GroupIDs,
+		"policy_type":    req.PolicyType,
+		"tq_group":       req.TQGroup,
+		"scope_content":  req.ScopeContent,
+		"operation_user": req.OperationUser,
+		"create_time":    req.CreateTime,
+		"update_time":    req.UpdateTime,
+		"status":         req.Status,
+		"task_num":       req.TaskNum,
+		"task_start_time": req.TaskStartTime,
+		"task_end_time":  req.TaskEndTime,
+		"index":          req.Index,
+	}
+
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/instruction_policy/update", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("update instruction policy failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) SaveInstructionPolicyStatus(ctx context.Context, req SaveInstructionPolicyStatusRequest) (SaveInstructionPolicyStatusResponse, error) {
+	payload := map[string]any{
+		"rid":  req.RID,
+		"rids": req.RIDs,
+	}
+
+	var envelope apiEnvelope[SaveInstructionPolicyStatusResponse]
+	if err := c.post(ctx, "/instruction_policy/save_status", payload, &envelope); err != nil {
+		return SaveInstructionPolicyStatusResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return SaveInstructionPolicyStatusResponse{}, fmt.Errorf("save instruction policy status failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) DeleteInstructionPolicy(ctx context.Context, rid string) (DeleteInstructionPolicyResponse, error) {
+	payload := map[string]any{
+		"rid": rid,
+	}
+
+	var envelope apiEnvelope[DeleteInstructionPolicyResponse]
+	if err := c.post(ctx, "/instruction_policy/delete", payload, &envelope); err != nil {
+		return DeleteInstructionPolicyResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return DeleteInstructionPolicyResponse{}, fmt.Errorf("delete instruction policy failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) SortInstructionPolicies(ctx context.Context, rids []string) error {
+	payload := map[string]any{
+		"rids": rids,
+	}
+
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/instruction_policy/save_sort", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("sort instruction policies failed: %s", envelope.Message)
+	}
+	return nil
+}
+
+func (c *OpenAPIClient) AddInstructionPolicy(ctx context.Context, req AddInstructionPolicyRequest) (AddInstructionPolicyResponse, error) {
+	payload := map[string]any{
+		"name":           req.Name,
+		"condition_list": req.ConditionList,
+		"action":         req.Action,
+		"scope":          req.Scope,
+		"client_id":      req.ClientID,
+		"group_ids":      req.GroupIDs,
+		"policy_type":    req.PolicyType,
+		"tq_group":       req.TQGroup,
+		"scope_content":  req.ScopeContent,
+		"operation_user": req.OperationUser,
+		"status":         req.Status,
+		"task_num":       req.TaskNum,
+		"task_start_time": req.TaskStartTime,
+		"task_end_time":  req.TaskEndTime,
+		"index":          req.Index,
+	}
+
+	var envelope apiEnvelope[AddInstructionPolicyResponse]
+	if err := c.post(ctx, "/instruction_policy/add_policy", payload, &envelope); err != nil {
+		return AddInstructionPolicyResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return AddInstructionPolicyResponse{}, fmt.Errorf("add instruction policy failed: %s", envelope.Message)
 	}
 	return envelope.Data, nil
 }
