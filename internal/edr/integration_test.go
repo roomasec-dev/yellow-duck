@@ -202,15 +202,25 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		// 先获取一条隔离文件的 GUID
 		result, err := client.ListIsolateFiles(ctx, ListIsolateFilesRequest{Page: 1, Limit: 3})
 		// t.Logf("isolate_file_delete result %+v", result)
-		raw, _ := json.MarshalIndent(result, "", "  ")
-		t.Logf("isolate_file_delete raw json:\n%s", string(raw))
+		// raw, _ := json.MarshalIndent(result, "", "  ")
+		// t.Logf("isolate_file_delete raw json:\n%s", string(raw))
 		if err != nil {
 			t.Fatalf("list isolate files failed: %v", err)
 		}
 		if len(result.Results) == 0 {
 			t.Skip("no isolate files to release")
 		}
-		guid := result.Results[0].GUID
+		// 循环查找第一个 recoverStatus=1 的隔离文件
+		var guid string
+		for _, f := range result.Results {
+			if f.RecoverStatus == 1 {
+				guid = f.GUID
+				break
+			}
+		}
+		if guid == "" {
+			t.Skip("no isolate file with recoverStatus=1 to delete")
+		}
 		t.Logf("deleting isolate file: guid=%s", guid)
 		if err := client.DeleteIsolateFiles(ctx, []string{guid}); err != nil {
 			t.Fatalf("delete isolate file failed: %v", err)
