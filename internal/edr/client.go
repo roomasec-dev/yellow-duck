@@ -593,7 +593,7 @@ type Plan struct {
 	ScanType         int            `json:"scan_type"`
 	Scope            int            `json:"scope"`
 	ScopeContent     string         `json:"scope_content"`
-	Contents         map[string]any `json:"contents"`
+	Contents         string         `json:"contents"`
 	ExecuteStartTime int64          `json:"execute_start_time"`
 	ExecuteCycle     int            `json:"execute_cycle"`
 	RepeatCycle      []int          `json:"repeat_cycle"`
