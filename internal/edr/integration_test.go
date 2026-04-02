@@ -40,6 +40,36 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		}
 	})
 
+	t.Run("host_blacklist_add", func(t *testing.T) {
+		// 先获取一台主机
+		result, err := client.ListHosts(ctx, ListHostsRequest{Page: 1, Limit: 1})
+		if err != nil {
+			t.Fatalf("list hosts failed: %v", err)
+		}
+		if len(result.Hosts) == 0 {
+			t.Skip("no host to add to blacklist")
+		}
+		clientID := result.Hosts[0].ClientID
+		t.Logf("adding host to blacklist: client_id=%s", clientID)
+
+		err = client.AddHostBlacklist(ctx, []string{clientID}, "integration test")
+		if err != nil {
+			t.Fatalf("add host blacklist failed: %v", err)
+		}
+		t.Logf("host_blacklist_add done: client_id=%s", clientID)
+	})
+
+	t.Run("host_remove", func(t *testing.T) {
+		clientID := "8310648-ec82c802a22f146aa0db2db4d77f4a7a"
+		t.Logf("removing host: client_id=%s", clientID)
+
+		err := client.RemoveHost(ctx, []string{clientID})
+		if err != nil {
+			t.Fatalf("remove host failed: %v", err)
+		}
+		t.Logf("host_remove done: client_id=%s", clientID)
+	})
+
 	t.Run("incidents_list", func(t *testing.T) {
 		result, err := client.ListIncidents(ctx, ListIncidentsRequest{Page: 1, PageSize: 1})
 		if err != nil {
@@ -59,6 +89,19 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		if result.Total < 0 {
 			t.Fatalf("unexpected total: %+v", result)
 		}
+	})
+
+	t.Run("event_log_alarms_list", func(t *testing.T) {
+		result, err := client.ListEventLogAlarms(ctx, ListEventLogAlarmsRequest{Page: 1, Limit: 10})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("event_log_alarms_list raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("event log alarms list failed: %v", err)
+		}
+		if result.Total < 0 {
+			t.Fatalf("unexpected total: %+v", result)
+		}
+		t.Logf("event_log_alarms_list done: total=%d", result.Total)
 	})
 
 	t.Run("logs_list", func(t *testing.T) {
@@ -291,14 +334,8 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			t.Skip("no incident to get r2 summary")
 		}
 		incidentID := incidents.Incidents[0].IncidentID
-		// clientID := incidents.Incidents[0].ClientID
-		fullIncidentID := incidentID
-		// if clientID != "" {
-		// 	fullIncidentID = clientID + "-" + incidentID
-		// }
-		t.Logf("getting incident r2 summary: id=%s", fullIncidentID)
-
-		result, err := client.IncidentR2Summary(ctx, fullIncidentID)
+		t.Logf("getting incident r2 summary: id=%s", incidentID)
+		result, err := client.IncidentR2Summary(ctx, incidentID)
 		// raw, _ := json.MarshalIndent(result, "", "  ")
 		// t.Logf("incident_r2_summary raw json:\n%s", string(raw))
 		if err != nil {
@@ -317,18 +354,14 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			t.Skip("no incident to batch deal")
 		}
 		incidentID := incidents.Incidents[0].IncidentID
-		clientID := incidents.Incidents[0].ClientID
-		fullIncidentID := incidentID
-		if clientID != "" {
-			fullIncidentID = clientID + "-" + incidentID
-		}
-		t.Logf("batch dealing incident: id=%s", fullIncidentID)
+		// clientID := incidents.Incidents[0].ClientID
+		t.Logf("batch dealing incident: id=%s", incidentID)
 
 		result, err := client.BatchDealIncident(ctx, BatchDealIncidentRequest{
-			IDs:    []string{fullIncidentID},
+			IDs:    []string{incidentID},
 			Allow:  false,
 			Status: 2, // 2 = 已处理
-			Scene:  "manual",
+			Scene:  "batch",
 		})
 		raw, _ := json.MarshalIndent(result, "", "  ")
 		t.Logf("batch_deal_incident raw json:\n%s", string(raw))
@@ -416,9 +449,11 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 	})
 
 	t.Run("virus_hash_host_list", func(t *testing.T) {
-		result, err := client.ListVirusHashHosts(ctx, ListVirusHashHostsRequest{Page: 1, Limit: 10})
-		raw, _ := json.MarshalIndent(result, "", "  ")
-		t.Logf("virus_hash_host_list raw json:\n%s", string(raw))
+		result, err := client.ListVirusHashHosts(ctx, ListVirusHashHostsRequest{Page: 1, Limit: 10,
+			/*ClientID: "4fb179de00b442c78ae04998c2681073",*/
+			SHA1: "9c66935f67360d7db35642d5ad02414287d97723"})
+		// raw, _ := json.MarshalIndent(result, "", "  ")
+		// t.Logf("virus_hash_host_list raw json:\n%s", string(raw))
 		if err != nil {
 			t.Fatalf("virus hash host list failed: %v", err)
 		}
@@ -474,20 +509,36 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 	t.Run("plan_edit", func(t *testing.T) {
 		// 先获取一个现有的计划
-		result, err := client.ListPlans(ctx, ListPlansRequest{Page: 1, Limit: 1, Type: "kill_plan"})
+		result, err := client.ListPlans(ctx, ListPlansRequest{Page: 1, Limit: 10, Type: "kill_plan"})
 		if err != nil {
 			t.Fatalf("list plans failed: %v", err)
 		}
 		if len(result.Items) == 0 {
 			t.Skip("no plan to edit")
 		}
-		rid := result.Items[0].RID
-		t.Logf("editing plan: rid=%s", rid)
+		// Find a plan that can be edited: if scope=1, client_id must be non-empty
+		var existingPlan Plan
+		for _, p := range result.Items {
+			if p.Scope != 1 || p.ClientID != "" {
+				existingPlan = p
+				break
+			}
+		}
+		if existingPlan.RID == "" {
+			t.Skip("no editable plan found (scope=1 plans require client_id which is empty in test data)")
+		}
+		rid := existingPlan.RID
+		t.Logf("editing plan: rid=%s, scope=%d, client_id=%s", rid, existingPlan.Scope, existingPlan.ClientID)
 
 		// 更新计划名称
 		err = client.EditPlan(ctx, EditPlanRequest{
 			RID:      rid,
+			ClientID: existingPlan.ClientID,
 			PlanName: "updated integration test plan",
+			ScanType: existingPlan.ScanType,
+			PlanType: existingPlan.PlanType,
+			Scope:    existingPlan.Scope,
+			Type:     existingPlan.Type,
 		})
 		if err != nil {
 			t.Fatalf("edit plan failed: %v", err)
@@ -520,25 +571,18 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		t.Logf("plan_cancel done: rid=%s", rid)
 	})
 
-	t.Run("plan_task", func(t *testing.T) {
-		// 先获取一个现有的计划
-		result, err := client.ListPlans(ctx, ListPlansRequest{Page: 1, Limit: 1, Type: "kill_plan"})
+	// Virus Scan Record tests
+	t.Run("virus_scan_record", func(t *testing.T) {
+		result, err := client.ListVirusScanRecords(ctx, ListVirusScanRecordsRequest{Page: 1, Limit: 10, RID: "2039285631745527808"})
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("virus_scan_record raw json:\n%s", string(raw))
 		if err != nil {
-			t.Fatalf("list plans failed: %v", err)
+			t.Fatalf("virus scan record failed: %v", err)
 		}
-		if len(result.Items) == 0 {
-			t.Skip("no plan to get task")
+		if result.Total < 0 {
+			t.Fatalf("unexpected total: %+v", result)
 		}
-		rid := result.Items[0].RID
-		t.Logf("getting plan task: rid=%s", rid)
-
-		taskResult, err := client.GetPlanTask(ctx, rid)
-		raw, _ := json.MarshalIndent(taskResult, "", "  ")
-		t.Logf("plan_task raw json:\n%s", string(raw))
-		if err != nil {
-			t.Fatalf("get plan task failed: %v", err)
-		}
-		t.Logf("plan_task done: total=%d", taskResult.Total)
+		t.Logf("virus_scan_record done: total=%d", result.Total)
 	})
 
 	// Client Setting (Host Offline) tests
@@ -608,7 +652,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 		err = client.UpdateIOA(ctx, UpdateIOARequest{
 			ID:          ioaID,
-			Description: "updated integration test ioa",
+			Description: "updated integration test ioa 2",
 		})
 		if err != nil {
 			t.Fatalf("update ioa failed: %v", err)
@@ -721,7 +765,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 	})
 
 	t.Run("strategy_list", func(t *testing.T) {
-		result, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 10, Type: "virus_scan_settings"})
+		result, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 10, Type: "vulnerability"})
 		raw, _ := json.MarshalIndent(result, "", "  ")
 		t.Logf("strategy_list raw json:\n%s", string(raw))
 		if err != nil {
@@ -742,7 +786,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 	t.Run("strategy_detail", func(t *testing.T) {
 		// 先获取一个策略
-		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 1, Type: "virus_scan_settings"})
+		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 1, Type: "vulnerability"})
 		if err != nil {
 			t.Fatalf("list strategies failed: %v", err)
 		}
@@ -768,7 +812,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 	t.Run("strategy_create", func(t *testing.T) {
 		result, err := client.CreateStrategy(ctx, CreateStrategyRequest{
 			Name:      "integration test strategy",
-			Type:      "virus_scan_settings",
+			Type:      "vulnerability",
 			RangeType: 1,
 			Status:    1,
 		})
@@ -782,18 +826,20 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 	t.Run("strategy_update", func(t *testing.T) {
 		// 先获取一个策略
-		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 1, Type: "virus_scan_settings"})
+		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 3, Type: "virus_scan_settings"})
 		if err != nil {
 			t.Fatalf("list strategies failed: %v", err)
 		}
 		if len(listResult.Items) == 0 {
 			t.Skip("no strategy to update")
 		}
-		strategyID := listResult.Items[0].StrategyID
+		existingStrategy := listResult.Items[0]
+		strategyID := existingStrategy.StrategyID
 		t.Logf("updating strategy: id=%s", strategyID)
 
 		err = client.UpdateStrategy(ctx, UpdateStrategyRequest{
 			StrategyID: strategyID,
+			Type:       existingStrategy.Type,
 			Name:       "updated integration test strategy",
 		})
 		if err != nil {
@@ -806,7 +852,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		// 先创建一个策略再删除
 		createResult, err := client.CreateStrategy(ctx, CreateStrategyRequest{
 			Name:      "integration test strategy to delete",
-			Type:      "virus_scan_settings",
+			Type:      "vulnerability",
 			RangeType: 1,
 			Status:    1,
 		})
@@ -815,7 +861,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		}
 		t.Logf("created strategy: id=%s", createResult.StrategyID)
 
-		err = client.DeleteStrategy(ctx, createResult.StrategyID, "virus_scan_settings")
+		err = client.DeleteStrategy(ctx, createResult.StrategyID, "vulnerability")
 		if err != nil {
 			t.Fatalf("delete strategy failed: %v", err)
 		}
@@ -824,7 +870,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 	t.Run("strategy_sort", func(t *testing.T) {
 		// 先获取策略列表
-		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 10, Type: "virus_scan_settings"})
+		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 10, Type: "vulnerability"})
 		if err != nil {
 			t.Fatalf("list strategies failed: %v", err)
 		}
@@ -837,7 +883,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			sortIDs = append(sortIDs, item.StrategyID)
 		}
 
-		err = client.SortStrategies(ctx, sortIDs, "virus_scan_settings")
+		err = client.SortStrategies(ctx, sortIDs, "vulnerability")
 		if err != nil {
 			t.Fatalf("sort strategies failed: %v", err)
 		}
@@ -846,7 +892,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 	t.Run("strategy_status", func(t *testing.T) {
 		// 先获取一个策略
-		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 1, Type: "virus_scan_settings"})
+		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 1, Type: "vulnerability"})
 		if err != nil {
 			t.Fatalf("list strategies failed: %v", err)
 		}
@@ -858,37 +904,13 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 		err = client.UpdateStrategyStatus(ctx, UpdateStrategyStatusRequest{
 			StrategyID: strategyID,
-			Type:       "virus_scan_settings",
+			Type:       "vulnerability",
 			Status:     1,
 		})
 		if err != nil {
 			t.Fatalf("update strategy status failed: %v", err)
 		}
 		t.Logf("strategy_status done: id=%s", strategyID)
-	})
-
-	t.Run("strategy_get_default", func(t *testing.T) {
-		// 先获取一个策略
-		listResult, err := client.ListStrategies(ctx, ListStrategiesRequest{Page: 1, Limit: 1, Type: "virus_scan_settings"})
-		if err != nil {
-			t.Fatalf("list strategies failed: %v", err)
-		}
-		if len(listResult.Items) == 0 {
-			t.Skip("no strategy to get default")
-		}
-		strategyID := listResult.Items[0].StrategyID
-		t.Logf("getting default strategy: id=%s", strategyID)
-
-		result, err := client.GetDefaultStrategy(ctx, GetDefaultStrategyRequest{
-			StrategyID: strategyID,
-			Type:       "virus_scan_settings",
-		})
-		raw, _ := json.MarshalIndent(result, "", "  ")
-		t.Logf("strategy_get_default raw json:\n%s", string(raw))
-		if err != nil {
-			t.Fatalf("get default strategy failed: %v", err)
-		}
-		t.Logf("strategy_get_default done: name=%s", result.Name)
 	})
 
 	// Instruction Policy (Auto Response) tests

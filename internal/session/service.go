@@ -768,7 +768,7 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 
 func callNeedsGroundedEDRAnswer(name string) bool {
 	switch name {
-	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_plan_list", "edr_plan_task", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts", "edr_instruction_policy_list":
+	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_plan_list", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts", "edr_virus_scan_record", "edr_instruction_policy_list":
 		return true
 	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_instruction_policy_update", "edr_instruction_policy_save_status", "edr_instruction_policy_delete", "edr_instruction_policy_sort", "edr_instruction_policy_add":
 		return false
@@ -979,13 +979,13 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return formatPlans(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
-	case "edr_plan_task":
-		reporter.Step(ctx, "我在拉取计划任务记录。")
-		result, err := s.edr.GetPlanTask(ctx, call.RID)
+	case "edr_virus_scan_record":
+		reporter.Step(ctx, "我在拉取病毒扫描记录。")
+		result, err := s.edr.ListVirusScanRecords(ctx, edr.ListVirusScanRecordsRequest{HostName: call.Hostname, ClientID: call.ClientID, Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
-		return formatPlanTasks(result), nil
+		return formatVirusScanRecords(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_virus_by_host":
 		reporter.Step(ctx, "我在按主机查询病毒信息。")
 		result, err := s.edr.ListVirusByHost(ctx, edr.ListVirusByHostRequest{HostName: call.Hostname, ClientID: call.ClientID, Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
@@ -1586,15 +1586,14 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		if err == nil {
 			toolResult = formatPlans(result, page, pageSize)
 		}
-	case "plan_task":
-		reporter.Step(ctx, "我在拉取计划任务记录。")
-		if decision.RID == "" {
-			return "", fmt.Errorf("查询计划任务需要提供计划ID（rid）")
-		}
-		result, callErr := s.edr.GetPlanTask(ctx, decision.RID)
+	case "virus_scan_record":
+		reporter.Step(ctx, "我在拉取病毒扫描记录。")
+		page := positiveOr(decision.Page, 1)
+		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
+		result, callErr := s.edr.ListVirusScanRecords(ctx, edr.ListVirusScanRecordsRequest{HostName: decision.Hostname, ClientID: decision.ClientID, Page: page, Limit: pageSize})
 		err = callErr
 		if err == nil {
-			toolResult = formatPlanTasks(result)
+			toolResult = formatVirusScanRecords(result, page, pageSize)
 		}
 	case "virus_by_host":
 		reporter.Step(ctx, "我在按主机查询病毒信息。")
@@ -1976,14 +1975,14 @@ func formatPlans(result edr.ListPlansResponse, page int, pageSize int) string {
 	return strings.Join(lines, "\n")
 }
 
-func formatPlanTasks(result edr.PlanTaskResponse) string {
-	if len(result.Items) == 0 {
-		return "当前没有查到计划任务记录。"
+func formatVirusScanRecords(result edr.ListVirusScanRecordsResponse, page, pageSize int) string {
+	if len(result.Results) == 0 {
+		return "当前没有查到病毒扫描记录。"
 	}
-	lines := []string{fmt.Sprintf("共找到 %d 条计划任务记录：", result.Total)}
-	for _, task := range result.Items {
+	lines := []string{fmt.Sprintf("共找到 %d 条病毒扫描记录（第 %d 页，每页 %d 条）：", result.Total, page, pageSize)}
+	for _, record := range result.Results {
 		statusStr := "未知"
-		switch task.Status {
+		switch record.Status {
 		case 0:
 			statusStr = "待执行"
 		case 1:
@@ -1993,7 +1992,7 @@ func formatPlanTasks(result edr.PlanTaskResponse) string {
 		case 3:
 			statusStr = "执行失败"
 		}
-		lines = append(lines, fmt.Sprintf("- task_id=%s hostname=%s status=%d(%s) result=%s", task.TaskID, task.HostName, task.Status, statusStr, task.Result))
+		lines = append(lines, fmt.Sprintf("- task_id=%s hostname=%s scan_type=%s status=%d(%s) virus_file_num=%d memory_virus_num=%d", record.TaskID, record.HostName, record.ScanType, record.Status, statusStr, record.VirusFileNum, record.MemoryVirusNum))
 	}
 	return strings.Join(lines, "\n")
 }

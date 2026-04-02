@@ -52,13 +52,13 @@ type Client interface {
 	ListVirusByHost(ctx context.Context, req ListVirusByHostRequest) (ListVirusByHostResponse, error)
 	ListVirusByHash(ctx context.Context, req ListVirusByHashRequest) (ListVirusByHashResponse, error)
 	ListVirusHashHosts(ctx context.Context, req ListVirusHashHostsRequest) (ListVirusHashHostsResponse, error)
+	ListVirusScanRecords(ctx context.Context, req ListVirusScanRecordsRequest) (ListVirusScanRecordsResponse, error)
 
 	// Plan Management
 	AddPlan(ctx context.Context, req AddPlanRequest) error
 	EditPlan(ctx context.Context, req EditPlanRequest) error
 	CancelPlan(ctx context.Context, rid string) error
 	ListPlans(ctx context.Context, req ListPlansRequest) (ListPlansResponse, error)
-	GetPlanTask(ctx context.Context, rid string) (PlanTaskResponse, error)
 
 	// Client Setting (Host Offline)
 	GetHostOfflineConf(ctx context.Context) (HostOfflineConf, error)
@@ -87,7 +87,6 @@ type Client interface {
 	GetStrategyState(ctx context.Context) (StrategyState, error)
 	SortStrategies(ctx context.Context, sortIDs []string, strategyType string) error
 	UpdateStrategyStatus(ctx context.Context, req UpdateStrategyStatusRequest) error
-	GetDefaultStrategy(ctx context.Context, req GetDefaultStrategyRequest) (Strategy, error)
 
 	// Instruction Policy (Auto Response)
 	ListInstructionPolicies(ctx context.Context, req ListInstructionPoliciesRequest) (ListInstructionPoliciesResponse, error)
@@ -516,6 +515,47 @@ type ListVirusHashHostsResponse struct {
 	Results []VirusHashHost `json:"results"`
 }
 
+type ListVirusScanRecordsRequest struct {
+	Page           int         `json:"page,omitempty"`
+	Limit          int         `json:"limit,omitempty"`
+	RID            string      `json:"rid,omitempty"`
+	TaskID         string      `json:"task_id,omitempty"`
+	ExecutionBatch string      `json:"execution_batch,omitempty"`
+	HostName       string      `json:"host_name,omitempty"`
+	ClientID       string      `json:"client_id,omitempty"`
+	ScanType       string      `json:"scan_type,omitempty"`
+	Status         string      `json:"status,omitempty"`
+	StartTime      *TimeFilter `json:"start_time,omitempty"`
+	EndTime        *TimeFilter `json:"end_time,omitempty"`
+}
+
+type VirusScanRecord struct {
+	ID             string `json:"id"`
+	TaskID         string `json:"task_id"`
+	RID            string `json:"rid"`
+	OrgName        string `json:"org_name"`
+	ExecutionBatch string `json:"execution_batch"`
+	ClientID       string `json:"client_id"`
+	HostName       string `json:"host_name"`
+	ScanType       string `json:"scan_type"`
+	Contents       string `json:"contents"`
+	Status         int    `json:"status"`
+	CreateTime     int64  `json:"create_time"`
+	StartTime      int64  `json:"start_time"`
+	EndTime        int64  `json:"end_time"`
+	UpdateTime     int64  `json:"update_time"`
+	VirusFileNum   int    `json:"virus_file_num"`
+	MemoryVirusNum int    `json:"memory_virus_num"`
+	ResponseTime   int64  `json:"response_time"`
+	PlanName       string `json:"plan_name"`
+	HostStatus     string `json:"host_status"`
+}
+
+type ListVirusScanRecordsResponse struct {
+	Total   int               `json:"total"`
+	Results []VirusScanRecord `json:"results"`
+}
+
 type TimeFilter struct {
 	TimeRange *TimeRange    `json:"time_range,omitempty"`
 	QuickTime *QuickTimeVal `json:"quick_time,omitempty"`
@@ -559,6 +599,7 @@ type AddPlanRequest struct {
 
 type EditPlanRequest struct {
 	RID              string         `json:"rid,omitempty"`
+	ClientID         string         `json:"client_id,omitempty"`
 	ScanType         int            `json:"scan_type,omitempty"`
 	PlanName         string         `json:"plan_name,omitempty"`
 	PlanType         int            `json:"plan_type,omitempty"`
@@ -586,30 +627,31 @@ type ListPlansRequest struct {
 }
 
 type Plan struct {
-	RID              string         `json:"rid"`
-	OrgName          string         `json:"org_name"`
-	PlanName         string         `json:"plan_name"`
-	PlanType         int            `json:"plan_type"`
-	ScanType         int            `json:"scan_type"`
-	Scope            int            `json:"scope"`
-	ScopeContent     string         `json:"scope_content"`
-	Contents         string         `json:"contents"`
-	ExecuteStartTime int64          `json:"execute_start_time"`
-	ExecuteCycle     int            `json:"execute_cycle"`
-	RepeatCycle      []int          `json:"repeat_cycle"`
-	ExecutionTime    string         `json:"execution_time"`
-	GroupIDs         []int          `json:"group_ids"`
-	Type             string         `json:"type"`
-	DeviceClientIDs  []string       `json:"device_client_ids"`
-	ExpiredSetting   int            `json:"expired_setting"`
-	ExpiredTime      int64          `json:"expired_time"`
-	SearchContent    []string       `json:"search_content"`
-	CreateTime       int64          `json:"create_time"`
-	UpdateTime       int64          `json:"update_time"`
-	OperationUser    string         `json:"operation_user"`
-	OperationUID     string         `json:"operation_uid"`
-	Status           int            `json:"status"`
-	IsDeleted        int            `json:"is_deleted"`
+	RID              string   `json:"rid"`
+	OrgName          string   `json:"org_name"`
+	ClientID         string   `json:"client_id"`
+	PlanName         string   `json:"plan_name"`
+	PlanType         int      `json:"plan_type"`
+	ScanType         int      `json:"scan_type"`
+	Scope            int      `json:"scope"`
+	ScopeContent     string   `json:"scope_content"`
+	Contents         string   `json:"contents"`
+	ExecuteStartTime int64    `json:"execute_start_time"`
+	ExecuteCycle     int      `json:"execute_cycle"`
+	RepeatCycle      []int    `json:"repeat_cycle"`
+	ExecutionTime    string   `json:"execution_time"`
+	GroupIDs         []int    `json:"group_ids"`
+	Type             string   `json:"type"`
+	DeviceClientIDs  []string `json:"device_client_ids"`
+	ExpiredSetting   int      `json:"expired_setting"`
+	ExpiredTime      int64    `json:"expired_time"`
+	SearchContent    []string `json:"search_content"`
+	CreateTime       int64    `json:"create_time"`
+	UpdateTime       int64    `json:"update_time"`
+	OperationUser    string   `json:"operation_user"`
+	OperationUID     string   `json:"operation_uid"`
+	Status           int      `json:"status"`
+	IsDeleted        int      `json:"is_deleted"`
 }
 
 type ListPlansResponse struct {
@@ -617,88 +659,70 @@ type ListPlansResponse struct {
 	Items []Plan `json:"items"`
 }
 
-type PlanTask struct {
-	TaskID      string `json:"task_id"`
-	RID         string `json:"rid"`
-	ClientID    string `json:"client_id"`
-	HostName    string `json:"host_name"`
-	Status      int    `json:"status"`
-	CreateTime  int64  `json:"create_time"`
-	UpdateTime  int64  `json:"update_time"`
-	ExecuteTime int64  `json:"execute_time"`
-	EndTime     int64  `json:"end_time"`
-	Result      string `json:"result"`
-}
-
-type PlanTaskResponse struct {
-	Total int        `json:"total"`
-	Items []PlanTask `json:"items"`
-}
-
 // Instruction Policy (Auto Response)
 
 type ListInstructionPoliciesRequest struct {
-	PolicyType    int        `json:"policy_type,omitempty"`
-	Name          string     `json:"name,omitempty"`
-	OperationUser string     `json:"operation_user,omitempty"`
-	Scopes        string     `json:"scopes,omitempty"`
-	Action        int        `json:"action,omitempty"`
-	Status        int        `json:"status,omitempty"`
+	PolicyType    int         `json:"policy_type,omitempty"`
+	Name          string      `json:"name,omitempty"`
+	OperationUser string      `json:"operation_user,omitempty"`
+	Scopes        string      `json:"scopes,omitempty"`
+	Action        int         `json:"action,omitempty"`
+	Status        int         `json:"status,omitempty"`
 	CreateTime    *TimeFilter `json:"create_time,omitempty"`
 	UpdateTime    *TimeFilter `json:"update_time,omitempty"`
 }
 
 type InstructionPolicy struct {
-	RID           string                    `json:"rid"`
-	PolicyType    int                       `json:"policy_type"`
-	Name          string                    `json:"name"`
-	NameEn        string                    `json:"name_en"`
+	RID           string                     `json:"rid"`
+	PolicyType    int                        `json:"policy_type"`
+	Name          string                     `json:"name"`
+	NameEn        string                     `json:"name_en"`
 	ConditionList InstructionPolicyCondition `json:"condition_list"`
 	OperatorList  InstructionPolicyCondition `json:"operator_list,omitempty"`
-	Action        []int                     `json:"action"`
-	FuncList      []string                  `json:"func_list,omitempty"`
-	ClientID      string                    `json:"client_id"`
-	Scope         int                       `json:"scope"`
-	ScopeContent  string                    `json:"scope_content"`
-	GroupIDs      []int                     `json:"group_ids"`
-	TQGroup       TQGroup                   `json:"tq_group"`
-	OperationUser string                    `json:"operation_user"`
-	OperationUID  string                    `json:"operation_uid,omitempty"`
-	CreateTime    int64                     `json:"create_time"`
-	UpdateTime    int64                     `json:"update_time"`
-	Status        int                       `json:"status"`
-	TaskNum       int                       `json:"task_num"`
-	TaskStartTime int64                     `json:"task_start_time"`
-	TaskEndTime   int64                     `json:"task_end_time"`
-	Index         int                       `json:"index,omitempty"`
-	HitContinue   string                    `json:"hit_continue,omitempty"`
-	IsDeleted     int                       `json:"is_deleted,omitempty"`
-	SubType       string                    `json:"sub_type,omitempty"`
-	HaveResp      bool                      `json:"have_resp,omitempty"`
+	Action        []int                      `json:"action"`
+	FuncList      []string                   `json:"func_list,omitempty"`
+	ClientID      string                     `json:"client_id"`
+	Scope         int                        `json:"scope"`
+	ScopeContent  string                     `json:"scope_content"`
+	GroupIDs      []int                      `json:"group_ids"`
+	TQGroup       TQGroup                    `json:"tq_group"`
+	OperationUser string                     `json:"operation_user"`
+	OperationUID  string                     `json:"operation_uid,omitempty"`
+	CreateTime    int64                      `json:"create_time"`
+	UpdateTime    int64                      `json:"update_time"`
+	Status        int                        `json:"status"`
+	TaskNum       int                        `json:"task_num"`
+	TaskStartTime int64                      `json:"task_start_time"`
+	TaskEndTime   int64                      `json:"task_end_time"`
+	Index         int                        `json:"index,omitempty"`
+	HitContinue   string                     `json:"hit_continue,omitempty"`
+	IsDeleted     int                        `json:"is_deleted,omitempty"`
+	SubType       string                     `json:"sub_type,omitempty"`
+	HaveResp      bool                       `json:"have_resp,omitempty"`
 }
 
 type InstructionPolicyCondition struct {
-	Sets   []InstructionPolicySet `json:"sets"`
+	Sets    []InstructionPolicySet `json:"sets"`
 	Version string                 `json:"version"`
-	Metas  map[string]any         `json:"metas"`
+	Metas   map[string]any         `json:"metas"`
 }
 
 type InstructionPolicySet struct {
 	SubSetsLogical string                  `json:"sub_sets_logical"`
 	SubSets        []InstructionPolicySet  `json:"sub_sets,omitempty"`
 	AccessRules    []InstructionPolicyRule `json:"access_rules,omitempty"`
-	Metas          map[string]any         `json:"metas"`
+	Metas          map[string]any          `json:"metas"`
 }
 
 type InstructionPolicyRule struct {
-	Key          string `json:"key"`
-	Value        string `json:"value"`
+	Key           string `json:"key"`
+	Value         string `json:"value"`
 	CompareMethod string `json:"compare_method"`
 }
 
 type TQGroup struct {
-	Groups   []int   `json:"groups"`
-	ShowData string  `json:"show_data"`
+	Groups   []int  `json:"groups"`
+	ShowData string `json:"show_data"`
 }
 
 type ListInstructionPoliciesResponse struct {
@@ -706,24 +730,24 @@ type ListInstructionPoliciesResponse struct {
 }
 
 type UpdateInstructionPolicyRequest struct {
-	RID           string                    `json:"rid"`
-	Name          string                   `json:"name"`
+	RID           string                     `json:"rid"`
+	Name          string                     `json:"name"`
 	ConditionList InstructionPolicyCondition `json:"condition_list"`
-	Action        []int                    `json:"action"`
-	Scope         int                      `json:"scope"`
-	ClientID      string                   `json:"client_id"`
-	GroupIDs      []int                    `json:"group_ids"`
-	PolicyType    int                      `json:"policy_type"`
-	TQGroup       TQGroup                  `json:"tq_group"`
-	ScopeContent  string                   `json:"scope_content"`
-	OperationUser string                   `json:"operation_user"`
-	CreateTime    int64                    `json:"create_time"`
-	UpdateTime    int64                    `json:"update_time"`
-	Status        int                      `json:"status"`
-	TaskNum       int                      `json:"task_num"`
-	TaskStartTime int64                    `json:"task_start_time"`
-	TaskEndTime   int64                    `json:"task_end_time"`
-	Index         int                      `json:"index"`
+	Action        []int                      `json:"action"`
+	Scope         int                        `json:"scope"`
+	ClientID      string                     `json:"client_id"`
+	GroupIDs      []int                      `json:"group_ids"`
+	PolicyType    int                        `json:"policy_type"`
+	TQGroup       TQGroup                    `json:"tq_group"`
+	ScopeContent  string                     `json:"scope_content"`
+	OperationUser string                     `json:"operation_user"`
+	CreateTime    int64                      `json:"create_time"`
+	UpdateTime    int64                      `json:"update_time"`
+	Status        int                        `json:"status"`
+	TaskNum       int                        `json:"task_num"`
+	TaskStartTime int64                      `json:"task_start_time"`
+	TaskEndTime   int64                      `json:"task_end_time"`
+	Index         int                        `json:"index"`
 }
 
 type SaveInstructionPolicyStatusRequest struct {
@@ -736,45 +760,45 @@ type SaveInstructionPolicyStatusResponse struct {
 }
 
 type DeleteInstructionPolicyResponse struct {
-	RID         string                    `json:"rid"`
-	HitContinue string                   `json:"hit_continue"`
-	IsDeleted   int                      `json:"is_deleted"`
-	PolicyType  int                      `json:"policy_type"`
-	SubType     string                   `json:"sub_type"`
-	HaveResp    bool                     `json:"have_resp"`
-	Name        string                   `json:"name"`
-	NameEn      string                   `json:"name_en"`
+	RID           string                     `json:"rid"`
+	HitContinue   string                     `json:"hit_continue"`
+	IsDeleted     int                        `json:"is_deleted"`
+	PolicyType    int                        `json:"policy_type"`
+	SubType       string                     `json:"sub_type"`
+	HaveResp      bool                       `json:"have_resp"`
+	Name          string                     `json:"name"`
+	NameEn        string                     `json:"name_en"`
 	ConditionList InstructionPolicyCondition `json:"condition_list"`
-	OperatorList InstructionPolicyCondition `json:"operator_list"`
-	Action      []int                    `json:"action"`
-	FuncList    []string                 `json:"func_list"`
-	ClientID    string                   `json:"client_id"`
-	GroupIDs    []int                    `json:"group_ids"`
-	Scope       int                      `json:"scope"`
-	TQGroup     TQGroup                  `json:"tq_group"`
-	ScopeContent string                  `json:"scope_content"`
-	OperationUser string                 `json:"operation_user"`
-	OperationUID string                 `json:"operation_uid"`
-	CreateTime  int64                   `json:"create_time"`
-	UpdateTime  int64                   `json:"update_time"`
+	OperatorList  InstructionPolicyCondition `json:"operator_list"`
+	Action        []int                      `json:"action"`
+	FuncList      []string                   `json:"func_list"`
+	ClientID      string                     `json:"client_id"`
+	GroupIDs      []int                      `json:"group_ids"`
+	Scope         int                        `json:"scope"`
+	TQGroup       TQGroup                    `json:"tq_group"`
+	ScopeContent  string                     `json:"scope_content"`
+	OperationUser string                     `json:"operation_user"`
+	OperationUID  string                     `json:"operation_uid"`
+	CreateTime    int64                      `json:"create_time"`
+	UpdateTime    int64                      `json:"update_time"`
 }
 
 type AddInstructionPolicyRequest struct {
-	Name          string                    `json:"name"`
+	Name          string                     `json:"name"`
 	ConditionList InstructionPolicyCondition `json:"condition_list"`
-	Action        []int                    `json:"action"`
-	Scope         int                      `json:"scope"`
-	ClientID      string                   `json:"client_id"`
-	GroupIDs      []int                    `json:"group_ids"`
-	PolicyType    int                      `json:"policy_type"`
-	TQGroup       TQGroup                  `json:"tq_group"`
-	ScopeContent  string                   `json:"scope_content"`
-	OperationUser string                   `json:"operation_user"`
-	Status        int                      `json:"status"`
-	TaskNum       int                      `json:"task_num"`
-	TaskStartTime int64                    `json:"task_start_time"`
-	TaskEndTime   int64                    `json:"task_end_time"`
-	Index         int                      `json:"index"`
+	Action        []int                      `json:"action"`
+	Scope         int                        `json:"scope"`
+	ClientID      string                     `json:"client_id"`
+	GroupIDs      []int                      `json:"group_ids"`
+	PolicyType    int                        `json:"policy_type"`
+	TQGroup       TQGroup                    `json:"tq_group"`
+	ScopeContent  string                     `json:"scope_content"`
+	OperationUser string                     `json:"operation_user"`
+	Status        int                        `json:"status"`
+	TaskNum       int                        `json:"task_num"`
+	TaskStartTime int64                      `json:"task_start_time"`
+	TaskEndTime   int64                      `json:"task_end_time"`
+	Index         int                        `json:"index"`
 }
 
 type AddInstructionPolicyResponse struct {
@@ -1052,11 +1076,6 @@ type UpdateStrategyStatusRequest struct {
 	StrategyID string `json:"strategy_id,omitempty"`
 	Type       string `json:"type,omitempty"`
 	Status     int    `json:"status"`
-}
-
-type GetDefaultStrategyRequest struct {
-	StrategyID string `json:"strategy_id"`
-	Type       string `json:"type"`
 }
 
 type ListDetectionsRequest struct {
@@ -2398,6 +2417,55 @@ func (c *OpenAPIClient) ListVirusHashHosts(ctx context.Context, req ListVirusHas
 	return envelope.Data, nil
 }
 
+func (c *OpenAPIClient) ListVirusScanRecords(ctx context.Context, req ListVirusScanRecordsRequest) (ListVirusScanRecordsResponse, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
+	}
+	payload := map[string]any{
+		"page":  req.Page,
+		"limit": req.Limit,
+	}
+	if req.RID != "" {
+		payload["rid"] = req.RID
+	}
+	if req.TaskID != "" {
+		payload["task_id"] = req.TaskID
+	}
+	if req.ExecutionBatch != "" {
+		payload["execution_batch"] = req.ExecutionBatch
+	}
+	if req.HostName != "" {
+		payload["host_name"] = req.HostName
+	}
+	if req.ClientID != "" {
+		payload["client_id"] = req.ClientID
+	}
+	if req.ScanType != "" {
+		payload["scan_type"] = req.ScanType
+	}
+	if req.Status != "" {
+		payload["status"] = req.Status
+	}
+	if req.StartTime != nil {
+		payload["start_time"] = req.StartTime
+	}
+	if req.EndTime != nil {
+		payload["end_time"] = req.EndTime
+	}
+
+	var envelope apiEnvelope[ListVirusScanRecordsResponse]
+	if err := c.post(ctx, "/virus_scan/scan_record", payload, &envelope); err != nil {
+		return ListVirusScanRecordsResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return ListVirusScanRecordsResponse{}, fmt.Errorf("list virus scan records failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
 // Plan Management
 
 func (c *OpenAPIClient) AddPlan(ctx context.Context, req AddPlanRequest) error {
@@ -2458,6 +2526,9 @@ func (c *OpenAPIClient) EditPlan(ctx context.Context, req EditPlanRequest) error
 	payload := map[string]any{}
 	if req.RID != "" {
 		payload["rid"] = req.RID
+	}
+	if req.ClientID != "" {
+		payload["client_id"] = req.ClientID
 	}
 	if req.ScanType > 0 {
 		payload["scan_type"] = req.ScanType
@@ -2560,17 +2631,6 @@ func (c *OpenAPIClient) ListPlans(ctx context.Context, req ListPlansRequest) (Li
 	return envelope.Data, nil
 }
 
-func (c *OpenAPIClient) GetPlanTask(ctx context.Context, rid string) (PlanTaskResponse, error) {
-	var envelope apiEnvelope[PlanTaskResponse]
-	if err := c.get(ctx, "/plan/task/"+rid, nil, &envelope); err != nil {
-		return PlanTaskResponse{}, err
-	}
-	if envelope.Error != 0 {
-		return PlanTaskResponse{}, fmt.Errorf("get plan task failed: %s", envelope.Message)
-	}
-	return envelope.Data, nil
-}
-
 // Instruction Policy (Auto Response)
 
 func (c *OpenAPIClient) ListInstructionPolicies(ctx context.Context, req ListInstructionPoliciesRequest) (ListInstructionPoliciesResponse, error) {
@@ -2606,24 +2666,24 @@ func (c *OpenAPIClient) ListInstructionPolicies(ctx context.Context, req ListIns
 
 func (c *OpenAPIClient) UpdateInstructionPolicy(ctx context.Context, req UpdateInstructionPolicyRequest) error {
 	payload := map[string]any{
-		"rid":            req.RID,
-		"name":           req.Name,
-		"condition_list": req.ConditionList,
-		"action":         req.Action,
-		"scope":          req.Scope,
-		"client_id":      req.ClientID,
-		"group_ids":      req.GroupIDs,
-		"policy_type":    req.PolicyType,
-		"tq_group":       req.TQGroup,
-		"scope_content":  req.ScopeContent,
-		"operation_user": req.OperationUser,
-		"create_time":    req.CreateTime,
-		"update_time":    req.UpdateTime,
-		"status":         req.Status,
-		"task_num":       req.TaskNum,
+		"rid":             req.RID,
+		"name":            req.Name,
+		"condition_list":  req.ConditionList,
+		"action":          req.Action,
+		"scope":           req.Scope,
+		"client_id":       req.ClientID,
+		"group_ids":       req.GroupIDs,
+		"policy_type":     req.PolicyType,
+		"tq_group":        req.TQGroup,
+		"scope_content":   req.ScopeContent,
+		"operation_user":  req.OperationUser,
+		"create_time":     req.CreateTime,
+		"update_time":     req.UpdateTime,
+		"status":          req.Status,
+		"task_num":        req.TaskNum,
 		"task_start_time": req.TaskStartTime,
-		"task_end_time":  req.TaskEndTime,
-		"index":          req.Index,
+		"task_end_time":   req.TaskEndTime,
+		"index":           req.Index,
 	}
 
 	var envelope apiEnvelope[any]
@@ -2684,21 +2744,21 @@ func (c *OpenAPIClient) SortInstructionPolicies(ctx context.Context, rids []stri
 
 func (c *OpenAPIClient) AddInstructionPolicy(ctx context.Context, req AddInstructionPolicyRequest) (AddInstructionPolicyResponse, error) {
 	payload := map[string]any{
-		"name":           req.Name,
-		"condition_list": req.ConditionList,
-		"action":         req.Action,
-		"scope":          req.Scope,
-		"client_id":      req.ClientID,
-		"group_ids":      req.GroupIDs,
-		"policy_type":    req.PolicyType,
-		"tq_group":       req.TQGroup,
-		"scope_content":  req.ScopeContent,
-		"operation_user": req.OperationUser,
-		"status":         req.Status,
-		"task_num":       req.TaskNum,
+		"name":            req.Name,
+		"condition_list":  req.ConditionList,
+		"action":          req.Action,
+		"scope":           req.Scope,
+		"client_id":       req.ClientID,
+		"group_ids":       req.GroupIDs,
+		"policy_type":     req.PolicyType,
+		"tq_group":        req.TQGroup,
+		"scope_content":   req.ScopeContent,
+		"operation_user":  req.OperationUser,
+		"status":          req.Status,
+		"task_num":        req.TaskNum,
 		"task_start_time": req.TaskStartTime,
-		"task_end_time":  req.TaskEndTime,
-		"index":          req.Index,
+		"task_end_time":   req.TaskEndTime,
+		"index":           req.Index,
 	}
 
 	var envelope apiEnvelope[AddInstructionPolicyResponse]
@@ -3250,21 +3310,6 @@ func (c *OpenAPIClient) UpdateStrategyStatus(ctx context.Context, req UpdateStra
 		return fmt.Errorf("update strategy status failed: %s", envelope.Message)
 	}
 	return nil
-}
-
-func (c *OpenAPIClient) GetDefaultStrategy(ctx context.Context, req GetDefaultStrategyRequest) (Strategy, error) {
-	payload := map[string]any{
-		"strategy_id": req.StrategyID,
-		"type":        req.Type,
-	}
-	var envelope apiEnvelope[Strategy]
-	if err := c.post(ctx, "/strategy/get_default", payload, &envelope); err != nil {
-		return Strategy{}, err
-	}
-	if envelope.Error != 0 {
-		return Strategy{}, fmt.Errorf("get default strategy failed: %s", envelope.Message)
-	}
-	return envelope.Data, nil
 }
 
 func (c *OpenAPIClient) get(ctx context.Context, path string, payload any, out any) error {

@@ -9,12 +9,13 @@
 
 输入说明：
 - rid：计划ID，必填，用于指定要编辑的计划
-- scan_type：扫描/操作类型，可选，1-快速扫描 2-全盘扫描 3-自定义路径扫描 4-漏洞修复 5-安装软件 6-卸载软件 7-更新软件 8-发送文件
-- plan_type：执行方式，可选，1-立即执行 2-定时执行 3-周期执行
-- scope：范围，可选，1-特定主机 2-主机组 3-全网主机
-- type：业务类型，可选，kill_plan/leak_repair/distribute_software/distribute_file
+- scan_type：扫描/操作类型，必填，1-快速扫描 2-全盘扫描 3-自定义路径扫描 4-漏洞修复 5-安装软件 6-卸载软件 7-更新软件 8-发送文件
+- plan_type：执行方式，必填，1-立即执行 2-定时执行 3-周期执行
+- scope：范围，必填，1-特定主机 2-主机组 3-全网主机
+- type：业务类型，必填，kill_plan/leak_repair/distribute_software/distribute_file
+- client_id：当 scope=1(特定主机) 时必填，指定单台主机
 - plan_name：计划名称
-- contents：内容对象 (scan_path/software/file等)
+- contents：内容对象 (scan_path/software/file等)，格式为 JSON 字符串
 - execute_start_time：执行开始时间
 - execute_cycle：执行周期
 - repeat_cycle：重复周期

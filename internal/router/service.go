@@ -65,13 +65,13 @@ func (s *Service) analyzeByModel(ctx context.Context, text string) (Decision, er
 	}
 
 	systemPrompt := "你是 EDR 意图路由器。请把用户输入路由成结构化 JSON。\n" +
-		"可选 action 只有：none, hosts, incidents, detections, logs, isolate, release, iocs, tasks, task_result, send_instruction, virus_by_host, virus_by_hash, virus_hash_hosts, ioa, ioa_network, strategy, host_offline, plan_list, plan_add, plan_edit, plan_cancel, plan_task, instruction_policy_list, instruction_policy_update, instruction_policy_save_status, instruction_policy_delete, instruction_policy_sort, instruction_policy_add。\n" +
+		"可选 action 只有：none, hosts, incidents, detections, logs, isolate, release, iocs, tasks, task_result, send_instruction, virus_by_host, virus_by_hash, virus_hash_hosts, virus_scan_record, ioa, ioa_network, strategy, host_offline, plan_list, plan_add, plan_edit, plan_cancel, instruction_policy_list, instruction_policy_update, instruction_policy_save_status, instruction_policy_delete, instruction_policy_sort, instruction_policy_add。\n" +
 		"如果是查询主机，尽量提取 hostname 或 client_ip。\n" +
 		"如果是查事件、检出、日志，按最接近的 action 返回。\n" +
 		"如果用户提到第几页、page、每页多少条，也尽量提取 page 和 page_size。\n" +
 		"如果是高危写操作（隔离/恢复/增删改IOA/增删改策略/新建计划/编辑计划/取消计划/增删改自动响应策略），needs_confirmation=true。\n" +
 		"只输出 JSON，不要 markdown，不要解释。JSON 结构：{" +
-		"\"action\":\"none|hosts|incidents|detections|logs|isolate|release|iocs|tasks|task_result|send_instruction|virus_by_host|virus_by_hash|virus_hash_hosts|ioa|ioa_network|strategy|host_offline|plan_list|plan_add|plan_edit|plan_cancel|plan_task|instruction_policy_list|instruction_policy_update|instruction_policy_save_status|instruction_policy_delete|instruction_policy_sort|instruction_policy_add\"," +
+		"\"action\":\"none|hosts|incidents|detections|logs|isolate|release|iocs|tasks|task_result|send_instruction|virus_by_host|virus_by_hash|virus_hash_hosts|virus_scan_record|ioa|ioa_network|strategy|host_offline|plan_list|plan_add|plan_edit|plan_cancel|instruction_policy_list|instruction_policy_update|instruction_policy_save_status|instruction_policy_delete|instruction_policy_sort|instruction_policy_add\"," +
 		"\"confidence\":0.0," +
 		"\"hostname\":\"\"," +
 		"\"client_id\":\"\"," +
@@ -217,10 +217,9 @@ func heuristicDecision(text string) Decision {
 		decision.Confidence = 0.9
 		decision.NeedsConfirmation = true
 		decision.RID = extractRID(text)
-	case containsAny(plain, "计划任务", "任务记录", "plan_task"):
-		decision.Action = "plan_task"
+	case containsAny(plain, "病毒扫描记录", "扫描记录", "virus_scan_record", "scan_record"):
+		decision.Action = "virus_scan_record"
 		decision.Confidence = 0.8
-		decision.RID = extractRID(text)
 	case containsAny(plain, "主机病毒", "染毒主机", "中毒主机", "病毒主机"):
 		decision.Action = "virus_by_host"
 		decision.Confidence = 0.8

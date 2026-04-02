@@ -1255,34 +1255,6 @@ Content-Type: `application/json`
 
 ---
 
-### 获取默认策略
-
-**POST** `/open_api/rm/v1/strategy/get_default`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api2/v1/strategy/get_default
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **type**: string (required) 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
 ### 策略列表
 
 **POST** `/open_api/rm/v1/strategy/list`
@@ -1571,15 +1543,41 @@ Content-Type: `application/json`
 
 ---
 
-### 计划任务记录
+### 病毒扫描执行记录
 
-**GET** `/open_api/rm/v1/plan/task/:rid`
+**POST** `/open_api/rm/v1/virus_scan/scan_record`
 
-sase-console-api 计划任务记录接口
+open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
 
-> Proxy Route: /api/v1/plan/task/:rid
+> Proxy Route: /api/v1/virus_scan/scan_record
 
-> Downstream: ../sase-console-api
+> Downstream: ../ratp-console/services/console
+
+**Request Body**:
+
+Content-Type: `application/json`
+
+```json
+  - **page**: integer 
+  - **limit**: integer 
+  - **rid**: string 
+  - **task_id**: string 
+  - **execution_batch**: string 
+  - **host_name**: string 
+  - **client_id**: string 
+  - **scan_type**: string 
+  - **status**: string 
+  - **start_time**:     - **time_range**:       - **start**: integer 
+      - **end**: integer  
+    - **quick_time**:       - **time_num**: integer 
+      - **time_span**: string 
+      - **time_type**: string   
+  - **end_time**:     - **time_range**:       - **start**: integer 
+      - **end**: integer  
+    - **quick_time**:       - **time_num**: integer 
+      - **time_span**: string 
+      - **time_type**: string   
+```
 
 **Responses**:
 
@@ -1588,7 +1586,9 @@ sase-console-api 计划任务记录接口
     - error: integer
     - message: string
     - data:     - **total**: integer 
-    - **items**: array<object> 
+    - **results**: array<object> 
+
+---
 
 
 
