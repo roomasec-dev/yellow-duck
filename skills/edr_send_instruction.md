@@ -23,19 +23,10 @@
 |---|---|---|---|---|
 | list_ps | 1 | - | - | 进程列表，需 is_online=1 |
 | get_suspicious_file | - | 1 | 必传 | 可疑文件，需 is_batch=1 和 batch_params（含 path） |
-| quarantine_file | - | - | - | 隔离文件 |
-| recover_file | - | - | - | 恢复文件 |
 | quarantine_network | - | - | - | 隔离主机 |
 | recover_network | - | - | - | 恢复主机 |
-| kill_ps | - | - | - | 结束进程 |
-| process_analyze | - | - | - | 进程分析 |
-| image_analyze | - | - | - | 模块分析 |
-| process_dump | - | - | - | 下载进程 dump |
 | batch_quarantine_file | - | 1 | 必传 | 批量隔离文件 |
 | batch_kill_ps | - | 1 | 必传 | 批量结束进程 |
-| full_malware_scan | - | - | - | 全盘扫描 |
-| quick_malware_scan | - | - | - | 快速扫描 |
-| custom_malware_scan | - | - | - | 自定义扫描 |
 
 输出建议：
 - 成功后汇报任务 ID 和下发结果。

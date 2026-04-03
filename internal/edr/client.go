@@ -21,7 +21,7 @@ type Client interface {
 	ListHosts(ctx context.Context, req ListHostsRequest) (ListHostsResponse, error)
 	AddHostBlacklist(ctx context.Context, clientIDs []string, reason string) error
 	RemoveHost(ctx context.Context, clientIDs []string) error
-	IsolateHost(ctx context.Context, clientID string) (InstructionResult, error)
+	IsolateHost(ctx context.Context, clientID string, time int) (InstructionResult, error)
 	ReleaseHost(ctx context.Context, clientID string) (InstructionResult, error)
 	ListIncidents(ctx context.Context, req ListIncidentsRequest) (ListIncidentsResponse, error)
 	BatchDealIncident(ctx context.Context, req BatchDealIncidentRequest) (BatchDealIncidentResponse, error)
@@ -331,12 +331,18 @@ type SendInstructionRequest struct {
 	IsOnline        int          `json:"is_online,omitempty"`    // for list_ps
 	IsBatch         int          `json:"is_batch,omitempty"`     // for get_suspicious_file
 	BatchParams     []BatchParam `json:"batch_params,omitempty"` // for get_suspicious_file
+	Params          *Params      `json:"params,omitempty"`        // for quarantine_network
+}
+
+type Params struct {
+	Time int `json:"time,omitempty"` // for quarantine_network
 }
 
 type BatchParam struct {
 	ID   string `json:"id,omitempty"`
 	Path string `json:"path,omitempty"`
 	SHA1 string `json:"sha1,omitempty"`
+	Pid  int    `json:"pid,omitempty"`
 }
 
 type ListTasksRequest struct {
@@ -1375,11 +1381,15 @@ func (c *OpenAPIClient) RemoveHost(ctx context.Context, clientIDs []string) erro
 	return nil
 }
 
-func (c *OpenAPIClient) IsolateHost(ctx context.Context, clientID string) (InstructionResult, error) {
-	return c.sendInstruction(ctx, SendInstructionRequest{
+func (c *OpenAPIClient) IsolateHost(ctx context.Context, clientID string, time int) (InstructionResult, error) {
+	req := SendInstructionRequest{
 		ClientID:        clientID,
 		InstructionName: "quarantine_network",
-	})
+	}
+	if time > 0 {
+		req.Params = &Params{Time: time}
+	}
+	return c.sendInstruction(ctx, req)
 }
 
 func (c *OpenAPIClient) ReleaseHost(ctx context.Context, clientID string) (InstructionResult, error) {
@@ -2135,20 +2145,39 @@ func (c *OpenAPIClient) sendInstruction(ctx context.Context, req SendInstruction
 			if bp.SHA1 != "" {
 				m["sha1"] = bp.SHA1
 			}
+			if bp.Pid != 0 {
+				m["pid"] = bp.Pid
+			}
 			batchParams[i] = m
 		}
 		payload["batch_params"] = batchParams
+	}
+	if req.Params != nil {
+		params := map[string]any{}
+		if req.Params.Time != 0 {
+			params["time"] = req.Params.Time
+		}
+		if len(params) > 0 {
+			payload["params"] = params
+		}
 	}
 
 	jsonBytes, _ := json.MarshalIndent(payload, "", "  ")
 	log.Printf("send_instruction request body:\n%s", string(jsonBytes))
 
+	// First parse as apiEnvelope[any] to get error info before unmarshaling data
+	var envelopeRaw apiEnvelope[any]
+	if err := c.post(ctx, "/instructions/send_instruction", payload, &envelopeRaw); err != nil {
+		return InstructionResult{}, err
+	}
+	if envelopeRaw.Error != 0 {
+		return InstructionResult{}, fmt.Errorf("edr send instruction failed: error=%d %s", envelopeRaw.Error, envelopeRaw.Message)
+	}
+
+	// Now unmarshal data into InstructionResult
 	var envelope apiEnvelope[InstructionResult]
 	if err := c.post(ctx, "/instructions/send_instruction", payload, &envelope); err != nil {
 		return InstructionResult{}, err
-	}
-	if envelope.Error != 0 {
-		return InstructionResult{}, fmt.Errorf("edr send instruction failed: %s", envelope.Message)
 	}
 	return envelope.Data, nil
 }

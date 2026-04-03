@@ -187,7 +187,7 @@ func (h *Handler) processInbound(inbound protocol.InboundMessage) {
 			return
 		}
 		h.logger.Error("process inbound failed", "message_id", inbound.MessageID, "error", err)
-		response = "处理消息失败，请稍后重试。"
+		response = fmt.Sprintf("处理消息失败：%s", err.Error())
 	}
 
 	if err := h.client.ReplyText(ctx, inbound.MessageID, response); err != nil {

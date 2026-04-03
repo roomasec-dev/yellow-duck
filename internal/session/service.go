@@ -797,6 +797,51 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 			if call.Path != "" {
 				summary += ", path=" + call.Path
 			}
+			if call.Time > 0 {
+				summary += fmt.Sprintf(", time=%d", call.Time)
+			}
+			if call.Pid > 0 {
+				summary += fmt.Sprintf(", pid=%d", call.Pid)
+			}
+			if call.TaskID != "" {
+				summary += ", task_id=" + call.TaskID
+			}
+			if call.IncidentID != "" {
+				summary += ", incident_id=" + call.IncidentID
+			}
+			if call.DetectionID != "" {
+				summary += ", detection_id=" + call.DetectionID
+			}
+			if call.IOCAction != "" {
+				summary += ", ioc_action=" + call.IOCAction
+			}
+			if call.IOCHash != "" {
+				summary += ", ioc_hash=" + call.IOCHash
+			}
+			if call.IOCID != "" {
+				summary += ", ioc_id=" + call.IOCID
+			}
+			if call.IsolateFileGUIDs != "" {
+				summary += ", isolate_file_guids=" + call.IsolateFileGUIDs
+			}
+			if call.PlanName != "" {
+				summary += ", plan_name=" + call.PlanName
+			}
+			if call.ScanType > 0 {
+				summary += fmt.Sprintf(", scan_type=%d", call.ScanType)
+			}
+			if call.Scope > 0 {
+				summary += fmt.Sprintf(", scope=%d", call.Scope)
+			}
+			if call.RID != "" {
+				summary += ", rid=" + call.RID
+			}
+			if call.Hostname != "" {
+				summary += ", hostname=" + call.Hostname
+			}
+			if call.Reason != "" {
+				summary += ", reason=" + call.Reason
+			}
 			if err := s.store.SavePendingAction(ctx, sessionKey, call.Name, string(payload), summary); err != nil {
 				return nil, "", err
 			}
@@ -1091,7 +1136,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 	switch call.Name {
 	case "edr_isolate":
 		reporter.Step(ctx, "我在下发隔离动作，并等待任务回执。")
-		result, err := s.edr.IsolateHost(ctx, call.ClientID)
+		result, err := s.edr.IsolateHost(ctx, call.ClientID, call.Time)
 		if err != nil {
 			return "", err
 		}
@@ -1167,15 +1212,22 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 			req.IsOnline = 1
 		case "get_suspicious_file", "batch_quarantine_file", "batch_kill_ps":
 			req.IsBatch = 1
+			bp := edr.BatchParam{}
 			if call.Path != "" {
-				req.BatchParams = []edr.BatchParam{{Path: call.Path}}
+				bp.Path = call.Path
+			}
+			if call.Pid != 0 {
+				bp.Pid = call.Pid
+			}
+			if bp.Path != "" || bp.Pid != 0 {
+				req.BatchParams = []edr.BatchParam{bp}
 			}
 		}
 		result, err := s.edr.SendInstruction(ctx, req)
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("指令已下发成功，任务ID: %s", result.TaskID), nil
+		return fmt.Sprintf("指令已下发成功，任务ID: %s，主机: %s，重复: %t", result.TaskID, result.HostName, result.Repeat), nil
 	case "edr_plan_add":
 		reporter.Step(ctx, "我正在创建计划。")
 		if err := s.edr.AddPlan(ctx, edr.AddPlanRequest{
@@ -1609,7 +1661,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		result, callErr := s.edr.SendInstruction(ctx, req)
 		err = callErr
 		if err == nil {
-			toolResult = fmt.Sprintf("指令已下发成功，任务ID: %s", result.TaskID)
+			toolResult = fmt.Sprintf("指令已下发成功，任务ID: %s，主机: %s，重复: %t", result.TaskID, result.HostName, result.Repeat)
 		}
 	case "plan_list":
 		reporter.Step(ctx, "我在拉取计划列表。")

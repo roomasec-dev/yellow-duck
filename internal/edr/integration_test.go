@@ -352,6 +352,145 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		t.Logf("send_instruction_get_suspicious_file done: task_id=%s host_name=%s", result.TaskID, result.HostName)
 	})
 
+	t.Run("send_instruction_quarantine_network", func(t *testing.T) {
+		hosts, err := client.ListHosts(ctx, ListHostsRequest{Page: 1, Limit: 10})
+		if err != nil {
+			t.Fatalf("list hosts failed: %v", err)
+		}
+		var clientID string
+		for _, h := range hosts.Hosts {
+			if h.Status == "online" {
+				clientID = h.ClientID
+				break
+			}
+		}
+		if clientID == "" {
+			t.Skip("no online host to send instruction")
+		}
+		t.Logf("sending quarantine_network instruction to client_id=%s", clientID)
+
+		result, err := client.SendInstruction(ctx, SendInstructionRequest{
+			ClientID:        clientID,
+			InstructionName: "quarantine_network",
+			Params:          &Params{Time: 14400},
+		})
+		t.Logf("send_instruction_quarantine_network result %+v", result)
+		if err != nil {
+			t.Fatalf("send instruction failed: %v", err)
+		}
+		if result.TaskID == "" {
+			t.Fatalf("empty task_id in result: %+v", result)
+		}
+		t.Logf("send_instruction_quarantine_network done: task_id=%s host_name=%s", result.TaskID, result.HostName)
+	})
+
+	t.Run("send_instruction_recover_network", func(t *testing.T) {
+		hosts, err := client.ListHosts(ctx, ListHostsRequest{Page: 1, Limit: 10})
+		if err != nil {
+			t.Fatalf("list hosts failed: %v", err)
+		}
+		var clientID string
+		for _, h := range hosts.Hosts {
+			if h.Status == "online" {
+				clientID = h.ClientID
+				break
+			}
+		}
+		if clientID == "" {
+			t.Skip("no online host to send instruction")
+		}
+		t.Logf("sending recover_network instruction to client_id=%s", clientID)
+
+		result, err := client.SendInstruction(ctx, SendInstructionRequest{
+			ClientID:        clientID,
+			InstructionName: "recover_network",
+		})
+		t.Logf("send_instruction_recover_network result %+v", result)
+		if err != nil {
+			t.Fatalf("send instruction failed: %v", err)
+		}
+		if result.TaskID == "" {
+			t.Fatalf("empty task_id in result: %+v", result)
+		}
+		t.Logf("send_instruction_recover_network done: task_id=%s host_name=%s", result.TaskID, result.HostName)
+	})
+
+	t.Run("send_instruction_batch_quarantine_file", func(t *testing.T) {
+		hosts, err := client.ListHosts(ctx, ListHostsRequest{Page: 1, Limit: 10})
+		if err != nil {
+			t.Fatalf("list hosts failed: %v", err)
+		}
+		var clientID string
+		for _, h := range hosts.Hosts {
+			if h.Status == "online" {
+				clientID = h.ClientID
+				break
+			}
+		}
+		if clientID == "" {
+			t.Skip("no online host to send instruction")
+		}
+		t.Logf("sending batch_quarantine_file instruction to client_id=%s", clientID)
+
+		result, err := client.SendInstruction(ctx, SendInstructionRequest{
+			ClientID:        clientID,
+			InstructionName: "batch_quarantine_file",
+			IsBatch:         1,
+			BatchParams: []BatchParam{
+				{
+					Path: "C:\\test.exe",
+				},
+			},
+		})
+		t.Logf("send_instruction_batch_quarantine_file result %+v", result)
+		if err != nil {
+			t.Fatalf("send instruction failed: %v", err)
+		}
+		if result.TaskID == "" {
+			t.Fatalf("empty task_id in result: %+v", result)
+		}
+		t.Logf("send_instruction_batch_quarantine_file done: task_id=%s host_name=%s", result.TaskID, result.HostName)
+	})
+
+	t.Run("send_instruction_batch_kill_ps", func(t *testing.T) {
+		hosts, err := client.ListHosts(ctx, ListHostsRequest{Page: 1, Limit: 10})
+		if err != nil {
+			t.Fatalf("list hosts failed: %v", err)
+		}
+		var clientID string
+		for _, h := range hosts.Hosts {
+			if h.Status == "online" {
+				clientID = h.ClientID
+				break
+			}
+		}
+		if clientID == "" {
+			t.Skip("no online host to send instruction")
+		}
+		t.Logf("sending batch_kill_ps instruction to client_id=%s", clientID)
+
+		result, err := client.SendInstruction(ctx, SendInstructionRequest{
+			ClientID:        clientID,
+			InstructionName: "batch_kill_ps",
+			IsBatch:         1,
+			BatchParams: []BatchParam{
+				{
+					ID:   "7795fd31-dab3-4e6d-a3d2-f636b92efbbf",
+					Path: "d:\\cmd.exe",
+					Pid:  123,
+				},
+			},
+		})
+		t.Logf("send_instruction_batch_kill_ps result %+v", result)
+		if err != nil {
+			t.Fatalf("send instruction failed: %v", err)
+		}
+		if result.TaskID == "" {
+			t.Fatalf("empty task_id in result: %+v", result)
+		}
+		t.Logf("send_instruction_batch_kill_ps done: task_id=%s host_name=%s", result.TaskID, result.HostName)
+	})
+
 	t.Run("incident_view", func(t *testing.T) {
 		result, err := client.ViewIncident(ctx, IncidentViewRequest{
 			IncidentID: "89be88c5911e42acbcedcaf6f64ac0b6-20260323161549",
