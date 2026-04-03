@@ -60,7 +60,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 	})
 
 	t.Run("host_remove", func(t *testing.T) {
-		clientID := "8310648-ec82c802a22f146aa0db2db4d77f4a7a"
+		clientID := "759f9dba9a70404e8647ea31917a65e6"
 		t.Logf("removing host: client_id=%s", clientID)
 
 		err := client.RemoveHost(ctx, []string{clientID})
@@ -963,6 +963,21 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			t.Fatalf("get strategy single failed: %v", err)
 		}
 		t.Logf("strategy_single done: name=%s", result.Name)
+		// 		{
+		//     "scan_file_scope": "recommended",
+		//     "startup_scan_mode": "all_unknown",
+		//     "archive_size_limit_enabled": true,
+		//     "archive_size_limit": 256,
+		//     "realtime_mem_cache_tech_enabled": true,
+		//     "dynamic_cpu_monitor_enabled": false,
+		//     "dynamic_cpu_high_percent": 80,
+		//     "stop_realtime_on_cpu_high_enabled": false,
+		//     "stop_realtime_cpu_high_percent": 80,
+		//     "owl_on_realtime_enabled": false,
+		//     "realtime_scan_archive_enabled": false,
+		//     "runtime_max_file_size_mb": 800,
+		//     "custom_max_file_size_mb": 800
+		// }
 	})
 
 	t.Run("strategy_detail", func(t *testing.T) {
