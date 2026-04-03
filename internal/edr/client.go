@@ -331,7 +331,7 @@ type SendInstructionRequest struct {
 	IsOnline        int          `json:"is_online,omitempty"`    // for list_ps
 	IsBatch         int          `json:"is_batch,omitempty"`     // for get_suspicious_file
 	BatchParams     []BatchParam `json:"batch_params,omitempty"` // for get_suspicious_file
-	Params          *Params      `json:"params,omitempty"`        // for quarantine_network
+	Params          *Params      `json:"params,omitempty"`       // for quarantine_network
 }
 
 type Params struct {
@@ -1486,7 +1486,7 @@ func (c *OpenAPIClient) ListIncidents(ctx context.Context, req ListIncidentsRequ
 		},
 		"sort": []map[string]string{{
 			"order":    "desc",
-			"sort_key": "end_time",
+			"sort_key": "score",
 		}},
 	}
 	if strings.TrimSpace(req.ClientID) != "" {
