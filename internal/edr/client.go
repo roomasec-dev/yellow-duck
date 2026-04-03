@@ -46,7 +46,7 @@ type Client interface {
 
 	ListTasks(ctx context.Context, req ListTasksRequest) (ListTasksResponse, error)
 	GetTaskResult(ctx context.Context, taskID string) (TaskResult, error)
-	SendInstruction(ctx context.Context, clientID string, instructionName string) (InstructionResult, error)
+	SendInstruction(ctx context.Context, req SendInstructionRequest) (InstructionResult, error)
 
 	// Virus Statistics
 	ListVirusByHost(ctx context.Context, req ListVirusByHostRequest) (ListVirusByHostResponse, error)
@@ -324,6 +324,20 @@ type UpdateIOCRequest struct {
 }
 
 // Instructions Tasks
+
+type SendInstructionRequest struct {
+	ClientID        string       `json:"client_id"`
+	InstructionName string       `json:"instruction_name"`
+	IsOnline        int          `json:"is_online,omitempty"`    // for list_ps
+	IsBatch         int          `json:"is_batch,omitempty"`     // for get_suspicious_file
+	BatchParams     []BatchParam `json:"batch_params,omitempty"` // for get_suspicious_file
+}
+
+type BatchParam struct {
+	ID   string `json:"id,omitempty"`
+	Path string `json:"path,omitempty"`
+	SHA1 string `json:"sha1,omitempty"`
+}
 
 type ListTasksRequest struct {
 	Page            int         `json:"page"`
@@ -1362,11 +1376,17 @@ func (c *OpenAPIClient) RemoveHost(ctx context.Context, clientIDs []string) erro
 }
 
 func (c *OpenAPIClient) IsolateHost(ctx context.Context, clientID string) (InstructionResult, error) {
-	return c.sendInstruction(ctx, clientID, "quarantine_network")
+	return c.sendInstruction(ctx, SendInstructionRequest{
+		ClientID:        clientID,
+		InstructionName: "quarantine_network",
+	})
 }
 
 func (c *OpenAPIClient) ReleaseHost(ctx context.Context, clientID string) (InstructionResult, error) {
-	return c.sendInstruction(ctx, clientID, "recover_network")
+	return c.sendInstruction(ctx, SendInstructionRequest{
+		ClientID:        clientID,
+		InstructionName: "recover_network",
+	})
 }
 
 func (c *OpenAPIClient) ListDetections(ctx context.Context, req ListDetectionsRequest) (ListDetectionsResponse, error) {
@@ -2001,8 +2021,8 @@ func (c *OpenAPIClient) GetTaskResult(ctx context.Context, taskID string) (TaskR
 	return envelope.Data, nil
 }
 
-func (c *OpenAPIClient) SendInstruction(ctx context.Context, clientID string, instructionName string) (InstructionResult, error) {
-	return c.sendInstruction(ctx, clientID, instructionName)
+func (c *OpenAPIClient) SendInstruction(ctx context.Context, req SendInstructionRequest) (InstructionResult, error) {
+	return c.sendInstruction(ctx, req)
 }
 
 func (c *OpenAPIClient) ViewIncident(ctx context.Context, req IncidentViewRequest) (map[string]any, error) {
@@ -2091,12 +2111,37 @@ func shortenForError(text string) string {
 	return text[:200] + "..."
 }
 
-func (c *OpenAPIClient) sendInstruction(ctx context.Context, clientID string, instructionName string) (InstructionResult, error) {
+func (c *OpenAPIClient) sendInstruction(ctx context.Context, req SendInstructionRequest) (InstructionResult, error) {
 	payload := map[string]any{
-		"client_id":        clientID,
-		"instruction_name": instructionName,
-		"is_online":        1,
+		"client_id":        req.ClientID,
+		"instruction_name": req.InstructionName,
 	}
+	if req.IsOnline != 0 {
+		payload["is_online"] = req.IsOnline
+	}
+	if req.IsBatch != 0 {
+		payload["is_batch"] = req.IsBatch
+	}
+	if len(req.BatchParams) > 0 {
+		batchParams := make([]map[string]any, len(req.BatchParams))
+		for i, bp := range req.BatchParams {
+			m := map[string]any{}
+			if bp.ID != "" {
+				m["id"] = bp.ID
+			}
+			if bp.Path != "" {
+				m["path"] = bp.Path
+			}
+			if bp.SHA1 != "" {
+				m["sha1"] = bp.SHA1
+			}
+			batchParams[i] = m
+		}
+		payload["batch_params"] = batchParams
+	}
+
+	jsonBytes, _ := json.MarshalIndent(payload, "", "  ")
+	log.Printf("send_instruction request body:\n%s", string(jsonBytes))
 
 	var envelope apiEnvelope[InstructionResult]
 	if err := c.post(ctx, "/instructions/send_instruction", payload, &envelope); err != nil {

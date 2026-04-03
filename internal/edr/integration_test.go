@@ -281,7 +281,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		}
 	})
 
-	t.Run("send_instruction", func(t *testing.T) {
+	t.Run("send_instruction_list_ps", func(t *testing.T) {
 		// 先获取一台在线主机的 client_id
 		hosts, err := client.ListHosts(ctx, ListHostsRequest{Page: 1, Limit: 10})
 		if err != nil {
@@ -297,17 +297,59 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		if clientID == "" {
 			t.Skip("no online host to send instruction")
 		}
-		t.Logf("sending instruction to client_id=%s", clientID)
+		t.Logf("sending list_ps instruction to client_id=%s", clientID)
 
-		result, err := client.SendInstruction(ctx, clientID, "list_ps")
-		t.Logf("send_instruction result %+v", result)
+		result, err := client.SendInstruction(ctx, SendInstructionRequest{
+			ClientID:        clientID,
+			InstructionName: "list_ps",
+			IsOnline:        1,
+		})
+		t.Logf("send_instruction_list_ps result %+v", result)
 		if err != nil {
 			t.Fatalf("send instruction failed: %v", err)
 		}
 		if result.TaskID == "" {
 			t.Fatalf("empty task_id in result: %+v", result)
 		}
-		t.Logf("send_instruction done: task_id=%s host_name=%s", result.TaskID, result.HostName)
+		t.Logf("send_instruction_list_ps done: task_id=%s host_name=%s", result.TaskID, result.HostName)
+	})
+
+	t.Run("send_instruction_get_suspicious_file", func(t *testing.T) {
+		// 先获取一台在线主机的 client_id
+		hosts, err := client.ListHosts(ctx, ListHostsRequest{Page: 1, Limit: 10})
+		if err != nil {
+			t.Fatalf("list hosts failed: %v", err)
+		}
+		var clientID string
+		for _, h := range hosts.Hosts {
+			if h.Status == "online" {
+				clientID = h.ClientID
+				break
+			}
+		}
+		if clientID == "" {
+			t.Skip("no online host to send instruction")
+		}
+		t.Logf("sending get_suspicious_file instruction to client_id=%s", clientID)
+
+		result, err := client.SendInstruction(ctx, SendInstructionRequest{
+			ClientID:        clientID,
+			InstructionName: "get_suspicious_file",
+			IsBatch:         1,
+			BatchParams: []BatchParam{
+				{
+					Path: "C:\\cmd.exe",
+				},
+			},
+		})
+		t.Logf("send_instruction_get_suspicious_file result %+v", result)
+		if err != nil {
+			t.Fatalf("send instruction failed: %v", err)
+		}
+		if result.TaskID == "" {
+			t.Fatalf("empty task_id in result: %+v", result)
+		}
+		t.Logf("send_instruction_get_suspicious_file done: task_id=%s host_name=%s", result.TaskID, result.HostName)
 	})
 
 	t.Run("incident_view", func(t *testing.T) {

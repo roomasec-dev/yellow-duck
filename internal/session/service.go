@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -783,12 +784,18 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 		if err := ctx.Err(); err != nil {
 			return nil, "", err
 		}
-		s.logger.Info("start tool call", "session_key", sessionKey, "tool", call.Name, "client_id", call.ClientID, "os_type", call.OSType, "operation", call.Operation, "start_time", call.StartTime, "end_time", call.EndTime, "filter_field", call.FilterField, "filter_operator", call.FilterOp, "filter_value", call.FilterValue, "page", call.Page, "page_size", call.PageSize, "incident_id", call.IncidentID, "detection_id", call.DetectionID, "artifact_id", call.ArtifactID, "query", call.Query, "kb_title", call.KBTitle, "kb_query", call.KBQuery, "kb_mode", call.KBMode)
+		s.logger.Info("start tool call", "session_key", sessionKey, "tool", call.Name, "client_id", call.ClientID, "os_type", call.OSType, "operation", call.Operation, "start_time", call.StartTime, "end_time", call.EndTime, "filter_field", call.FilterField, "filter_operator", call.FilterOp, "filter_value", call.FilterValue, "page", call.Page, "page_size", call.PageSize, "incident_id", call.IncidentID, "detection_id", call.DetectionID, "artifact_id", call.ArtifactID, "query", call.Query, "kb_title", call.KBTitle, "kb_query", call.KBQuery, "kb_mode", call.KBMode, "instruction_name", call.InstructionName, "path", call.Path)
 		if call.Critical || isCriticalTool(call.Name) {
 			payload, _ := json.Marshal(call)
 			summary := call.Name
 			if call.ClientID != "" {
 				summary += " client_id=" + call.ClientID
+			}
+			if call.InstructionName != "" {
+				summary += ", instruction_name=" + call.InstructionName
+			}
+			if call.Path != "" {
+				summary += ", path=" + call.Path
 			}
 			if err := s.store.SavePendingAction(ctx, sessionKey, call.Name, string(payload), summary); err != nil {
 				return nil, "", err
@@ -1143,6 +1150,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 		}
 		return fmt.Sprintf("已放行 %d 个隔离文件。", len(cleaned)), nil
 	case "edr_send_instruction":
+		log.Printf("edr_send_instruction call: %+v", call)
 		if call.ClientID == "" {
 			return "", fmt.Errorf("发送指令需要提供 client_id")
 		}
@@ -1150,7 +1158,20 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 			return "", fmt.Errorf("发送指令需要提供 instruction_name")
 		}
 		reporter.Step(ctx, "我正在下发指令到目标主机。")
-		result, err := s.edr.SendInstruction(ctx, call.ClientID, call.InstructionName)
+		req := edr.SendInstructionRequest{
+			ClientID:        call.ClientID,
+			InstructionName: call.InstructionName,
+		}
+		switch call.InstructionName {
+		case "list_ps":
+			req.IsOnline = 1
+		case "get_suspicious_file", "batch_quarantine_file", "batch_kill_ps":
+			req.IsBatch = 1
+			if call.Path != "" {
+				req.BatchParams = []edr.BatchParam{{Path: call.Path}}
+			}
+		}
+		result, err := s.edr.SendInstruction(ctx, req)
 		if err != nil {
 			return "", err
 		}
@@ -1195,7 +1216,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 	case "edr_instruction_policy_update":
 		reporter.Step(ctx, "我正在更新自动响应策略。")
 		if err := s.edr.UpdateInstructionPolicy(ctx, edr.UpdateInstructionPolicyRequest{
-			RID: call.RID,
+			RID:  call.RID,
 			Name: call.PlanName,
 		}); err != nil {
 			return "", err
@@ -1572,7 +1593,20 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 			return "", fmt.Errorf("发送指令需要提供指令名称，如「发送指令 list_ps」")
 		}
 		reporter.Step(ctx, "我正在下发指令到目标主机。")
-		result, callErr := s.edr.SendInstruction(ctx, decision.ClientID, decision.InstructionName)
+		req := edr.SendInstructionRequest{
+			ClientID:        decision.ClientID,
+			InstructionName: decision.InstructionName,
+		}
+		switch decision.InstructionName {
+		case "list_ps":
+			req.IsOnline = 1
+		case "get_suspicious_file", "batch_quarantine_file", "batch_kill_ps":
+			req.IsBatch = 1
+			if decision.Path != "" {
+				req.BatchParams = []edr.BatchParam{{Path: decision.Path}}
+			}
+		}
+		result, callErr := s.edr.SendInstruction(ctx, req)
 		err = callErr
 		if err == nil {
 			toolResult = fmt.Sprintf("指令已下发成功，任务ID: %s", result.TaskID)

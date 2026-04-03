@@ -44,6 +44,7 @@ type ToolCall struct {
 	TaskFeedback          string `json:"task_feedback,omitempty"`
 	TaskIntervalMinutes   int    `json:"task_interval_minutes,omitempty"`
 	InstructionName       string `json:"instruction_name,omitempty"`
+	Path                 string `json:"path,omitempty"`
 	KBTitle               string `json:"kb_title,omitempty"`
 	KBQuery               string `json:"kb_query,omitempty"`
 	KBContent             string `json:"kb_content,omitempty"`
@@ -108,6 +109,7 @@ func (s *Service) BuildPlan(ctx context.Context, modelRef string, userText strin
 	}
 	s.logger.Info("planner raw output", "preview", preview(result.Text))
 	jsonText := extractJSON(result.Text)
+	s.logger.Info("planner json extracted", "json", jsonText)
 	if jsonText == "" {
 		s.logger.Warn("planner output missing json", "preview", preview(result.Text))
 		return Plan{}, fmt.Errorf("planner did not return json")
@@ -116,6 +118,9 @@ func (s *Service) BuildPlan(ctx context.Context, modelRef string, userText strin
 	if err := json.Unmarshal([]byte(jsonText), &plan); err != nil {
 		s.logger.Warn("planner json decode failed", "json_preview", preview(jsonText), "error", err)
 		return Plan{}, err
+	}
+	if len(plan.ToolCalls) > 0 {
+		s.logger.Info("planner first tool_call", "name", plan.ToolCalls[0].Name, "client_id", plan.ToolCalls[0].ClientID, "instruction_name", plan.ToolCalls[0].InstructionName, "path", plan.ToolCalls[0].Path)
 	}
 	for i := range plan.ToolCalls {
 		plan.ToolCalls[i].Name = strings.ToLower(strings.TrimSpace(plan.ToolCalls[i].Name))
@@ -166,6 +171,7 @@ func (s *Service) BuildPlan(ctx context.Context, modelRef string, userText strin
 		plan.ToolCalls[i].IOCFileName = strings.TrimSpace(plan.ToolCalls[i].IOCFileName)
 		plan.ToolCalls[i].IOCHostType = strings.TrimSpace(plan.ToolCalls[i].IOCHostType)
 		plan.ToolCalls[i].IsolateFileGUIDs = strings.TrimSpace(plan.ToolCalls[i].IsolateFileGUIDs)
+		plan.ToolCalls[i].Path = strings.TrimSpace(plan.ToolCalls[i].Path)
 	}
 	plan.DirectReply = strings.TrimSpace(plan.DirectReply)
 	s.logger.Info("planner parsed", "tool_count", len(plan.ToolCalls), "direct_reply_preview", preview(plan.DirectReply))
@@ -230,9 +236,9 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"14.1 如果用户在删除隔离文件记录（彻底删除），优先规划 edr_delete_isolate_files，需要填 isolate_file_guids。注意：删除是彻底移除记录，放行是解除隔离让文件恢复正常使用，两者完全不同。\n" +
 		"15. 如果用户在查看指令任务列表，优先规划 edr_tasks。\n" +
 		"16. 如果用户在查看任务结果/详情，优先规划 edr_task_result，需要提取 task_id。\n" +
-		"17. 如果用户要求发送指令到主机（如 list_ps、kill_ps 等），优先规划 edr_send_instruction，需要同时填 client_id 和 instruction_name。\n" +
+		"17. 如果用户要求发送指令到主机，优先规划 edr_send_instruction，需要同时填 client_id 和 instruction_name；如果提到文件路径（path=\\xxx 或\"文件路径是 xxx\"），必须提取到 path 字段中；涉及可疑文件、批量隔离、批量结束进程时 path 通常不能为空。\n" +
 		"18. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
-		"只输出 JSON，不要 markdown。结构：{\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"instruction_name\":\"\",\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"ioc_description\":\"\",\"ioc_expiration_date\":\"\",\"ioc_file_name\":\"\",\"ioc_host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false}]}"
+		"只输出 JSON，不要 markdown。结构：{\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"instruction_name\":\"\",\"path\":\"\",\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"ioc_description\":\"\",\"ioc_expiration_date\":\"\",\"ioc_file_name\":\"\",\"ioc_host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false}]}"
 	if memoryText != "" {
 		base += "\n\n当前已有记忆：\n" + memoryText
 	}
