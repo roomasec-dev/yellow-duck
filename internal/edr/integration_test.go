@@ -492,9 +492,11 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 	})
 
 	t.Run("incident_view", func(t *testing.T) {
+		// 		incident_id: da091e368911485fa7e5218cb089fd76-20260210015130
+		// client_id: da091e368911485fa7e5218cb089fd76
 		result, err := client.ViewIncident(ctx, IncidentViewRequest{
-			IncidentID: "89be88c5911e42acbcedcaf6f64ac0b6-20260323161549",
-			ClientID:   "89be88c5911e42acbcedcaf6f64ac0b6",
+			IncidentID: "da091e368911485fa7e5218cb089fd76-20260210015130",
+			ClientID:   "da091e368911485fa7e5218cb089fd76",
 		})
 		// t.Logf("incident_view result %+v", result)
 		if err != nil {
@@ -541,7 +543,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		result, err := client.BatchDealIncident(ctx, BatchDealIncidentRequest{
 			IDs:    []string{incidentID},
 			Allow:  false,
-			Status: 2, // 2 = 已处理
+			Status: 2,
 			Scene:  "batch",
 		})
 		raw, _ := json.MarshalIndent(result, "", "  ")

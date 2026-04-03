@@ -784,12 +784,15 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 		if err := ctx.Err(); err != nil {
 			return nil, "", err
 		}
-		s.logger.Info("start tool call", "session_key", sessionKey, "tool", call.Name, "client_id", call.ClientID, "os_type", call.OSType, "operation", call.Operation, "start_time", call.StartTime, "end_time", call.EndTime, "filter_field", call.FilterField, "filter_operator", call.FilterOp, "filter_value", call.FilterValue, "page", call.Page, "page_size", call.PageSize, "incident_id", call.IncidentID, "detection_id", call.DetectionID, "artifact_id", call.ArtifactID, "query", call.Query, "kb_title", call.KBTitle, "kb_query", call.KBQuery, "kb_mode", call.KBMode, "instruction_name", call.InstructionName, "path", call.Path)
+		s.logger.Info("start tool call", "session_key", sessionKey, "tool", call.Name, "client_id", call.ClientID, "os_type", call.OSType, "operation", call.Operation, "start_time", call.StartTime, "end_time", call.EndTime, "filter_field", call.FilterField, "filter_operator", call.FilterOp, "filter_value", call.FilterValue, "page", call.Page, "page_size", call.PageSize, "incident_id", call.IncidentID, "detection_id", call.DetectionID, "artifact_id", call.ArtifactID, "query", call.Query, "kb_title", call.KBTitle, "kb_query", call.KBQuery, "kb_mode", call.KBMode, "instruction_name", call.InstructionName, "path", call.Path, "status", call.Status, "allow", call.Allow, "scene", call.Scene)
 		if call.Critical || isCriticalTool(call.Name) {
 			payload, _ := json.Marshal(call)
 			summary := call.Name
+			if call.Ids != "" {
+				summary += " ids=" + call.Ids
+			}
 			if call.ClientID != "" {
-				summary += " client_id=" + call.ClientID
+				summary += ", client_id=" + call.ClientID
 			}
 			if call.InstructionName != "" {
 				summary += ", instruction_name=" + call.InstructionName
@@ -829,6 +832,8 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 			}
 			if call.ScanType > 0 {
 				summary += fmt.Sprintf(", scan_type=%d", call.ScanType)
+			} else if call.Status > 0 {
+				summary += fmt.Sprintf(", status=%d", call.Status)
 			}
 			if call.Scope > 0 {
 				summary += fmt.Sprintf(", scope=%d", call.Scope)
@@ -918,10 +923,10 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 	case "edr_batch_deal_incident":
 		reporter.Step(ctx, "我正在批量处置事件。")
 		result, err := s.edr.BatchDealIncident(ctx, edr.BatchDealIncidentRequest{
-			IDs:    strings.Split(strings.TrimSpace(call.ClientID), ","),
-			Allow:  true,
-			Status: call.ScanType,
-			Scene:  "batch",
+			IDs:    strings.Split(strings.TrimSpace(call.IncidentID), ","),
+			Allow:  call.Allow,
+			Status: call.Status,
+			Scene:  call.Scene,
 		})
 		if err != nil {
 			return "", err
@@ -1423,6 +1428,18 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 			return "", err
 		}
 		return fmt.Sprintf("已成功从管控中移除 %d 台主机。", len(cleaned)), nil
+	case "edr_batch_deal_incident":
+		reporter.Step(ctx, "我正在批量处置事件。")
+		result, err := s.edr.BatchDealIncident(ctx, edr.BatchDealIncidentRequest{
+			IDs:    strings.Split(strings.TrimSpace(call.IncidentID), ","),
+			Allow:  call.Allow,
+			Status: call.Status,
+			Scene:  call.Scene,
+		})
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("批量处置完成：%d 个事件已处理", result.TotalIncident), nil
 	default:
 		return "", fmt.Errorf("unsupported confirmed action: %s", call.Name)
 	}
@@ -1430,7 +1447,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 
 func isCriticalTool(name string) bool {
 	switch name {
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_ioa_add", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_add", "edr_ioa_network_update", "edr_ioa_network_delete", "edr_strategy_create", "edr_strategy_update", "edr_strategy_delete", "edr_strategy_status", "edr_host_offline_save", "edr_add_host_blacklist", "edr_remove_host":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_ioa_add", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_add", "edr_ioa_network_update", "edr_ioa_network_delete", "edr_strategy_create", "edr_strategy_update", "edr_strategy_delete", "edr_strategy_status", "edr_host_offline_save", "edr_add_host_blacklist", "edr_remove_host", "edr_batch_deal_incident":
 		return true
 	default:
 		return false

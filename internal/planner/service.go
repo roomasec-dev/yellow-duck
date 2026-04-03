@@ -44,7 +44,7 @@ type ToolCall struct {
 	TaskFeedback          string `json:"task_feedback,omitempty"`
 	TaskIntervalMinutes   int    `json:"task_interval_minutes,omitempty"`
 	InstructionName       string `json:"instruction_name,omitempty"`
-	Path                 string `json:"path,omitempty"`
+	Path                  string `json:"path,omitempty"`
 	KBTitle               string `json:"kb_title,omitempty"`
 	KBQuery               string `json:"kb_query,omitempty"`
 	KBContent             string `json:"kb_content,omitempty"`
@@ -70,6 +70,11 @@ type ToolCall struct {
 	RID                   string `json:"rid,omitempty"`
 	Time                  int    `json:"time,omitempty"`
 	Pid                   int    `json:"pid,omitempty"`
+	Ids                   string `json:"ids,omitempty"`
+	Allow                 bool   `json:"allow,omitempty"`
+	Status                int    `json:"status,omitempty"`
+	Scene                 string `json:"scene,omitempty"`
+	Comment               string `json:"comment,omitempty"`
 }
 
 type Plan struct {
@@ -109,9 +114,9 @@ func (s *Service) BuildPlan(ctx context.Context, modelRef string, userText strin
 		s.logger.Warn("planner model call failed", "model", modelRef, "error", err)
 		return Plan{}, err
 	}
-	s.logger.Info("planner raw output", "preview", preview(result.Text))
+	// s.logger.Info("planner raw output", "preview", preview(result.Text))
 	jsonText := extractJSON(result.Text)
-	s.logger.Info("planner json extracted", "json", jsonText)
+	// s.logger.Info("planner json extracted", "json", jsonText)
 	if jsonText == "" {
 		s.logger.Warn("planner output missing json", "preview", preview(result.Text))
 		return Plan{}, fmt.Errorf("planner did not return json")
