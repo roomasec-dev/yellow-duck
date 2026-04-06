@@ -228,6 +228,7 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"2.2 如果用户在做 hunting / 狩猎 / IOC 扩线 / 进程链排查，优先规划 edr_logs，并尽量提取 client_id、os_type、operation、start_time、end_time，以及一组最关键的 filter_field/filter_operator/filter_value。\n" +
 		"2.3 对 edr_logs，filter_operator 优先用 is；如果用户已经给了明确进程名、操作名、系统类型、client_id 或哈希，优先用 is。contain 只用于路径片段、命令行片段、目录片段等模糊试探。\n" +
 		"2.4 如果用户明确提到时间范围（最近1小时、今天、昨天、某个时间段），对 edr_logs 要尽量填写 start_time / end_time，格式优先用 YYYY-MM-DD HH:MM:SS。\n" +
+		"2.5 如果用户查询某个事件关联的风险/检测/检出，例如'这个事件关联了哪些风险''该事件关联的风险'，优先规划 edr_detections_proxy 并传入 incident_id。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
 		"3. 如果用户给了 incident_id 和 client_id，就优先规划 edr_incident_view。\n" +
 		"4. 如果用户给了 detection_id 和 client_id，就优先规划 edr_detection_view；如果有 view_type 和 process_uuid 也一起带上。\n" +
 		"4.1 incident_id / detection_id 只能使用用户明确提供或真实工具结果里已经出现过的值，绝对不要根据 host_name、incident_name、时间、样例或自然语言自行拼接猜测。\n" +
