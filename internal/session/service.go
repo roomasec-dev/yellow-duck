@@ -832,7 +832,8 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 			}
 			if call.ScanType > 0 {
 				summary += fmt.Sprintf(", scan_type=%d", call.ScanType)
-			} else if call.Status > 0 {
+			}
+			if call.Status > 0 {
 				summary += fmt.Sprintf(", status=%d", call.Status)
 			}
 			if call.Scope > 0 {
@@ -1428,6 +1429,15 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 			return "", err
 		}
 		return fmt.Sprintf("已成功从管控中移除 %d 台主机。", len(cleaned)), nil
+	case "edr_update_detection_status":
+		reporter.Step(ctx, "我正在更新检测状态。")
+		if err := s.edr.UpdateDetectionStatus(ctx, edr.UpdateDetectionStatusRequest{
+			IDs:        strings.Split(strings.TrimSpace(call.DetectionID), ","),
+			DealStatus: call.Status,
+		}); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("检测状态已更新，共 %d 个检测", len(strings.Split(strings.TrimSpace(call.DetectionID), ","))), nil
 	case "edr_batch_deal_incident":
 		reporter.Step(ctx, "我正在批量处置事件。")
 		result, err := s.edr.BatchDealIncident(ctx, edr.BatchDealIncidentRequest{
@@ -1447,7 +1457,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 
 func isCriticalTool(name string) bool {
 	switch name {
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_ioa_add", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_add", "edr_ioa_network_update", "edr_ioa_network_delete", "edr_strategy_create", "edr_strategy_update", "edr_strategy_delete", "edr_strategy_status", "edr_host_offline_save", "edr_add_host_blacklist", "edr_remove_host", "edr_batch_deal_incident":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_ioa_add", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_add", "edr_ioa_network_update", "edr_ioa_network_delete", "edr_strategy_create", "edr_strategy_update", "edr_strategy_delete", "edr_strategy_status", "edr_host_offline_save", "edr_add_host_blacklist", "edr_remove_host", "edr_update_detection_status", "edr_batch_deal_incident":
 		return true
 	default:
 		return false
