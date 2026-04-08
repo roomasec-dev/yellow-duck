@@ -224,14 +224,15 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"1.4 如果用户想新增、编辑、补充知识库，优先规划 knowledge_base_write。默认 kb_mode=upsert；如果明显是追加则用 append；如果明显是把旧内容改成新内容则用 replace_text。\n" +
 		"1.5 knowledge_base_write / knowledge_base_delete 的 kb_title 可以直接填写知识库文件标题，也可以直接填写搜索结果里出现的相对路径，例如 runbook/linux/ssh.md。\n" +
 		"1.6 如果用户要修改或删除某篇知识库，但目标文件还不够明确，先规划 knowledge_base_search，等看到候选文件后再继续写入或删除。\n" +
-		"2. 如果用户在查询主机/事件/检出/日志，就优先规划 EDR 只读工具。\n" +
-		"2.1 对 edr_incidents / edr_detections / edr_logs，如果用户明确提到第几页、page、下一页、每页多少条，要把 page 和 page_size 一起填进 tool_calls。\n" +
+		"2. 如果用户在查询主机/风险/检测/检出/事件/日志，就优先规划 EDR 只读工具。关键词对应：'风险''检测''检出'对应 edr_detections；'事件'对应 edr_incidents。注意：detection 结构体有 incident_id 字段；incident 结构体有 id 字段。\n" +
+		"2.1 对 edr_detections / edr_incidents / edr_logs，如果用户明确提到第几页、page、下一页、每页多少条，要把 page 和 page_size 一起填进 tool_calls。\n" +
 		"2.2 如果用户在做 hunting / 狩猎 / IOC 扩线 / 进程链排查，优先规划 edr_logs，并尽量提取 client_id、os_type、operation、start_time、end_time，以及一组最关键的 filter_field/filter_operator/filter_value。\n" +
 		"2.3 对 edr_logs，filter_operator 优先用 is；如果用户已经给了明确进程名、操作名、系统类型、client_id 或哈希，优先用 is。contain 只用于路径片段、命令行片段、目录片段等模糊试探。\n" +
 		"2.4 如果用户明确提到时间范围（最近1小时、今天、昨天、某个时间段），对 edr_logs 要尽量填写 start_time / end_time，格式优先用 YYYY-MM-DD HH:MM:SS。\n" +
-		"2.5 如果用户查询某个事件关联的风险/检测/检出，例如'这个事件关联了哪些风险''该事件关联的风险'，优先规划 edr_detections_proxy 并传入 incident_id。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
-		"3. 如果用户给了 incident_id 和 client_id，就优先规划 edr_incident_view。\n" +
-		"4. 如果用户给了 detection_id 和 client_id，就优先规划 edr_detection_view；如果有 view_type 和 process_uuid 也一起带上。\n" +
+		"2.5 如果用户明确查询'这个事件有哪些风险''该事件关联的检测/检出''风险列表'，即需要用 incident_id 查关联风险时，优先规划 edr_detections_proxy。注意：如果用户要查的是事件本身（如'查看相关事件'），应走 2.6 规划 edr_incident_r2_summary，不要走 edr_detections_proxy。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
+		"2.6 如果用户提供 incident_id 并说'查看事件''查看相关事件''查看这个事件''事件详情'，或者在查看某条风险后追问'这个风险的事件''该风险关联的事件'，优先规划 edr_incident_r2_summary 并传入 incident_id。注意：'查看相关事件'查的是事件本身，不是风险，不要调用 edr_detections_proxy。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
+		"3. 如果用户给了 incident_id 和 client_id，要查看事件详情，就优先规划 edr_incident_view。\n" +
+		"4. 如果用户给了 detection_id 和 client_id，要查看风险详情，就优先规划 edr_detection_view；如果有 view_type 和 process_uuid 也一起带上。\n" +
 		"4.1 incident_id / detection_id 只能使用用户明确提供或真实工具结果里已经出现过的值，绝对不要根据 host_name、incident_name、时间、样例或自然语言自行拼接猜测。\n" +
 		"4.2 如果缺少真实 incident_id / detection_id，就先继续查列表或返回 direct_reply 说明还不能安全调用详情工具。\n" +
 		"5. 如果用户在追问刚才那条超大 incident/detection 详情，优先规划 artifact_search；需要看一段连续原文时再规划 artifact_read。\n" +

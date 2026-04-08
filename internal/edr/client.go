@@ -1187,6 +1187,7 @@ type Detection struct {
 	UserName    string `json:"user_name"`
 	DealStatus  any    `json:"deal_status"`
 	RootName    string `json:"root_name"`
+	IncidentID  string `json:"incident_id"`
 }
 
 type ListIncidentsRequest struct {
