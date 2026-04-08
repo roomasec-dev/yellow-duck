@@ -739,6 +739,13 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 			call.ClientID,
 			call.Hostname,
 			call.ClientIP,
+			call.OSType,
+			call.Operation,
+			call.StartTime,
+			call.EndTime,
+			call.FilterField,
+			call.FilterOp,
+			call.FilterValue,
 			fmt.Sprintf("p=%d", call.Page),
 			fmt.Sprintf("ps=%d", call.PageSize),
 			call.IncidentID,
@@ -747,6 +754,10 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 			call.ProcessUUID,
 			call.ArtifactID,
 			call.Query,
+			fmt.Sprintf("sl=%d", call.StartLine),
+			fmt.Sprintf("lc=%d", call.LineCount),
+			call.MemoryKey,
+			call.MemoryValue,
 			call.TaskID,
 			call.TaskTitle,
 			call.TaskPrompt,
@@ -754,14 +765,39 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 			call.TaskStatus,
 			call.TaskFeedback,
 			fmt.Sprintf("ti=%d", call.TaskIntervalMinutes),
+			call.InstructionName,
+			call.Path,
 			call.KBTitle,
 			call.KBQuery,
 			call.KBContent,
 			call.KBMode,
 			call.KBOldText,
 			call.KBNewText,
-			fmt.Sprintf("s=%d", call.StartLine),
-			fmt.Sprintf("n=%d", call.LineCount),
+			call.Reason,
+			fmt.Sprintf("critical=%t", call.Critical),
+			call.IOCAction,
+			call.IOCID,
+			call.IOCHash,
+			call.IOCDescription,
+			call.IOCExpirationDate,
+			call.IOCFileName,
+			call.IOCHostType,
+			call.IsolateFileGUIDs,
+			fmt.Sprintf("add_excl=%t", call.IsolateFileAddExcl),
+			fmt.Sprintf("release_all=%t", call.IsolateFileReleaseAll),
+			call.PlanName,
+			fmt.Sprintf("st=%d", call.ScanType),
+			fmt.Sprintf("pt=%d", call.PlanType),
+			fmt.Sprintf("scope=%d", call.Scope),
+			call.RID,
+			fmt.Sprintf("time=%d", call.Time),
+			fmt.Sprintf("pid=%d", call.Pid),
+			call.Ids,
+			fmt.Sprintf("allow=%t", call.Allow),
+			fmt.Sprintf("status=%d", call.Status),
+			call.Scene,
+			call.Comment,
+			call.Type,
 		}, "|"))
 	}
 	return strings.Join(parts, "||")
@@ -1032,7 +1068,7 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 		return formatTaskResult(result), nil
 	case "edr_plan_list":
 		reporter.Step(ctx, "我在拉取计划列表。")
-		result, err := s.edr.ListPlans(ctx, edr.ListPlansRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize), Type: call.Operation})
+		result, err := s.edr.ListPlans(ctx, edr.ListPlansRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize), Type: call.Type})
 		if err != nil {
 			return "", err
 		}
