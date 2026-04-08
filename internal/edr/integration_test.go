@@ -783,7 +783,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		err := client.SaveHostOfflineConf(ctx, SaveHostOfflineConfRequest{
 			Status: 1,
 			Setting: HostOfflineSetting{
-				Timeout: "10m",
+				Timeout: 123,
 			},
 		})
 		if err != nil {

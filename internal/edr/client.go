@@ -838,7 +838,7 @@ type HostOfflineConf struct {
 }
 
 type HostOfflineSetting struct {
-	Timeout string `json:"timeout"`
+	Timeout int `json:"offline_days"`
 }
 
 type SaveHostOfflineConfRequest struct {
@@ -2295,7 +2295,7 @@ func (c *OpenAPIClient) postWithHeaders(ctx context.Context, url string, headers
 	}
 
 	rawBody, _ := io.ReadAll(resp.Body)
-	// fmt.Printf("===edr raw response: %s\n", string(rawBody))
+	fmt.Printf("===edr raw response: %s\n", string(rawBody))
 	if err := json.NewDecoder(bytes.NewReader(rawBody)).Decode(out); err != nil {
 		return fmt.Errorf("decode edr response: %w", err)
 	}

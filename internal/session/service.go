@@ -1429,9 +1429,9 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 	case "edr_host_offline_save":
 		reporter.Step(ctx, "我正在保存主机离线配置。")
 		if err := s.edr.SaveHostOfflineConf(ctx, edr.SaveHostOfflineConfRequest{
-			Status: call.ScanType,
+			Status: call.Status,
 			Setting: edr.HostOfflineSetting{
-				Timeout: call.Operation,
+				Timeout: call.Time,
 			},
 		}); err != nil {
 			return "", err
@@ -2444,8 +2444,8 @@ func formatHostOfflineConf(result edr.HostOfflineConf) string {
 	} else if result.Status == 2 {
 		lines = append(lines, "状态：关闭")
 	}
-	if result.Setting.Timeout != "" {
-		lines = append(lines, fmt.Sprintf("离线超时时间：%s", result.Setting.Timeout))
+	if result.Setting.Timeout > 0 {
+		lines = append(lines, fmt.Sprintf("离线超时时间：%d 天", result.Setting.Timeout))
 	}
 	lines = append(lines, fmt.Sprintf("组织：%s", result.OrgName))
 	return strings.Join(lines, "\n")
