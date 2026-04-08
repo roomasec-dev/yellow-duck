@@ -169,6 +169,35 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 		response, err = s.storeAssistantReply(ctx, sessionKey, response)
 		return response, true, err
 	default:
+		// 尝试补全 plan_add / plan_edit 的参数（scan_type、plan_type、scope）
+		if pending.ActionType == "edr_plan_add" || pending.ActionType == "edr_plan_edit" {
+			if val, err := strconv.Atoi(strings.TrimSpace(userText)); err == nil && val >= 1 && val <= 8 {
+				var call planner.ToolCall
+				if err := json.Unmarshal([]byte(pending.Payload), &call); err != nil {
+					return "", true, err
+				}
+				// 依次填充第一个缺失的字段
+				if call.ScanType == 0 {
+					call.ScanType = val
+				} else if call.PlanType == 0 {
+					call.PlanType = val
+				} else if call.Scope == 0 {
+					call.Scope = val
+				} else {
+					// 所有字段都已填充，直接执行
+				}
+				reporter.Step(ctx, "我收到参数了，正在执行计划操作。")
+				response, execErr := s.executeConfirmedTool(ctx, call, locale, reporter)
+				if delErr := s.store.DeletePendingAction(ctx, sessionKey); delErr != nil && execErr == nil {
+					execErr = delErr
+				}
+				if execErr == nil {
+					reply, storeErr := s.storeAssistantReply(ctx, sessionKey, response)
+					return reply, true, storeErr
+				}
+				return "", true, execErr
+			}
+		}
 		return "", false, nil
 	}
 }
@@ -875,6 +904,12 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 			if call.Scope > 0 {
 				summary += fmt.Sprintf(", scope=%d", call.Scope)
 			}
+			if call.PlanType > 0 {
+				summary += fmt.Sprintf(", plan_type=%d", call.PlanType)
+			}
+			if call.Type != "" {
+				summary += ", type=" + call.Type
+			}
 			if call.RID != "" {
 				summary += ", rid=" + call.RID
 			}
@@ -1271,23 +1306,50 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 		}
 		return fmt.Sprintf("指令已下发成功，任务ID: %s，主机: %s，重复: %t", result.TaskID, result.HostName, result.Repeat), nil
 	case "edr_plan_add":
+		if call.Type == "" {
+			return "", fmt.Errorf("type（业务类型）未指定，请补充：kill_plan/leak_repair/distribute_software/distribute_file")
+		}
+		if call.ScanType == 0 {
+			return "", fmt.Errorf("scan_type（扫描类型）未指定，请补充：1-快速扫描 2-全盘扫描 3-自定义路径扫描 4-漏洞修复 5-安装软件 6-卸载软件 7-更新软件 8-发送文件")
+		}
+		if call.PlanType == 0 {
+			return "", fmt.Errorf("plan_type（执行方式）未指定，请补充：1-立即执行 2-定时执行 3-周期执行")
+		}
+		if call.Scope == 0 {
+			return "", fmt.Errorf("scope（范围）未指定，请补充：1-特定主机 2-主机组 3-全网主机")
+		}
 		reporter.Step(ctx, "我正在创建计划。")
 		if err := s.edr.AddPlan(ctx, edr.AddPlanRequest{
 			PlanName: call.PlanName,
 			ScanType: call.ScanType,
 			PlanType: call.PlanType,
 			Scope:    call.Scope,
-			Type:     "kill_plan",
+			Type:     call.Type,
 		}); err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("计划「%s」创建成功", call.PlanName), nil
 	case "edr_plan_edit":
+		if call.Type == "" {
+			return "", fmt.Errorf("type（业务类型）未指定，请补充：kill_plan/leak_repair/distribute_software/distribute_file")
+		}
+		if call.ScanType == 0 {
+			return "", fmt.Errorf("scan_type（扫描类型）未指定，请补充：1-快速扫描 2-全盘扫描 3-自定义路径扫描 4-漏洞修复 5-安装软件 6-卸载软件 7-更新软件 8-发送文件")
+		}
+		if call.PlanType == 0 {
+			return "", fmt.Errorf("plan_type（执行方式）未指定，请补充：1-立即执行 2-定时执行 3-周期执行")
+		}
+		if call.Scope == 0 {
+			return "", fmt.Errorf("scope（范围）未指定，请补充：1-特定主机 2-主机组 3-全网主机")
+		}
 		reporter.Step(ctx, "我正在编辑计划。")
 		if err := s.edr.EditPlan(ctx, edr.EditPlanRequest{
 			RID:      call.RID,
 			PlanName: call.PlanName,
 			ScanType: call.ScanType,
+			PlanType: call.PlanType,
+			Scope:    call.Scope,
+			Type:     call.Type,
 		}); err != nil {
 			return "", err
 		}
@@ -1800,11 +1862,26 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		if decision.RID == "" {
 			return "", fmt.Errorf("编辑计划需要提供计划ID（rid），请使用类似「编辑计划 rid=xxx」的格式")
 		}
+		if decision.ScanType == 0 {
+			return "", fmt.Errorf("编辑计划需要提供操作类型（scan_type）：1-快速扫描 2-全盘扫描 3-自定义路径扫描 4-漏洞修复 5-安装软件 6-卸载软件 7-更新软件 8-发送文件，请使用类似「编辑计划 rid=xxx scan_type=1」的格式")
+		}
+		if decision.PlanType == 0 {
+			return "", fmt.Errorf("编辑计划需要提供执行方式（plan_type）：1-立即执行 2-定时执行 3-周期执行，请使用类似「编辑计划 rid=xxx scan_type=1 plan_type=1」的格式")
+		}
+		if decision.Scope == 0 {
+			return "", fmt.Errorf("编辑计划需要提供范围（scope）：1-特定主机 2-主机组 3-全网主机，请使用类似「编辑计划 rid=xxx scan_type=1 plan_type=1 scope=1」的格式")
+		}
+		if decision.Type == "" {
+			return "", fmt.Errorf("编辑计划需要提供业务类型（type）：kill_plan/leak_repair/distribute_software/distribute_file，请使用类似「编辑计划 rid=xxx scan_type=1 plan_type=1 scope=1 type=kill_plan」的格式")
+		}
 		reporter.Step(ctx, "我正在编辑计划。")
 		callErr := s.edr.EditPlan(ctx, edr.EditPlanRequest{
 			RID:      decision.RID,
 			PlanName: decision.PlanName,
 			ScanType: decision.ScanType,
+			PlanType: decision.PlanType,
+			Scope:    decision.Scope,
+			Type:     decision.Type,
 		})
 		err = callErr
 		if err == nil {

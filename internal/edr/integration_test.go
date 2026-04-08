@@ -715,8 +715,8 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 		// 更新计划名称
 		err = client.EditPlan(ctx, EditPlanRequest{
-			RID:      rid,
-			ClientID: existingPlan.ClientID,
+			RID: rid,
+			// ClientID: existingPlan.ClientID,
 			PlanName: "updated integration test plan",
 			ScanType: existingPlan.ScanType,
 			PlanType: existingPlan.PlanType,

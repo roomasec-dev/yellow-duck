@@ -30,6 +30,7 @@ type Decision struct {
 	ScanType          int     `json:"scan_type"`
 	PlanType          int     `json:"plan_type"`
 	Scope             int     `json:"scope"`
+	Type              string  `json:"type"`
 	RID               string  `json:"rid"`
 	Path              string  `json:"path"` // for send_instruction batch_params
 }
@@ -212,6 +213,7 @@ func heuristicDecision(text string) Decision {
 		decision.ScanType = extractScanType(text)
 		decision.PlanType = extractPlanType(text)
 		decision.Scope = extractScope(text)
+		decision.Type = extractPlanCategory(text)
 	case containsAny(plain, "编辑计划", "修改计划", "更新计划"):
 		decision.Action = "plan_edit"
 		decision.Confidence = 0.9
@@ -219,6 +221,9 @@ func heuristicDecision(text string) Decision {
 		decision.RID = extractRID(text)
 		decision.PlanName = extractPlanName(text)
 		decision.ScanType = extractScanType(text)
+		decision.PlanType = extractPlanType(text)
+		decision.Scope = extractScope(text)
+		decision.Type = extractPlanCategory(text)
 	case containsAny(plain, "取消计划", "删除计划", "停止计划"):
 		decision.Action = "plan_cancel"
 		decision.Confidence = 0.9
@@ -357,6 +362,11 @@ func extractPlanName(text string) string {
 
 func extractScanType(text string) int {
 	plain := strings.ToLower(text)
+	switch plain {
+	case "1", "2", "3", "4", "5", "6", "7", "8":
+		i, _ := strconv.Atoi(plain)
+		return i
+	}
 	switch {
 	case containsAny(plain, "快速扫描", "快速", "quick"):
 		return 1
@@ -380,6 +390,11 @@ func extractScanType(text string) int {
 
 func extractPlanType(text string) int {
 	plain := strings.ToLower(text)
+	switch plain {
+	case "1", "2", "3":
+		i, _ := strconv.Atoi(plain)
+		return i
+	}
 	switch {
 	case containsAny(plain, "立即执行", "立即", "立刻"):
 		return 1
@@ -391,8 +406,28 @@ func extractPlanType(text string) int {
 	return 0
 }
 
+func extractPlanCategory(text string) string {
+	plain := strings.ToLower(text)
+	switch {
+	case containsAny(plain, "kill_plan", "查杀计划", "查杀"):
+		return "kill_plan"
+	case containsAny(plain, "leak_repair", "漏洞修复", "漏洞"):
+		return "leak_repair"
+	case containsAny(plain, "distribute_software", "软件分发", "软件"):
+		return "distribute_software"
+	case containsAny(plain, "distribute_file", "文件分发", "文件"):
+		return "distribute_file"
+	}
+	return ""
+}
+
 func extractScope(text string) int {
 	plain := strings.ToLower(text)
+	switch plain {
+	case "1", "2", "3":
+		i, _ := strconv.Atoi(plain)
+		return i
+	}
 	switch {
 	case containsAny(plain, "特定主机", "单台", "单主机", "指定主机"):
 		return 1
