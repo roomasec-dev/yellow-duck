@@ -9,8 +9,8 @@
 
 输入说明：
 - plan_name：策略名称，必填。
-- instruction_name：策略类型，必填，支持 `virus_scan_settings`、`asset_registration` 等。
-- scope：范围类型，必填，1=全局，2=主机组。
+- type：策略类型，必填，支持 `virus_scan_settings`、`asset_registration` 等。
+- range_type：范围类型，必填，1=全局，2=主机组。
 
 输出建议：
 - 成功后汇报策略 ID 和创建结果。

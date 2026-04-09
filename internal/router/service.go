@@ -32,6 +32,7 @@ type Decision struct {
 	Scope             int     `json:"scope"`
 	Type              string  `json:"type"`
 	RID               string  `json:"rid"`
+	StrategyID        string  `json:"strategy_id"`
 	Path              string  `json:"path"` // for send_instruction batch_params
 }
 
@@ -84,6 +85,7 @@ func (s *Service) analyzeByModel(ctx context.Context, text string) (Decision, er
 		"\"task_id\":\"\"," +
 		"\"reason\":\"\"," +
 		"\"needs_confirmation\":false," +
+		"\"strategy_id\":\"\"," +
 		"\"instruction_name\":\"\"," +
 		"\"path\":\"\"}"
 	if s.prompt != nil {

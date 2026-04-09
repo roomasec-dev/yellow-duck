@@ -13,69 +13,83 @@ import (
 )
 
 type ToolCall struct {
-	Name                  string `json:"name"`
-	Hostname              string `json:"hostname,omitempty"`
-	ClientID              string `json:"client_id,omitempty"`
-	ClientIP              string `json:"client_ip,omitempty"`
-	OSType                string `json:"os_type,omitempty"`
-	Operation             string `json:"operation,omitempty"`
-	StartTime             string `json:"start_time,omitempty"`
-	EndTime               string `json:"end_time,omitempty"`
-	FilterField           string `json:"filter_field,omitempty"`
-	FilterOp              string `json:"filter_operator,omitempty"`
-	FilterValue           string `json:"filter_value,omitempty"`
-	Page                  int    `json:"page,omitempty"`
-	PageSize              int    `json:"page_size,omitempty"`
-	IncidentID            string `json:"incident_id,omitempty"`
-	DetectionID           string `json:"detection_id,omitempty"`
-	ViewType              string `json:"view_type,omitempty"`
-	ProcessUUID           string `json:"process_uuid,omitempty"`
-	ArtifactID            string `json:"artifact_id,omitempty"`
-	Query                 string `json:"query,omitempty"`
-	StartLine             int    `json:"start_line,omitempty"`
-	LineCount             int    `json:"line_count,omitempty"`
-	MemoryKey             string `json:"memory_key,omitempty"`
-	MemoryValue           string `json:"memory_value,omitempty"`
-	TaskID                string `json:"task_id,omitempty"`
-	TaskTitle             string `json:"task_title,omitempty"`
-	TaskPrompt            string `json:"task_prompt,omitempty"`
-	TaskAction            string `json:"task_action,omitempty"`
-	TaskStatus            string `json:"task_status,omitempty"`
-	TaskFeedback          string `json:"task_feedback,omitempty"`
-	TaskIntervalMinutes   int    `json:"task_interval_minutes,omitempty"`
-	InstructionName       string `json:"instruction_name,omitempty"`
-	Path                  string `json:"path,omitempty"`
-	KBTitle               string `json:"kb_title,omitempty"`
-	KBQuery               string `json:"kb_query,omitempty"`
-	KBContent             string `json:"kb_content,omitempty"`
-	KBMode                string `json:"kb_mode,omitempty"`
-	KBOldText             string `json:"kb_old_text,omitempty"`
-	KBNewText             string `json:"kb_new_text,omitempty"`
-	Reason                string `json:"reason,omitempty"`
-	Critical              bool   `json:"critical,omitempty"`
-	IOCAction             string `json:"ioc_action,omitempty"`
-	IOCID                 string `json:"ioc_id,omitempty"`
-	IOCHash               string `json:"ioc_hash,omitempty"`
-	IOCDescription        string `json:"ioc_description,omitempty"`
-	IOCExpirationDate     string `json:"ioc_expiration_date,omitempty"`
-	IOCFileName           string `json:"ioc_file_name,omitempty"`
-	IOCHostType           string `json:"ioc_host_type,omitempty"`
-	IsolateFileGUIDs      string `json:"isolate_file_guids,omitempty"`
-	IsolateFileAddExcl    bool   `json:"isolate_file_add_exclusion,omitempty"`
-	IsolateFileReleaseAll bool   `json:"isolate_file_release_all,omitempty"`
-	PlanName              string `json:"plan_name,omitempty"`
-	ScanType              int    `json:"scan_type,omitempty"`
-	PlanType              int    `json:"plan_type,omitempty"`
-	Scope                 int    `json:"scope,omitempty"`
-	RID                   string `json:"rid,omitempty"`
-	Time                  int    `json:"time,omitempty"`
-	Pid                   int    `json:"pid,omitempty"`
-	Ids                   string `json:"ids,omitempty"`
-	Allow                 bool   `json:"allow,omitempty"`
-	Status                int    `json:"status,omitempty"`
-	Scene                 string `json:"scene,omitempty"`
-	Comment               string `json:"comment,omitempty"`
-	Type                  string `json:"type,omitempty"`
+	Name                         string `json:"name"`
+	Hostname                     string `json:"hostname,omitempty"`
+	ClientID                     string `json:"client_id,omitempty"`
+	ClientIP                     string `json:"client_ip,omitempty"`
+	OSType                       string `json:"os_type,omitempty"`
+	Operation                    string `json:"operation,omitempty"`
+	StartTime                    string `json:"start_time,omitempty"`
+	EndTime                      string `json:"end_time,omitempty"`
+	FilterField                  string `json:"filter_field,omitempty"`
+	FilterOp                     string `json:"filter_operator,omitempty"`
+	FilterValue                  string `json:"filter_value,omitempty"`
+	Page                         int    `json:"page,omitempty"`
+	PageSize                     int    `json:"page_size,omitempty"`
+	IncidentID                   string `json:"incident_id,omitempty"`
+	DetectionID                  string `json:"detection_id,omitempty"`
+	ViewType                     string `json:"view_type,omitempty"`
+	ProcessUUID                  string `json:"process_uuid,omitempty"`
+	ArtifactID                   string `json:"artifact_id,omitempty"`
+	Query                        string `json:"query,omitempty"`
+	StartLine                    int    `json:"start_line,omitempty"`
+	LineCount                    int    `json:"line_count,omitempty"`
+	MemoryKey                    string `json:"memory_key,omitempty"`
+	MemoryValue                  string `json:"memory_value,omitempty"`
+	TaskID                       string `json:"task_id,omitempty"`
+	TaskTitle                    string `json:"task_title,omitempty"`
+	TaskPrompt                   string `json:"task_prompt,omitempty"`
+	TaskAction                   string `json:"task_action,omitempty"`
+	TaskStatus                   string `json:"task_status,omitempty"`
+	TaskFeedback                 string `json:"task_feedback,omitempty"`
+	TaskIntervalMinutes          int    `json:"task_interval_minutes,omitempty"`
+	InstructionName              string `json:"instruction_name,omitempty"`
+	Path                         string `json:"path,omitempty"`
+	KBTitle                      string `json:"kb_title,omitempty"`
+	KBQuery                      string `json:"kb_query,omitempty"`
+	KBContent                    string `json:"kb_content,omitempty"`
+	KBMode                       string `json:"kb_mode,omitempty"`
+	KBOldText                    string `json:"kb_old_text,omitempty"`
+	KBNewText                    string `json:"kb_new_text,omitempty"`
+	Reason                       string `json:"reason,omitempty"`
+	Critical                     bool   `json:"critical,omitempty"`
+	IOCAction                    string `json:"ioc_action,omitempty"`
+	IOCID                        string `json:"ioc_id,omitempty"`
+	IOCHash                      string `json:"ioc_hash,omitempty"`
+	IOCDescription               string `json:"ioc_description,omitempty"`
+	IOCExpirationDate            string `json:"ioc_expiration_date,omitempty"`
+	IOCFileName                  string `json:"ioc_file_name,omitempty"`
+	IOCHostType                  string `json:"ioc_host_type,omitempty"`
+	IsolateFileGUIDs             string `json:"isolate_file_guids,omitempty"`
+	IsolateFileAddExcl           bool   `json:"isolate_file_add_exclusion,omitempty"`
+	IsolateFileReleaseAll        bool   `json:"isolate_file_release_all,omitempty"`
+	PlanName                     string `json:"plan_name,omitempty"`
+	ScanType                     int    `json:"scan_type,omitempty"`
+	PlanType                     int    `json:"plan_type,omitempty"`
+	Scope                        int    `json:"scope,omitempty"`
+	RID                          string `json:"rid,omitempty"`
+	Time                         int    `json:"time,omitempty"`
+	Pid                          int    `json:"pid,omitempty"`
+	Ids                          string `json:"ids,omitempty"`
+	Allow                        bool   `json:"allow,omitempty"`
+	Status                       int    `json:"status,omitempty"`
+	Scene                        string `json:"scene,omitempty"`
+	Comment                      string `json:"comment,omitempty"`
+	Type                         string  `json:"type,omitempty"`
+	ScanFileScope                string  `json:"scan_file_scope,omitempty"`
+	StartupScanMode              string  `json:"startup_scan_mode,omitempty"`
+	ArchiveSizeLimitEnabled      *bool   `json:"archive_size_limit_enabled,omitempty"`
+	ArchiveSizeLimit             int     `json:"archive_size_limit,omitempty"`
+	RealtimeMemCacheTechEnabled  *bool   `json:"realtime_mem_cache_tech_enabled,omitempty"`
+	DynamicCpuMonitorEnabled     *bool   `json:"dynamic_cpu_monitor_enabled,omitempty"`
+	DynamicCpuHighPercent        int     `json:"dynamic_cpu_high_percent,omitempty"`
+	StopRealtimeOnCpuHighEnabled *bool   `json:"stop_realtime_on_cpu_high_enabled,omitempty"`
+	StopRealtimeCpuHighPercent   int     `json:"stop_realtime_cpu_high_percent,omitempty"`
+	OwlOnRealtimeEnabled         *bool   `json:"owl_on_realtime_enabled,omitempty"`
+	RealtimeScanArchiveEnabled   *bool   `json:"realtime_scan_archive_enabled,omitempty"`
+	RuntimeMaxFileSizeMb         int     `json:"runtime_max_file_size_mb,omitempty"`
+	CustomMaxFileSizeMb           int     `json:"custom_max_file_size_mb,omitempty"`
+	StrategyID                   string  `json:"strategy_id,omitempty"`
 }
 
 type Plan struct {
@@ -180,11 +194,28 @@ func (s *Service) BuildPlan(ctx context.Context, modelRef string, userText strin
 		plan.ToolCalls[i].IOCHostType = strings.TrimSpace(plan.ToolCalls[i].IOCHostType)
 		plan.ToolCalls[i].IsolateFileGUIDs = strings.TrimSpace(plan.ToolCalls[i].IsolateFileGUIDs)
 		plan.ToolCalls[i].Path = strings.TrimSpace(plan.ToolCalls[i].Path)
+		plan.ToolCalls[i].ScanFileScope = strings.TrimSpace(plan.ToolCalls[i].ScanFileScope)
+		plan.ToolCalls[i].StartupScanMode = strings.TrimSpace(plan.ToolCalls[i].StartupScanMode)
 		if plan.ToolCalls[i].Time < 0 {
 			plan.ToolCalls[i].Time = 0
 		}
 		if plan.ToolCalls[i].Pid < 0 {
 			plan.ToolCalls[i].Pid = 0
+		}
+		if plan.ToolCalls[i].ArchiveSizeLimit < 0 {
+			plan.ToolCalls[i].ArchiveSizeLimit = 0
+		}
+		if plan.ToolCalls[i].DynamicCpuHighPercent < 0 {
+			plan.ToolCalls[i].DynamicCpuHighPercent = 0
+		}
+		if plan.ToolCalls[i].StopRealtimeCpuHighPercent < 0 {
+			plan.ToolCalls[i].StopRealtimeCpuHighPercent = 0
+		}
+		if plan.ToolCalls[i].RuntimeMaxFileSizeMb < 0 {
+			plan.ToolCalls[i].RuntimeMaxFileSizeMb = 0
+		}
+		if plan.ToolCalls[i].CustomMaxFileSizeMb < 0 {
+			plan.ToolCalls[i].CustomMaxFileSizeMb = 0
 		}
 	}
 	plan.DirectReply = strings.TrimSpace(plan.DirectReply)
@@ -256,6 +287,7 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"18. 如果用户要求发送指令到主机，优先规划 edr_send_instruction，需要同时填 client_id 和 instruction_name；如果提到文件路径（path=\\xxx 或\"文件路径是 xxx\"），必须提取到 path 字段中；涉及可疑文件、批量隔离、批量结束进程时 path 通常不能为空；如果提到隔离时间（如\"1小时\"、\"30分钟\"），必须提取到 time 字段并转换成秒为单位（如1小时=3600）；如果提到 pid 或进程 id，必须提取到 pid 字段中。\n" +
 		"19. 如果用户要开启/关闭离线终端管理、保存主机离线配置，优先规划 edr_host_offline_save，需要填 status（开启=1，关闭=2）和 time（离线超时天数，如18天则 time=18）。\n" +
 		"20. 如果用户在查看策略配置、查杀设置、扫描设置，优先规划 edr_strategy_single，type 填 virus_scan_settings；如果查资产登记策略，type 填 asset_registration。\n" +
+		"20.1 如果用户在修改查杀设置、修改扫描策略、修改扫描配置（查杀范围、启动模式、压缩包限制、CPU避让、实时防护文件大小等），优先规划 edr_strategy_update，需要填 rid 和需要修改的字段（scan_file_scope、startup_scan_mode、archive_size_limit_enabled、archive_size_limit、realtime_mem_cache_tech_enabled、dynamic_cpu_monitor_enabled、dynamic_cpu_high_percent、stop_realtime_on_cpu_high_enabled、stop_realtime_cpu_high_percent、owl_on_realtime_enabled、realtime_scan_archive_enabled、runtime_max_file_size_mb、custom_max_file_size_mb 等）。\n" +
 		"21. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
 		"只输出 JSON，不要 markdown。结构：{\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"instruction_name\":\"\",\"path\":\"\",\"time\":0,\"pid\":0,\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"status\":0,\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"ioc_description\":\"\",\"ioc_expiration_date\":\"\",\"ioc_file_name\":\"\",\"ioc_host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false,\"type\":\"\"}]}"
 	if memoryText != "" {

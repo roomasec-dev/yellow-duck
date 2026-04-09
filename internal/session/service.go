@@ -919,6 +919,40 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 			if call.Reason != "" {
 				summary += ", reason=" + call.Reason
 			}
+			if call.StrategyID != "" {
+				summary += ", strategy_id=" + call.StrategyID
+				if call.ScanFileScope != "" {
+					summary += ", scan_file_scope=" + call.ScanFileScope
+				}
+				if call.StartupScanMode != "" {
+					summary += ", startup_scan_mode=" + call.StartupScanMode
+				}
+				if call.ArchiveSizeLimitEnabled != nil && *call.ArchiveSizeLimitEnabled {
+					summary += fmt.Sprintf(", archive_size_limit=%d", call.ArchiveSizeLimit)
+				}
+				if call.RealtimeMemCacheTechEnabled != nil && *call.RealtimeMemCacheTechEnabled {
+					summary += ", realtime_mem_cache_tech=true"
+				}
+				if call.DynamicCpuMonitorEnabled != nil && *call.DynamicCpuMonitorEnabled {
+					summary += fmt.Sprintf(", dynamic_cpu_high_percent=%d", call.DynamicCpuHighPercent)
+				}
+				if call.StopRealtimeOnCpuHighEnabled != nil && *call.StopRealtimeOnCpuHighEnabled {
+					summary += fmt.Sprintf(", stop_realtime_on_cpu_high=%d", call.StopRealtimeCpuHighPercent)
+				}
+				if call.OwlOnRealtimeEnabled != nil && *call.OwlOnRealtimeEnabled {
+					summary += ", owl_on_realtime=true"
+				}
+				if call.RealtimeScanArchiveEnabled != nil && *call.RealtimeScanArchiveEnabled {
+					summary += ", realtime_scan_archive=true"
+				}
+				if call.RuntimeMaxFileSizeMb > 0 {
+					summary += fmt.Sprintf(", runtime_max_file_size_mb=%d", call.RuntimeMaxFileSizeMb)
+				}
+				if call.CustomMaxFileSizeMb > 0 {
+					summary += fmt.Sprintf(", custom_max_file_size_mb=%d", call.CustomMaxFileSizeMb)
+				}
+			}
+
 			if err := s.store.SavePendingAction(ctx, sessionKey, call.Name, string(payload), summary); err != nil {
 				return nil, "", err
 			}
@@ -1456,7 +1490,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 		reporter.Step(ctx, "我正在创建策略。")
 		result, err := s.edr.CreateStrategy(ctx, edr.CreateStrategyRequest{
 			Name:      call.PlanName,
-			Type:      call.InstructionName,
+			Type:      call.Type,
 			RangeType: call.Scope,
 		})
 		if err != nil {
@@ -1465,29 +1499,73 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 		return fmt.Sprintf("策略创建成功，ID: %s", result.StrategyID), nil
 	case "edr_strategy_update":
 		reporter.Step(ctx, "我正在更新策略。")
+		configContent := make(map[string]any)
+		if call.ScanFileScope != "" {
+			configContent["scan_file_scope"] = call.ScanFileScope
+		}
+		if call.StartupScanMode != "" {
+			configContent["startup_scan_mode"] = call.StartupScanMode
+		}
+		if call.ArchiveSizeLimitEnabled != nil {
+			configContent["archive_size_limit_enabled"] = *call.ArchiveSizeLimitEnabled
+		}
+		if call.ArchiveSizeLimit > 0 {
+			configContent["archive_size_limit"] = call.ArchiveSizeLimit
+		}
+		if call.RealtimeMemCacheTechEnabled != nil {
+			configContent["realtime_mem_cache_tech_enabled"] = *call.RealtimeMemCacheTechEnabled
+		}
+		if call.DynamicCpuMonitorEnabled != nil {
+			configContent["dynamic_cpu_monitor_enabled"] = *call.DynamicCpuMonitorEnabled
+		}
+		if call.DynamicCpuHighPercent > 0 {
+			configContent["dynamic_cpu_high_percent"] = call.DynamicCpuHighPercent
+		}
+		if call.StopRealtimeOnCpuHighEnabled != nil {
+			configContent["stop_realtime_on_cpu_high_enabled"] = *call.StopRealtimeOnCpuHighEnabled
+		}
+		if call.StopRealtimeCpuHighPercent > 0 {
+			configContent["stop_realtime_cpu_high_percent"] = call.StopRealtimeCpuHighPercent
+		}
+		if call.OwlOnRealtimeEnabled != nil {
+			configContent["owl_on_realtime_enabled"] = *call.OwlOnRealtimeEnabled
+		}
+		if call.RealtimeScanArchiveEnabled != nil {
+			configContent["realtime_scan_archive_enabled"] = *call.RealtimeScanArchiveEnabled
+		}
+		if call.RuntimeMaxFileSizeMb > 0 {
+			configContent["runtime_max_file_size_mb"] = call.RuntimeMaxFileSizeMb
+		}
+		if call.CustomMaxFileSizeMb > 0 {
+			configContent["custom_max_file_size_mb"] = call.CustomMaxFileSizeMb
+		}
+		configJSON, _ := json.Marshal(configContent)
+		// fmt.Printf("=== configJSON is: %s", configJSON)
 		if err := s.edr.UpdateStrategy(ctx, edr.UpdateStrategyRequest{
-			StrategyID: call.RID,
-			Name:       call.PlanName,
+			StrategyID:    call.StrategyID,
+			Name:          call.Name,
+			Type:          call.Type,
+			ConfigContent: string(configJSON),
 		}); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("策略 %s 更新成功", call.RID), nil
+		return fmt.Sprintf("策略 %s 更新成功", call.StrategyID), nil
 	case "edr_strategy_delete":
 		reporter.Step(ctx, "我正在删除策略。")
-		if err := s.edr.DeleteStrategy(ctx, call.RID, call.InstructionName); err != nil {
+		if err := s.edr.DeleteStrategy(ctx, call.StrategyID, call.Type); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("策略 %s 已删除", call.RID), nil
+		return fmt.Sprintf("策略 %s 已删除", call.StrategyID), nil
 	case "edr_strategy_status":
 		reporter.Step(ctx, "我正在更新策略状态。")
 		if err := s.edr.UpdateStrategyStatus(ctx, edr.UpdateStrategyStatusRequest{
-			StrategyID: call.RID,
-			Type:       call.InstructionName,
-			Status:     call.ScanType,
+			StrategyID: call.StrategyID,
+			Type:       call.Type,
+			Status:     call.Status,
 		}); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("策略 %s 状态已更新", call.RID), nil
+		return fmt.Sprintf("策略 %s 状态已更新", call.StrategyID), nil
 	case "edr_host_offline_save":
 		reporter.Step(ctx, "我正在保存主机离线配置。")
 		if err := s.edr.SaveHostOfflineConf(ctx, edr.SaveHostOfflineConfRequest{

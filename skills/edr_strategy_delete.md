@@ -8,8 +8,8 @@
 - 执行前要确认策略 ID 明确无歧义。
 
 输入说明：
-- rid：策略 ID，必填。
-- instruction_name：策略类型，必填。
+- strategy_id：策略 ID，必填。
+- type：策略类型，必填。
 
 输出建议：
 - 成功后汇报已删除的策略 ID。
