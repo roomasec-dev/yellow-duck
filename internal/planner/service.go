@@ -255,7 +255,8 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"17. 如果用户要删除主机、移除主机、注销主机，优先规划 edr_remove_host，需要填 client_id。\n" +
 		"18. 如果用户要求发送指令到主机，优先规划 edr_send_instruction，需要同时填 client_id 和 instruction_name；如果提到文件路径（path=\\xxx 或\"文件路径是 xxx\"），必须提取到 path 字段中；涉及可疑文件、批量隔离、批量结束进程时 path 通常不能为空；如果提到隔离时间（如\"1小时\"、\"30分钟\"），必须提取到 time 字段并转换成秒为单位（如1小时=3600）；如果提到 pid 或进程 id，必须提取到 pid 字段中。\n" +
 		"19. 如果用户要开启/关闭离线终端管理、保存主机离线配置，优先规划 edr_host_offline_save，需要填 status（开启=1，关闭=2）和 time（离线超时天数，如18天则 time=18）。\n" +
-		"20. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
+		"20. 如果用户在查看策略配置、查杀设置、扫描设置，优先规划 edr_strategy_single，type 填 virus_scan_settings；如果查资产登记策略，type 填 asset_registration。\n" +
+		"21. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
 		"只输出 JSON，不要 markdown。结构：{\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"instruction_name\":\"\",\"path\":\"\",\"time\":0,\"pid\":0,\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"status\":0,\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"ioc_description\":\"\",\"ioc_expiration_date\":\"\",\"ioc_file_name\":\"\",\"ioc_host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false,\"type\":\"\"}]}"
 	if memoryText != "" {
 		base += "\n\n当前已有记忆：\n" + memoryText

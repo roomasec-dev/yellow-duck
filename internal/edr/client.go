@@ -3167,14 +3167,37 @@ func (c *OpenAPIClient) DeleteIOANetwork(ctx context.Context, id string) error {
 // Strategy Management
 
 func (c *OpenAPIClient) GetStrategySingle(ctx context.Context, strategyType string) (Strategy, error) {
-	var envelope apiEnvelope[Strategy]
+	var envelope apiEnvelope[json.RawMessage]
 	if err := c.get(ctx, fmt.Sprintf("/strategy/%s/single", strategyType), nil, &envelope); err != nil {
 		return Strategy{}, err
 	}
 	if envelope.Error != 0 {
 		return Strategy{}, fmt.Errorf("get strategy single failed: %s", envelope.Message)
 	}
-	return envelope.Data, nil
+
+	// Handle data that might be a string containing JSON
+	data := bytes.TrimSpace(envelope.Data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return Strategy{}, nil
+	}
+
+	// If data is a string (starts with "), extract the JSON from it
+	if data[0] == '"' {
+		var text string
+		if err := json.Unmarshal(data, &text); err != nil {
+			return Strategy{}, fmt.Errorf("get strategy single decode string data failed: %w", err)
+		}
+		text = strings.TrimSpace(text)
+		if text != "" {
+			data = []byte(text)
+		}
+	}
+
+	var strategy Strategy
+	if err := json.Unmarshal(data, &strategy); err != nil {
+		return Strategy{}, fmt.Errorf("get strategy single decode data failed: %w", err)
+	}
+	return strategy, nil
 }
 
 func (c *OpenAPIClient) ListStrategies(ctx context.Context, req ListStrategiesRequest) (ListStrategiesResponse, error) {

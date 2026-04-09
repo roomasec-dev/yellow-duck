@@ -1173,7 +1173,7 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 		return formatStrategies(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_strategy_single":
 		reporter.Step(ctx, "我在拉取单个策略。")
-		result, err := s.edr.GetStrategySingle(ctx, call.InstructionName)
+		result, err := s.edr.GetStrategySingle(ctx, call.Type)
 		if err != nil {
 			return "", err
 		}
