@@ -71,7 +71,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 	})
 
 	t.Run("incidents_list", func(t *testing.T) {
-		result, err := client.ListIncidents(ctx, ListIncidentsRequest{Page: 1, PageSize: 1})
+		result, err := client.ListIncidents(ctx, ListIncidentsRequest{Page: 1, Limit: 1})
 		if err != nil {
 			t.Fatalf("list incidents failed: %v", err)
 		}
@@ -81,7 +81,10 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 	})
 
 	t.Run("detections_list", func(t *testing.T) {
-		result, err := client.ListDetections(ctx, ListDetectionsRequest{Page: 1, PageSize: 1})
+		result, err := client.ListDetections(ctx, ListDetectionsRequest{
+			Page:  1,
+			Limit: 1,
+		})
 		t.Logf("detections_list result %+v", result)
 		if err != nil {
 			t.Fatalf("list detections failed: %v", err)
@@ -509,7 +512,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 	t.Run("incident_r2_summary", func(t *testing.T) {
 		// 先获取一个事件 ID
-		incidents, err := client.ListIncidents(ctx, ListIncidentsRequest{Page: 1, PageSize: 1})
+		incidents, err := client.ListIncidents(ctx, ListIncidentsRequest{Page: 1, Limit: 1})
 		if err != nil {
 			t.Fatalf("list incidents failed: %v", err)
 		}
@@ -529,7 +532,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 	t.Run("batch_deal_incident", func(t *testing.T) {
 		// 先获取一个事件
-		incidents, err := client.ListIncidents(ctx, ListIncidentsRequest{Page: 1, PageSize: 1})
+		incidents, err := client.ListIncidents(ctx, ListIncidentsRequest{Page: 1, Limit: 1})
 		if err != nil {
 			t.Fatalf("list incidents failed: %v", err)
 		}
@@ -570,21 +573,11 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		}
 	})
 
-	t.Run("detections_proxy_list", func(t *testing.T) {
-		result, err := client.ListDetectionsProxy(ctx, ListDetectionsProxyRequest{Page: 1, Limit: 10})
-		raw, _ := json.MarshalIndent(result, "", "  ")
-		t.Logf("detections_proxy_list raw json:\n%s", string(raw))
-		if err != nil {
-			t.Fatalf("detections proxy list failed: %v", err)
-		}
-		t.Logf("detections_proxy_list done: total=%d", result.Total)
-	})
-
 	t.Run("update_detection_status", func(t *testing.T) {
 		// 先获取一个检测记录
-		result, err := client.ListDetectionsProxy(ctx, ListDetectionsProxyRequest{Page: 1, Limit: 1})
+		result, err := client.ListDetections(ctx, ListDetectionsRequest{Page: 1, Limit: 1})
 		if err != nil {
-			t.Fatalf("list detections proxy failed: %v", err)
+			t.Fatalf("list detections failed: %v", err)
 		}
 		if len(result.Results) == 0 {
 			t.Skip("no detection to update status")
@@ -965,21 +958,6 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			t.Fatalf("get strategy single failed: %v", err)
 		}
 		t.Logf("strategy_single done: name=%s", result.Name)
-		// 		{
-		//     "scan_file_scope": "recommended",
-		//     "startup_scan_mode": "all_unknown",
-		//     "archive_size_limit_enabled": true,
-		//     "archive_size_limit": 256,
-		//     "realtime_mem_cache_tech_enabled": true,
-		//     "dynamic_cpu_monitor_enabled": false,
-		//     "dynamic_cpu_high_percent": 80,
-		//     "stop_realtime_on_cpu_high_enabled": false,
-		//     "stop_realtime_cpu_high_percent": 80,
-		//     "owl_on_realtime_enabled": false,
-		//     "realtime_scan_archive_enabled": false,
-		//     "runtime_max_file_size_mb": 800,
-		//     "custom_max_file_size_mb": 800
-		// }
 	})
 
 	t.Run("strategy_detail", func(t *testing.T) {

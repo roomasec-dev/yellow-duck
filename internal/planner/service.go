@@ -75,21 +75,21 @@ type ToolCall struct {
 	Status                       int    `json:"status,omitempty"`
 	Scene                        string `json:"scene,omitempty"`
 	Comment                      string `json:"comment,omitempty"`
-	Type                         string  `json:"type,omitempty"`
-	ScanFileScope                string  `json:"scan_file_scope,omitempty"`
-	StartupScanMode              string  `json:"startup_scan_mode,omitempty"`
-	ArchiveSizeLimitEnabled      *bool   `json:"archive_size_limit_enabled,omitempty"`
-	ArchiveSizeLimit             int     `json:"archive_size_limit,omitempty"`
-	RealtimeMemCacheTechEnabled  *bool   `json:"realtime_mem_cache_tech_enabled,omitempty"`
-	DynamicCpuMonitorEnabled     *bool   `json:"dynamic_cpu_monitor_enabled,omitempty"`
-	DynamicCpuHighPercent        int     `json:"dynamic_cpu_high_percent,omitempty"`
-	StopRealtimeOnCpuHighEnabled *bool   `json:"stop_realtime_on_cpu_high_enabled,omitempty"`
-	StopRealtimeCpuHighPercent   int     `json:"stop_realtime_cpu_high_percent,omitempty"`
-	OwlOnRealtimeEnabled         *bool   `json:"owl_on_realtime_enabled,omitempty"`
-	RealtimeScanArchiveEnabled   *bool   `json:"realtime_scan_archive_enabled,omitempty"`
-	RuntimeMaxFileSizeMb         int     `json:"runtime_max_file_size_mb,omitempty"`
-	CustomMaxFileSizeMb           int     `json:"custom_max_file_size_mb,omitempty"`
-	StrategyID                   string  `json:"strategy_id,omitempty"`
+	Type                         string `json:"type,omitempty"`
+	ScanFileScope                string `json:"scan_file_scope,omitempty"`
+	StartupScanMode              string `json:"startup_scan_mode,omitempty"`
+	ArchiveSizeLimitEnabled      *bool  `json:"archive_size_limit_enabled,omitempty"`
+	ArchiveSizeLimit             int    `json:"archive_size_limit,omitempty"`
+	RealtimeMemCacheTechEnabled  *bool  `json:"realtime_mem_cache_tech_enabled,omitempty"`
+	DynamicCpuMonitorEnabled     *bool  `json:"dynamic_cpu_monitor_enabled,omitempty"`
+	DynamicCpuHighPercent        int    `json:"dynamic_cpu_high_percent,omitempty"`
+	StopRealtimeOnCpuHighEnabled *bool  `json:"stop_realtime_on_cpu_high_enabled,omitempty"`
+	StopRealtimeCpuHighPercent   int    `json:"stop_realtime_cpu_high_percent,omitempty"`
+	OwlOnRealtimeEnabled         *bool  `json:"owl_on_realtime_enabled,omitempty"`
+	RealtimeScanArchiveEnabled   *bool  `json:"realtime_scan_archive_enabled,omitempty"`
+	RuntimeMaxFileSizeMb         int    `json:"runtime_max_file_size_mb,omitempty"`
+	CustomMaxFileSizeMb          int    `json:"custom_max_file_size_mb,omitempty"`
+	StrategyID                   string `json:"strategy_id,omitempty"`
 }
 
 type Plan struct {
@@ -245,7 +245,7 @@ func buildPlannerUserInput(userText string, toolContext string, summary string, 
 
 func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protocol.Artifact) string {
 	base := "你是一个工具规划器，只负责判断是否要调用工具，并输出 JSON。\n" +
-		"可用工具：current_time, edr_hosts, edr_incidents, edr_detections, edr_event_log_alarms, edr_logs, edr_incident_view, edr_detection_view, edr_isolate, edr_release, edr_iocs, edr_ioc_add, edr_ioc_update, edr_ioc_delete, edr_isolate_files, edr_release_isolate_files, edr_tasks, edr_task_result, edr_send_instruction, edr_plan_list, edr_plan_task, edr_virus_by_host, edr_virus_by_hash, edr_virus_hash_hosts, edr_plan_add, edr_plan_edit, edr_plan_cancel, edr_ioas, edr_ioa_audit_log, edr_ioa_networks, edr_strategies, edr_strategy_single, edr_strategy_state, edr_host_offline, edr_host_offline_save, edr_add_host_blacklist, edr_remove_host, edr_batch_deal_incident, edr_incident_r2_summary, edr_detections_proxy, edr_instruction_policy_list, edr_instruction_policy_update, edr_instruction_policy_save_status, edr_instruction_policy_delete, edr_instruction_policy_sort, edr_instruction_policy_add, artifact_search, artifact_read, memory_upsert, memory_delete, scheduled_task_create, scheduled_task_list, scheduled_task_update, scheduled_task_delete, scheduled_task_feedback, knowledge_base_search, knowledge_base_write, knowledge_base_delete。\n" +
+		"可用工具：current_time, edr_hosts, edr_incidents, edr_detections, edr_event_log_alarms, edr_logs, edr_incident_view, edr_detection_view, edr_isolate, edr_release, edr_iocs, edr_ioc_add, edr_ioc_update, edr_ioc_delete, edr_isolate_files, edr_release_isolate_files, edr_tasks, edr_task_result, edr_send_instruction, edr_plan_list, edr_plan_task, edr_virus_by_host, edr_virus_by_hash, edr_virus_hash_hosts, edr_plan_add, edr_plan_edit, edr_plan_cancel, edr_ioas, edr_ioa_audit_log, edr_ioa_networks, edr_strategies, edr_strategy_single, edr_strategy_state, edr_host_offline, edr_host_offline_save, edr_add_host_blacklist, edr_remove_host, edr_batch_deal_incident, edr_incident_r2_summary, edr_instruction_policy_list, edr_instruction_policy_update, edr_instruction_policy_save_status, edr_instruction_policy_delete, edr_instruction_policy_sort, edr_instruction_policy_add, artifact_search, artifact_read, memory_upsert, memory_delete, scheduled_task_create, scheduled_task_list, scheduled_task_update, scheduled_task_delete, scheduled_task_feedback, knowledge_base_search, knowledge_base_write, knowledge_base_delete。\n" +
 		"edr_isolate / edr_release / edr_ioc_add / edr_ioc_update / edr_ioc_delete / edr_delete_isolate_files / edr_release_isolate_files / edr_send_instruction / edr_plan_add / edr_plan_edit / edr_plan_cancel / edr_ioa_add / edr_ioa_update / edr_ioa_delete / edr_ioa_network_add / edr_ioa_network_update / edr_ioa_network_delete / edr_strategy_create / edr_strategy_update / edr_strategy_delete / edr_strategy_status / edr_host_offline_save / edr_add_host_blacklist / edr_remove_host / edr_batch_deal_incident / edr_instruction_policy_update / edr_instruction_policy_save_status / edr_instruction_policy_delete / edr_instruction_policy_sort / edr_instruction_policy_add 属于 critical=true。\n" +
 		"优先原则：\n" +
 		"1. 如果用户在问当前时间、现在几点、today/now/current time，就优先规划 current_time。\n" +
@@ -260,8 +260,8 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"2.2 如果用户在做 hunting / 狩猎 / IOC 扩线 / 进程链排查，优先规划 edr_logs，并尽量提取 client_id、os_type、operation、start_time、end_time，以及一组最关键的 filter_field/filter_operator/filter_value。\n" +
 		"2.3 对 edr_logs，filter_operator 优先用 is；如果用户已经给了明确进程名、操作名、系统类型、client_id 或哈希，优先用 is。contain 只用于路径片段、命令行片段、目录片段等模糊试探。\n" +
 		"2.4 如果用户明确提到时间范围（最近1小时、今天、昨天、某个时间段），对 edr_logs 要尽量填写 start_time / end_time，格式优先用 YYYY-MM-DD HH:MM:SS。\n" +
-		"2.5 如果用户明确查询'这个事件有哪些风险''该事件关联的检测/检出''风险列表'，即需要用 incident_id 查关联风险时，优先规划 edr_detections_proxy。注意：如果用户要查的是事件本身（如'查看相关事件'），应走 2.6 规划 edr_incident_r2_summary，不要走 edr_detections_proxy。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
-		"2.6 如果用户提供 incident_id 并说'查看事件''查看相关事件''查看这个事件''事件详情'，或者在查看某条风险后追问'这个风险的事件''该风险关联的事件'，优先规划 edr_incident_r2_summary 并传入 incident_id。注意：'查看相关事件'查的是事件本身，不是风险，不要调用 edr_detections_proxy。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
+		"2.5 如果用户明确查询'这个事件有哪些风险''该事件关联的检测/检出''风险列表'，即需要用 incident_id 查关联风险时，优先规划 edr_detections。注意：如果用户要查的是事件本身（如'查看相关事件'），应走 2.6 规划 edr_incident_r2_summary，不要走 edr_detections。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
+		"2.6 如果用户提供 incident_id 并说'查看事件''查看相关事件''查看这个事件''事件详情'，或者在查看某条风险后追问'这个风险的事件''该风险关联的事件'，优先规划 edr_incident_r2_summary 并传入 incident_id。注意：'查看相关事件'查的是事件本身，不是风险，不要调用 edr_detections。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
 		"3. 如果用户给了 incident_id 和 client_id，要查看事件详情，就优先规划 edr_incident_view。\n" +
 		"4. 如果用户给了 detection_id 和 client_id，要查看风险详情，就优先规划 edr_detection_view；如果有 view_type 和 process_uuid 也一起带上。\n" +
 		"4.1 incident_id / detection_id 只能使用用户明确提供或真实工具结果里已经出现过的值，绝对不要根据 host_name、incident_name、时间、样例或自然语言自行拼接猜测。\n" +

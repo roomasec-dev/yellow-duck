@@ -4,7 +4,7 @@
 - 查询策略列表，适合回答"有哪些策略""策略的配置情况"。
 
 输入说明：
-- instruction_name：策略类型，必填，如"virus_scan_settings"。
+- type：策略类型，必填，如"virus_scan_settings"。
 
 输入建议：
 - 支持分页查询，page 和 page_size 一起规划。

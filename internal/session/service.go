@@ -1021,7 +1021,7 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 		return formatHosts(result), nil
 	case "edr_incidents":
 		reporter.Step(ctx, "我在拉取近期事件。")
-		result, err := s.edr.ListIncidents(ctx, edr.ListIncidentsRequest{ClientID: call.ClientID, Page: positiveOr(call.Page, 1), PageSize: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		result, err := s.edr.ListIncidents(ctx, edr.ListIncidentsRequest{ClientID: call.ClientID, Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
@@ -1047,7 +1047,10 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 		return formatIncidentR2Summary(result), nil
 	case "edr_detections":
 		reporter.Step(ctx, "我在拉取近期行为检出。")
-		result, err := s.edr.ListDetections(ctx, edr.ListDetectionsRequest{Page: positiveOr(call.Page, 1), PageSize: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		result, err := s.edr.ListDetections(ctx, edr.ListDetectionsRequest{
+			Page:       positiveOr(call.Page, 1),
+			Limit:      positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize),
+			IncidentID: call.IncidentID})
 		if err != nil {
 			return "", err
 		}
@@ -1059,13 +1062,6 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return "", err
 		}
 		return formatEventLogAlarms(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
-	case "edr_detections_proxy":
-		reporter.Step(ctx, "我在拉取检测列表（console）。")
-		result, err := s.edr.ListDetectionsProxy(ctx, edr.ListDetectionsProxyRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
-		if err != nil {
-			return "", err
-		}
-		return formatDetectionsProxy(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_logs":
 		reporter.Step(ctx, "我在拉取行为日志。")
 		result, err := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: call.ClientID, OSType: call.OSType, Operation: call.Operation, StartTime: call.StartTime, EndTime: call.EndTime, FilterField: call.FilterField, FilterOperator: call.FilterOp, FilterValue: call.FilterValue, Page: positiveOr(call.Page, 1), PageSize: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
@@ -1714,7 +1710,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		reporter.Step(ctx, "我在从平台 API 拉取近期事件，整理威胁和主机状态。")
 		clientID, page, pageSize := parseIncidentListArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var result edr.ListIncidentsResponse
-		result, err = s.edr.ListIncidents(ctx, edr.ListIncidentsRequest{ClientID: clientID, Page: page, PageSize: pageSize})
+		result, err = s.edr.ListIncidents(ctx, edr.ListIncidentsRequest{ClientID: clientID, Page: page, Limit: pageSize})
 		if err == nil {
 			response = formatIncidents(result, page, pageSize)
 		}
@@ -1722,7 +1718,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		reporter.Step(ctx, "我在从平台 API 拉取近期行为检出，看看最近有哪些高风险动作。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var result edr.ListDetectionsResponse
-		result, err = s.edr.ListDetections(ctx, edr.ListDetectionsRequest{Page: page, PageSize: pageSize})
+		result, err = s.edr.ListDetections(ctx, edr.ListDetectionsRequest{Page: page, Limit: pageSize})
 		if err == nil {
 			response = formatDetections(result, page, pageSize)
 		}
@@ -1798,7 +1794,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		reporter.Step(ctx, "我在按你的问题拉取近期事件，并整理关键信息。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
-		result, callErr := s.edr.ListIncidents(ctx, edr.ListIncidentsRequest{ClientID: decision.ClientID, Page: page, PageSize: pageSize})
+		result, callErr := s.edr.ListIncidents(ctx, edr.ListIncidentsRequest{ClientID: decision.ClientID, Page: page, Limit: pageSize})
 		err = callErr
 		if err == nil {
 			toolResult = formatIncidents(result, page, pageSize)
@@ -1807,7 +1803,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		reporter.Step(ctx, "我在拉取近期行为检出，看看有哪些直接相关的风险线索。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
-		result, callErr := s.edr.ListDetections(ctx, edr.ListDetectionsRequest{Page: page, PageSize: pageSize})
+		result, callErr := s.edr.ListDetections(ctx, edr.ListDetectionsRequest{Page: page, Limit: pageSize})
 		err = callErr
 		if err == nil {
 			toolResult = formatDetections(result, page, pageSize)
@@ -2107,7 +2103,7 @@ func formatIncidentR2Summary(result edr.IncidentR2SummaryResponse) string {
 	return strings.Join(lines, "\n")
 }
 
-func formatDetectionsProxy(result edr.ListDetectionsProxyResponse, page int, pageSize int) string {
+func formatDetections(result edr.ListDetectionsResponse, page int, pageSize int) string {
 	if len(result.Results) == 0 {
 		return "当前没有查到检测记录。"
 	}
@@ -2124,32 +2120,7 @@ func formatDetectionsProxy(result edr.ListDetectionsProxyResponse, page int, pag
 			lines = append(lines, fmt.Sprintf("... 还有 %d 条记录", len(result.Results)-10))
 			break
 		}
-		if id, ok := item["id"].(string); ok {
-			lines = append(lines, fmt.Sprintf("- id=%s", id))
-		} else if detectionID, ok := item["detection_id"].(string); ok {
-			lines = append(lines, fmt.Sprintf("- detection_id=%s", detectionID))
-		}
-	}
-	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr detections_proxy %d %d", minInt(page+1, totalPages), pageSize))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func formatDetections(result edr.ListDetectionsResponse, page int, pageSize int) string {
-	if len(result.Detections) == 0 {
-		return "近期没有查到行为检出。"
-	}
-	page = positiveOr(page, 1)
-	pageSize = positiveOr(pageSize, len(result.Detections))
-	totalPages := calcTotalPages(result.Total, pageSize)
-	hasMore := "否"
-	if totalPages > 0 && page < totalPages {
-		hasMore = "是"
-	}
-	lines := []string{fmt.Sprintf("共找到 %d 条行为检出，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Detections), pageSize, hasMore)}
-	for _, detection := range result.Detections {
-		lines = append(lines, fmt.Sprintf("- host=%s detection_id=%s level=%v status=%v root=%s", detection.HostName, detection.DetectionID, detection.ThreatLevel, detection.DealStatus, detection.RootName))
+		lines = append(lines, fmt.Sprintf("- host=%s detection_id=%s level=%s status=%d rootname=%s client_id=%s incident_id=%s", item.HostName, item.DetectionID, item.ThreatLevel, item.DealStatus, item.RootName, item.ClientID, item.IncidentID))
 	}
 	if totalPages > 1 {
 		lines = append(lines, fmt.Sprintf("翻页示例：/edr detections %d %d", minInt(page+1, totalPages), pageSize))

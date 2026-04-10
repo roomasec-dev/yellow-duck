@@ -27,7 +27,6 @@ type Client interface {
 	BatchDealIncident(ctx context.Context, req BatchDealIncidentRequest) (BatchDealIncidentResponse, error)
 	IncidentR2Summary(ctx context.Context, incidentID string) (IncidentR2SummaryResponse, error)
 	ListDetections(ctx context.Context, req ListDetectionsRequest) (ListDetectionsResponse, error)
-	ListDetectionsProxy(ctx context.Context, req ListDetectionsProxyRequest) (ListDetectionsProxyResponse, error)
 	UpdateDetectionStatus(ctx context.Context, req UpdateDetectionStatusRequest) error
 	ListEventLogAlarms(ctx context.Context, req ListEventLogAlarmsRequest) (ListEventLogAlarmsResponse, error)
 	ListLogs(ctx context.Context, req ListLogsRequest) (ListLogsResponse, error)
@@ -1099,16 +1098,6 @@ type UpdateStrategyStatusRequest struct {
 }
 
 type ListDetectionsRequest struct {
-	Page     int
-	PageSize int
-}
-
-type ListDetectionsResponse struct {
-	Total      int         `json:"total"`
-	Detections []Detection `json:"data"`
-}
-
-type ListDetectionsProxyRequest struct {
 	Page            int         `json:"page"`
 	Limit           int         `json:"limit"`
 	From            string      `json:"from,omitempty"`
@@ -1136,9 +1125,9 @@ type ListDetectionsProxyRequest struct {
 	ClientIP        string      `json:"client_ip,omitempty"`
 }
 
-type ListDetectionsProxyResponse struct {
-	Total   int              `json:"total"`
-	Results []map[string]any `json:"results"`
+type ListDetectionsResponse struct {
+	Total   int         `json:"total"`
+	Results []Detection `json:"results"`
 }
 
 type UpdateDetectionStatusRequest struct {
@@ -1192,7 +1181,7 @@ type Detection struct {
 
 type ListIncidentsRequest struct {
 	Page     int
-	PageSize int
+	Limit    int
 	ClientID string
 }
 
@@ -1400,33 +1389,6 @@ func (c *OpenAPIClient) ReleaseHost(ctx context.Context, clientID string) (Instr
 	})
 }
 
-func (c *OpenAPIClient) ListDetections(ctx context.Context, req ListDetectionsRequest) (ListDetectionsResponse, error) {
-	if req.Page <= 0 {
-		req.Page = 1
-	}
-	if req.PageSize <= 0 {
-		req.PageSize = c.cfg.DefaultPageSize
-	}
-	payload := map[string]any{
-		"page": map[string]any{
-			"cur_page":  req.Page,
-			"page_size": req.PageSize,
-		},
-		"sort": []map[string]string{{
-			"order":    "desc",
-			"sort_key": "end_time",
-		}},
-	}
-	var envelope apiEnvelope[ListDetectionsResponse]
-	if err := c.postPlatform(ctx, "/detections/list", payload, &envelope); err != nil {
-		return ListDetectionsResponse{}, err
-	}
-	if envelope.Error != 0 {
-		return ListDetectionsResponse{}, fmt.Errorf("platform detections failed: %s", envelope.Message)
-	}
-	return envelope.Data, nil
-}
-
 func (c *OpenAPIClient) ListEventLogAlarms(ctx context.Context, req ListEventLogAlarmsRequest) (ListEventLogAlarmsResponse, error) {
 	if req.Page <= 0 {
 		req.Page = 1
@@ -1477,25 +1439,18 @@ func (c *OpenAPIClient) ListIncidents(ctx context.Context, req ListIncidentsRequ
 	if req.Page <= 0 {
 		req.Page = 1
 	}
-	if req.PageSize <= 0 {
-		req.PageSize = c.cfg.DefaultPageSize
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
 	}
 	payload := map[string]any{
-		"page": map[string]any{
-			"cur_page":  req.Page,
-			"page_size": req.PageSize,
-		},
-		"sort": []map[string]string{{
-			"order":    "desc",
-			"sort_key": "score",
-		}},
+		"page":  req.Page,
+		"limit": req.Limit,
+		"order": "score_desc",
 	}
 	if strings.TrimSpace(req.ClientID) != "" {
-		payload["param"] = []map[string]string{{
-			"key":   "client_id",
-			"value": req.ClientID,
-		}}
+		payload["client_id"] = req.ClientID
 	}
+	fmt.Printf("=== payload = %v", payload)
 	var envelope apiEnvelope[ListIncidentsResponse]
 	if err := c.postPlatform(ctx, "/incidents/list", payload, &envelope); err != nil {
 		return ListIncidentsResponse{}, err
@@ -1540,7 +1495,7 @@ func (c *OpenAPIClient) IncidentR2Summary(ctx context.Context, incidentID string
 	return envelope.Data, nil
 }
 
-func (c *OpenAPIClient) ListDetectionsProxy(ctx context.Context, req ListDetectionsProxyRequest) (ListDetectionsProxyResponse, error) {
+func (c *OpenAPIClient) ListDetections(ctx context.Context, req ListDetectionsRequest) (ListDetectionsResponse, error) {
 	if req.Page <= 0 {
 		req.Page = 1
 	}
@@ -1621,12 +1576,12 @@ func (c *OpenAPIClient) ListDetectionsProxy(ctx context.Context, req ListDetecti
 		payload["client_ip"] = req.ClientIP
 	}
 
-	var envelope apiEnvelope[ListDetectionsProxyResponse]
+	var envelope apiEnvelope[ListDetectionsResponse]
 	if err := c.post(ctx, "/detection/get_list", payload, &envelope); err != nil {
-		return ListDetectionsProxyResponse{}, err
+		return ListDetectionsResponse{}, err
 	}
 	if envelope.Error != 0 {
-		return ListDetectionsProxyResponse{}, fmt.Errorf("detection proxy list failed: %s", envelope.Message)
+		return ListDetectionsResponse{}, fmt.Errorf("detection list failed: %s", envelope.Message)
 	}
 	return envelope.Data, nil
 }
@@ -2296,7 +2251,7 @@ func (c *OpenAPIClient) postWithHeaders(ctx context.Context, url string, headers
 	}
 
 	rawBody, _ := io.ReadAll(resp.Body)
-	// fmt.Printf("===edr raw response: %s\n", string(rawBody))
+	fmt.Printf("===edr raw response: %s\n", string(rawBody))
 	if err := json.NewDecoder(bytes.NewReader(rawBody)).Decode(out); err != nil {
 		return fmt.Errorf("decode edr response: %w", err)
 	}

@@ -1,1639 +1,211 @@
-# open_api Service Swagger
+# Open API 接口文档
 
-**Version**: 2026-03-27
-
-按当前 open_api 路由映射和 ../ratp-console/services/console 下游实现生成；open_api 依赖 X-UserId/X-UserName/X-OrgName 头，而不是 Bearer Token。
-
----
-
-## Authentication
-
-This API uses the following headers:
-
-- `X-UserId`: User ID header
-- `X-UserName`: User Name header
-- `X-OrgName`: Organization Name header
+> **文档版本**：v1.0
+> **更新日期**：2026-04-09
+> **Base URL**：`https://qax-openapi.zboundary.com`
 
 ---
 
-## Rm Native
+## 目录
 
-### RM 检测列表
+- [Open API 接口文档](#open-api-接口文档)
+  - [目录](#目录)
+  - [1. API使用介绍](#1-api使用介绍)
+    - [1.1 步骤介绍](#11-步骤介绍)
+    - [1.2 API校验信息获取](#12-api校验信息获取)
+  - [2. 平台提供的API](#2-平台提供的api)
+    - [2.1 获取Token](#21-获取token)
+  - [2.2 策略管理](#22-策略管理)
+    - [策略列表查询](#策略列表查询)
+    - [新增策略](#新增策略)
+    - [更新策略](#更新策略)
+    - [更新策略状态](#更新策略状态)
+    - [删除策略](#删除策略)
+    - [策略排序](#策略排序)
+  - [2.3 IOA 配置](#23-ioa-配置)
+    - [IOA 白名单列表](#ioa-白名单列表)
+    - [创建 IOA 白名单](#创建-ioa-白名单)
+    - [更新 IOA 白名单](#更新-ioa-白名单)
+    - [删除 IOA 白名单](#删除-ioa-白名单)
+    - [IOA 加白活动审计](#ioa-加白活动审计)
+  - [2.4 查杀设置](#24-查杀设置)
+    - [获取查杀设置](#获取查杀设置)
+    - [更新查杀设置](#更新查杀设置)
+  - [2.5 终端管理](#25-终端管理)
+    - [终端列表查询](#终端列表查询)
+    - [终端加入黑名单](#终端加入黑名单)
+    - [移除主机](#移除主机)
+    - [离线终端管理查询](#离线终端管理查询)
+    - [离线终端管理更新](#离线终端管理更新)
+  - [2.6 查杀计划](#26-查杀计划)
+    - [2.6 查杀计划列表](#26-查杀计划列表)
+    - [新建查杀计划](#新建查杀计划)
+    - [编辑查杀计划](#编辑查杀计划)
+    - [取消查杀计划](#取消查杀计划)
+    - [查看查杀任务](#查看查杀任务)
+  - [2.7 病毒统计](#27-病毒统计)
+    - [按主机统计](#按主机统计)
+    - [按 Hash 统计](#按-hash-统计)
+    - [Hash 关联主机列表](#hash-关联主机列表)
+  - [2.8 任务下发](#28-任务下发)
+    - [下发任务（单终端）](#下发任务单终端)
+    - [批量下发任务](#批量下发任务)
+  - [2.9 事件管理](#29-事件管理)
+    - [事件列表](#事件列表)
+    - [事件详情](#事件详情)
+    - [事件状态批量更新](#事件状态批量更新)
+    - [关联风险检出列表](#关联风险检出列表)
+    - [进程树](#进程树)
+  - [2.10 人工响应](#210-人工响应)
+    - [人工响应任务列表](#人工响应任务列表)
+  - [3. 通用响应说明](#3-通用响应说明)
+    - [响应结构](#响应结构)
+    - [错误码说明](#错误码说明)
+    - [分页参数](#分页参数)
+    - [时间格式](#时间格式)
+    - [认证方式](#认证方式)
+    - [常见问题](#常见问题)
 
-**POST** `/open_api/rm/v1/detections/list`
+---
 
-open_api 原生接口；上下文来自 X-UserId/X-UserName/X-OrgName。
+## 1. API使用介绍
 
-**Request Body**:
+### 1.1 步骤介绍
 
-Content-Type: `application/json`
+奇安信SASE提供一系列开放API，支持企业开发者通过开放API将奇安信SASE的数据与内部其他系统打通，赋能企业安全体系建设。
 
-```json
-  - **page**:     - **cur_page**: integer (required) 
-    - **page_size**: integer (required)  
-  - **sort**: array<OpenApiSort> 
-  - **start_time**: integer 
-  - **end_time**: integer 
-  - **threat_severity**: array<integer> 
-  - **process_result**: array<integer> 
-  - **threat_phase_list**: array<OpenApiThreatPhase> 
+开发者使用平台开放API时，可按以下步骤进行：
+
+1. 进入奇安信SASE控制台
+2. 从控制台中获取API校验信息：Application Key、Application SK
+3. 通过Application Key和Application SK获取Token
+4. 通过Token调用一系列业务接口
+
+### 1.2 API校验信息获取
+
+进入奇安信SASE控制台后，点击左下角的**配置中心/API凭证**，进入API凭证页面，选择**获取API凭证**按钮，获取Application Key和Application SK，用于在后面的步骤中获取Token。
+
+---
+
+## 2. 平台提供的API
+
+### 2.1 获取Token
+
+获取 API 访问令牌。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/get_open_api_token
 ```
 
-**Responses**:
+**请求头**
 
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **data**: array<OpenApiDetectionVO> (required) 
-    - **total**: integer (required) 
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Content-Type | Header | String | 是 | application/json |
 
----
+**请求参数**
 
-### RM 事件列表
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| sign | Body | String | 是 | 签名，规则：`md5(appkey + appsecret + time)` |
+| time | Body | Integer | 是 | 当前时间戳（毫秒） |
+| app_key | Body | String | 是 | 控制台获取的 Application Key |
 
-**POST** `/open_api/rm/v1/incidents/list`
-
-open_api 原生接口；上下文来自 X-UserId/X-UserName/X-OrgName。
-
-**Request Body**:
-
-Content-Type: `application/json`
+**请求示例**
 
 ```json
-  - **org_name**: string 可选，会被 X-OrgName 覆盖
-  - **page**:     - **cur_page**: integer (required) 
-    - **page_size**: integer (required)  
-  - **sort**: array<OpenApiSort> 
-  - **start_time**: integer 
-  - **end_time**: integer 
-  - **params**: array<OpenApiIncidentParam> 
+{
+  "sign": "d41d8cd98f00b204e9800998ecf8427e",
+  "time": 1712659200000,
+  "app_key": "your_app_key_here"
+}
 ```
 
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **data**: array<OpenApiIncidentVO> (required) 
-    - **total**: integer (required) 
-
----
-
-### RM 日志列表
-
-**POST** `/open_api/rm/v1/logs/list`
-
-open_api 原生接口；上下文来自 X-UserId/X-UserName/X-OrgName。 日志项为动态结构。
-
-**Request Body**:
-
-Content-Type: `application/json`
+**响应示例**
 
 ```json
-  - **page**:     - **cur_page**: integer (required) 
-    - **page_size**: integer (required)  
-  - **sort**: array<OpenApiSort> 
-  - **start_time**: integer 
-  - **end_time**: integer 
-  - **filter**: array<OpenApiLogFilterItem> 
-  - **sql**: string 
-  - **search_key**: array<string> 
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
 ```
 
-**Responses**:
+**响应参数说明**
 
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **data**: array<OpenApiLogInfoEntry> (required) 
-    - **total**: integer (required) 
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| error | Integer | 是 | 错误码，0 表示成功 |
+| message | String | 是 | 错误信息 |
+| data.token | String | 是 | 访问令牌 |
+
+**使用说明**
+
+获取Token后，在调用其他业务接口时，需要在请求头中携带Token：
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌，直接传递 token 值 |
 
 ---
 
-## Ts Native
+## 2.2 策略管理
 
-### TS 检测列表
+### 策略列表查询
 
-**POST** `/open_api/ts/v1/detections/list`
+查询策略列表。
 
-open_api 原生接口；上下文来自 X-UserId/X-UserName/X-OrgName。
+**请求 URL**
 
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **page**:     - **cur_page**: integer (required) 
-    - **page_size**: integer (required)  
-  - **sort**: array<OpenApiSort> 
-  - **start_time**: integer 
-  - **end_time**: integer 
-  - **threat_severity**: array<integer> 
-  - **process_result**: array<integer> 
-  - **threat_phase_list**: array<OpenApiThreatPhase> 
 ```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **data**: array<OpenApiDetectionVO> (required) 
-    - **total**: integer (required) 
-
----
-
-### TS 事件列表
-
-**POST** `/open_api/ts/v1/incidents/list`
-
-open_api 原生接口；上下文来自 X-UserId/X-UserName/X-OrgName。
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **org_name**: string 可选，会被 X-OrgName 覆盖
-  - **page**:     - **cur_page**: integer (required) 
-    - **page_size**: integer (required)  
-  - **sort**: array<OpenApiSort> 
-  - **start_time**: integer 
-  - **end_time**: integer 
-  - **params**: array<OpenApiIncidentParam> 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **data**: array<OpenApiIncidentVO> (required) 
-    - **total**: integer (required) 
-
----
-
-## Proxy Hosts
-
-### 全球化主机列表
-
-**POST** `/open_api/rm/v1/hosts/globalization/list`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/hosts/globalization/list
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **page**: integer 
-  - **limit**: integer 
-  - **hostname**: string 
-  - **client_id**: string 
-  - **client_ids**: array<string> 
-  - **status**: string 
-  - **importance**: integer 
-  - **os_version**: string 
-  - **os_type**: integer 
-  - **rmconnectip**: string 
-  - **orgconnectip**: string 
-  - **client_ip**: string 
-  - **mac_address**: string 
-  - **win_version**: string 
-  - **client_version**: string 
-  - **username**: string 
-  - **remarks**: string 
-  - **isolate**: boolean 
-  - **business_type**: integer 
-  - **is_export**: integer 
-  - **gids**: array<integer> 
-  - **platform**: string 
-  - **last_logon_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-  - **first_seen_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-  - **last_seen_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **hosts**: array<object> 
-    - **total**: integer 
-    - **pages**: integer 
-    - **current_page**: integer 
-
----
-
-## Proxy Isolate File
-
-### 删除隔离文件记录
-
-**POST** `/open_api/rm/v1/isolate_file/delete`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/isolate_file/delete
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **guids**: array<string> (required) 
-  - **is_add_exclusion**: boolean 下游 DTO 仅识别该字段
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 隔离文件列表
-
-**POST** `/open_api/rm/v1/isolate_file/get_list`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/isolate_file/get_list
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **page**: integer 
-  - **limit**: integer 
-  - **recover_status**: string 
-  - **path**: string 
-  - **md5**: string 
-  - **sha1**: string 
-  - **file_name**: string 
-  - **hostname**: string 
-  - **username**: string 
-  - **task_id**: string 
-  - **last_quarantine_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **total**: integer 
-    - **results**: array<object> 
-
----
-
-### 释放隔离文件
-
-**POST** `/open_api/rm/v1/isolate_file/release`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/isolate_file/release
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **guids**: array<string> (required) 
-  - **is_add_exclusion**: boolean 下游 DTO 仅识别该字段
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-## Proxy Configure
-
-### 新增 IOA 规则
-
-**POST** `/open_api/rm/v1/configure/ioa/add`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/configure/ioa/add
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **ioa_id**: string IOA 规则 ID
-  - **ta_id**: string 战术 ID
-  - **t_id**: string 技术 ID
-  - **ioa_name**: string IOA 名称
-  - **description**: string 描述
-  - **severity**: string 严重程度
-  - **file_name**: string 文件名称
-  - **command_line**: string 命令行
-  - **host_type**: string 主机类型
-  - **exclusion_name**: string 排除名称
-  - **group_ids**: array<integer> 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **exclusion_id**: string 唯一 ID
-    - **ioa_id**: string 
-    - **ta_name**: string 战术名称
-    - **t_name**: string 技术名称
-    - **ioa_name**: string 
-    - **description**: string 
-    - **severity**: string 
-    - **file_name**: string 
-    - **command_line**: string 
-    - **host_type**: string 
-    - **exclusion_name**: string 
-    - **p_uuid**: string 进程唯一 ID
-    - **create_time**: integer 
-    - **update_time**: integer 
-    - **modified_by_id**: string 
-    - **operate_user**: string 
-    - **group_ids**: array<integer> 
-
----
-
-### 新增 IOC
-
-**POST** `/open_api/rm/v1/configure/ioc/add`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/configure/ioc/add
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **guid**: string 
-  - **ioc_id**: string 
-  - **hash**: string (required) 
-  - **action**: string (required) 
-  - **host_type**: string (required) 
-  - **description**: string 
-  - **expiration_date**: string 
-  - **file_name**: string 
-  - **group_ids**: array<integer> 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **exclusion_id**: string 
-    - **ioc_id**: string 
-    - **hash**: string 
-    - **action**: string 
-    - **date_added**: integer 
-    - **last_seen**: integer 
-    - **last_modified**: integer 
-    - **host_type**: string 
-    - **expiration_date**: integer 
-    - **detection_count**: integer 
-    - **description**: string 
-    - **file_name**: string 
-    - **level**: integer 
-    - **org_name**: string 
-    - **group_ids**: array<integer> 
-
----
-
-### 删除 IOC
-
-**POST** `/open_api/rm/v1/configure/ioc/delete`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/configure/ioc/delete
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **id**: string (required) 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **exclusion_id**: string 
-    - **ioc_id**: string 
-    - **hash**: string 
-    - **action**: string 
-    - **date_added**: integer 
-    - **last_seen**: integer 
-    - **last_modified**: integer 
-    - **host_type**: string 
-    - **expiration_date**: integer 
-    - **detection_count**: integer 
-    - **description**: string 
-    - **file_name**: string 
-    - **level**: integer 
-    - **org_name**: string 
-    - **group_ids**: array<integer> 
-
----
-
-### IOC 详情（按 hash）
-
-**POST** `/open_api/rm/v1/configure/ioc/detail`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。 detail 当前入参是 hash。
-
-> Proxy Route: /api/v1/overseas/configure/ioc/detail
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **hash**: string (required) 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### IOC 列表
-
-**POST** `/open_api/rm/v1/configure/ioc/list`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/configure/ioc/list
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **page**: integer 
-  - **limit**: integer 
-  - **hash**: string 
-  - **action**: string 
-  - **date_add**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-  - **last_modified**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-  - **host_type**: string 
-  - **group_ids**: array<integer> 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **results**: array<ConsoleIocDetailResponse> 
-    - **total**: integer 
-
----
-
-### 更新 IOC
-
-**POST** `/open_api/rm/v1/configure/ioc/update`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/configure/ioc/update
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **id**: string (required) 
-  - **hash**: string (required) 
-  - **action**: string 
-  - **host_type**: string 
-  - **description**: string 
-  - **expiration_date**: string 
-  - **file_name**: string 
-  - **group_ids**: array<integer> 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **exclusion_id**: string 
-    - **ioc_id**: string 
-    - **hash**: string 
-    - **action**: string 
-    - **date_added**: integer 
-    - **last_seen**: integer 
-    - **last_modified**: integer 
-    - **host_type**: string 
-    - **expiration_date**: integer 
-    - **detection_count**: integer 
-    - **description**: string 
-    - **file_name**: string 
-    - **level**: integer 
-    - **org_name**: string 
-    - **group_ids**: array<integer> 
-
----
-
-## Proxy Instructions
-
-### 发送指令
-
-**POST** `/open_api/rm/v1/instructions/send_instruction`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v2/instructions/send_instruction
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **client_id**: string 
-  - **instruction_name**: string 
-  - **process**: array<object> 
-  - **params**: object 
-  - **batch_params**: array<object> 
-  - **is_batch**: integer 
-  - **instruction_type**: integer 
-  - **incident_id**: string 
-  - **task_name**: string 
-  - **is_online**: integer 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **task_id**: string 
-    - **host_name**: string 
-    - **repeat**: boolean 
-    - **category**: integer 
-
----
-
-### 查询指令任务结果
-
-**POST** `/open_api/rm/v1/instructions/task_result`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/instructions/task_result
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **task_id**: string (required) 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **instruction_name**: string 
-    - **status**: integer 
-    - **message**: string 
-    - **host_name**: string 
-    - **host_status**: string 
-    - **collect_time**: integer 
-    - **process**: array<object> 
-    - **process_detail**: array<object> 
-    - **image_detail**: array<object> 
-
----
-
-### 查询指令任务列表
-
-**POST** `/open_api/rm/v1/instructions/tasks`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/instructions/tasks
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **page**: integer 
-  - **limit**: integer 
-  - **client_id**: string 
-  - **host_name**: string 
-  - **id**: string 
-  - **instruction_name**: string 
-  - **content**: string 
-  - **status**: string 
-  - **user**: string 
-  - **is_export**: integer 
-  - **instruction_type**: integer 
-  - **policy_name**: string 
-  - **policy_id**: string 
-  - **create_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-  - **update_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **results**: array<object> 
-    - **total**: integer 
-
----
-
-## Proxy Incident
-
-### 批量处置事件
-
-**POST** `/open_api/rm/v1/incident/batch_deal`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/incident/batch_deal
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **ids**: array<string> (required) 
-  - **allow**: boolean (required) 
-  - **status**: integer (required) 
-  - **scene**: string (enum: batch, alone) (enum: batch, alone) (required) 
-  - **comment**: string 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **incident_name**: string 
-    - **status**: integer 
-    - **total_detection**: integer 
-    - **total_incident**: integer 
-    - **incident_names**: array<string> 
-
----
-
-### 事件摘要（R2）
-
-**POST** `/open_api/rm/v1/incident/r2/summary`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/incident/r2/summary
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **incident_id**: string (required) 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **id**: string 
-    - **client_id**: string 
-    - **incident_id**: string 
-    - **incident_name**: string 
-    - **status**: integer 
-    - **score**: number 
-    - **comment**: string 
-    - **remarks**: string 
-    - **tags**: array<string> 
-    - **ttp**:       - **target**: string 
-      - **technique**: string 
-      - **course**: string  
-    - **release**: integer 
-    - **actors**: array<string> 
-    - **multihost**: boolean 
-    - **scene**: integer 
-    - **associated_hosts**: array<string> 
-    - **host_id**: string 
-    - **host_name**: string 
-    - **operating_system**: string 
-    - **username**: string 
-    - **external_ip**: string 
-    - **connection_ip**: string 
-    - **client_version**: string 
-    - **isolation**: integer 
-    - **host_status**: string 
-    - **actor**: string 
-    - **actor_type**: string 
-    - **t_names**: array<string> 
-    - **start_time**: integer 
-    - **end_time**: integer 
-    - **keep_alive_status**: integer 
-    - **platform**: integer 
-
----
-
-### 事件详情视图
-
-**POST** `/open_api/rm/v1/incident/view`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/incident/view
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **incident_id**: string (required) 
-  - **client_id**: string (required) 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-## Proxy Detection
-
-### 更新 detection 处置状态
-
-**POST** `/open_api/rm/v1/detection/deal_status`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/detection/deal_status
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **ids**: array<string> (required) 
-  - **deal_status**: integer (required) 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 检测列表（console 代理）
-
-**POST** `/open_api/rm/v1/detection/get_list`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/detection/get_list
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **page**: integer 
-  - **limit**: integer 
-  - **from**: string 
-  - **threat_level**: string 
-  - **ta_id**: string 
-  - **t_id**: string 
-  - **hash**: string 
-  - **p_name**: string 
-  - **detect_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-  - **hostname**: string 
-  - **client_id**: string 
-  - **username**: string 
-  - **deal_status**: string 
-  - **incident_id**: string 
-  - **deal_status_array**: array<integer> 
-  - **start_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-  - **root_name**: string 
-  - **main_p_name**: string 
-  - **malware_name**: string 
-  - **detection_source**: string 
-  - **view_type**: string 
-  - **detection_ids**: array<string> 
-  - **rm_connect_ip**: string 
-  - **org_connect_ip**: string 
-  - **client_ip**: string 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **results**: array<object> 
-    - **total**: integer 
-
----
-
-### 检测详情视图
-
-**POST** `/open_api/rm/v1/detection/view`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/detection/view
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **detection_id**: string (required) 
-  - **client_id**: string (required) 
-  - **view_type**: string 
-  - **process_uuid**: string 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **client_id**: string 
-    - **org_name**: string 
-    - **incident_name**: string 
-    - **score**: integer 
-    - **last_update_time**: integer 
-    - **start_time**: integer 
-    - **view_type**: string 
-    - **timeline**: object 
-    - **file_relations**: array<object> 
-    - **process_relations**: array<object> 
-    - **ioa_timeline**: array<object> 
-    - **ioc_list**: object 
-    - **host_info**: object 
-    - **processes**: array<object> 
-
----
-
-## Proxy Virus
-
-### 按 Hash 查看主机明细
-
-**POST** `/open_api/rm/v1/virus/hash/host/list`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/virus/hash/host/list
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **page**: integer 
-  - **limit**: integer 
-  - **sha1**: string 
-  - **client_id**: string 
-  - **username**: string 
-  - **host_name**: string 
-  - **importance**: integer 
-  - **mac_address**: string 
-  - **client_ip**: string 
-  - **rmconnectip**: string 
-  - **status**: integer 
-  - **host_status**: string 
-  - **path**: string 
-  - **last_checked_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **total**: integer 
-    - **results**: array<object> 
-
----
-
-### 按文件 Hash 统计病毒命中
-
-**POST** `/open_api/rm/v1/virus/hash/list`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/virus/hash/list
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **page**: integer 
-  - **limit**: integer 
-  - **last_checked_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-  - **name**: string 
-  - **sha1**: string 
-  - **md5**: string 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **total**: integer 
-    - **results**: array<object> 
-
----
-
-### 按主机统计病毒命中
-
-**POST** `/open_api/rm/v1/virus/host/list`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/overseas/virus/host/list
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **page**: integer 
-  - **limit**: integer 
-  - **client_id**: string 
-  - **username**: string 
-  - **host_name**: string 
-  - **importance**: integer 
-  - **mac_address**: string 
-  - **client_ip**: string 
-  - **rmconnectip**: string 
-  - **status**: integer 
-  - **last_checked_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **total**: integer 
-    - **results**: array<object> status 条件存在时结果项会额外带 sha1/md5
-
----
-
-## Proxy Strategy
-
-### 获取单个策略
-
-**GET** `/open_api/rm/v1/strategy/:strategy_type/single`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api2/v1/strategy/:strategy_type/single
-
-> Downstream: ../ratp-console/services/console
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 创建策略
-
-**POST** `/open_api/rm/v1/strategy/create`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api2/v1/strategy/create
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **name**: string (required) 策略名称
-  - **type**: string (required) 策略类型
-  - **content**: string 策略内容
-  - **range_type**: integer (required) 范围类型: 1-全局, 2-分组
-  - **group_ids**: array<integer> 
-  - **config_content**: string 
-  - **status**: integer 状态: 1-启用, 0-禁用
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 删除策略
-
-**POST** `/open_api/rm/v1/strategy/delete`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api2/v1/strategy/delete
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **strategy_id**: string (required) 
-  - **type**: string (required) 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 策略详情
-
-**POST** `/open_api/rm/v1/strategy/detail`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api2/v1/strategy/detail
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **type**: string (required) 
-  - **strategy_id**: string (required) 
-  - **status**: integer 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 策略列表
-
-**POST** `/open_api/rm/v1/strategy/list`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api2/v1/strategy/list
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **type**: string 策略类型
-  - **name**: string 
-  - **status**: integer 
-  - **range_type**: integer 
-  - **group_ids**: array<integer> 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 排序策略
-
-**POST** `/open_api/rm/v1/strategy/sort`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api2/v1/strategy/sort
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **type**: string (required) 
-  - **sort_ids**: array<string> (required) 排序后的策略ID列表
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 获取策略状态
-
-**GET** `/open_api/rm/v1/strategy/state`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api2/v1/strategy/state
-
-> Downstream: ../ratp-console/services/console
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 更新策略状态
-
-**POST** `/open_api/rm/v1/strategy/status`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api2/v1/strategy/status
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **strategy_id**: string (required) 
-  - **type**: string (required) 
-  - **status**: integer (required) 状态: 1-启用, 0-禁用
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 更新策略
-
-**POST** `/open_api/rm/v1/strategy/update`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api2/v1/strategy/update
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **strategy_id**: string (required) 策略ID
-  - **name**: string 
-  - **type**: string 
-  - **content**: string 
-  - **range_type**: integer 
-  - **group_ids**: array<integer> 
-  - **config_content**: string 
-  - **status**: integer 
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-## Proxy Plan
-
-### 新建计划
-
-**POST** `/open_api/rm/v1/plan/add`
-
-sase-console-api 新建计划接口
-
-> Proxy Route: /api/v1/plan/add
-
-> Downstream: ../sase-console-api
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **rid**: string 计划id (编辑时必填)
-  - **scan_type**: integer (required) 1:快速扫描 2:全盘扫描 3:自定义路径扫描 4:漏洞修复 5:安装软件 6:卸载软件 7:更新软件 8:发送文件
-  - **plan_name**: string 计划名称
-  - **plan_type**: integer (required) 1:立即执行 2:定时执行 3:周期执行
-  - **scope**: integer (required) 1:特定主机 2:主机组 3:全网主机
-  - **contents**: object 内容 (scan_path/software/file等)
-  - **execute_start_time**: integer 执行开始时间
-  - **execute_cycle**: integer 执行周期 1:每天 2:每周 3:每月
-  - **repeat_cycle**: array<integer> 重复周期 周0-6 月1-31
-  - **execution_time**: string 执行时间 hh:mm
-  - **group_ids**: array<integer> 主机组
-  - **type**: string (required) 业务类型: kill_plan/leak_repair/distribute_software/distribute_file
-  - **device_client_ids**: array<string> 主机id数组
-  - **expired_setting**: integer 过期设置 0:永不过期 1:指定过期时间
-  - **expired_time**: integer 过期时间
-  - **search_content**: array<string> 搜索内容
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 取消计划
-
-**PUT** `/open_api/rm/v1/plan/cancel/:rid`
-
-sase-console-api 取消计划接口
-
-> Proxy Route: /api/v1/plan/cancel/:rid
-
-> Downstream: ../sase-console-api
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 编辑计划
-
-**POST** `/open_api/rm/v1/plan/edit`
-
-sase-console-api 编辑计划接口
-
-> Proxy Route: /api/v1/plan/edit
-
-> Downstream: ../sase-console-api
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **rid**: string 计划id (编辑时必填)
-  - **scan_type**: integer (required) 1:快速扫描 2:全盘扫描 3:自定义路径扫描 4:漏洞修复 5:安装软件 6:卸载软件 7:更新软件 8:发送文件
-  - **plan_name**: string 计划名称
-  - **plan_type**: integer (required) 1:立即执行 2:定时执行 3:周期执行
-  - **scope**: integer (required) 1:特定主机 2:主机组 3:全网主机
-  - **contents**: object 内容 (scan_path/software/file等)
-  - **execute_start_time**: integer 执行开始时间
-  - **execute_cycle**: integer 执行周期 1:每天 2:每周 3:每月
-  - **repeat_cycle**: array<integer> 重复周期 周0-6 月1-31
-  - **execution_time**: string 执行时间 hh:mm
-  - **group_ids**: array<integer> 主机组
-  - **type**: string (required) 业务类型: kill_plan/leak_repair/distribute_software/distribute_file
-  - **device_client_ids**: array<string> 主机id数组
-  - **expired_setting**: integer 过期设置 0:永不过期 1:指定过期时间
-  - **expired_time**: integer 过期时间
-  - **search_content**: array<string> 搜索内容
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data: object
-
----
-
-### 计划列表
-
-**POST** `/open_api/rm/v1/plan/list`
-
-sase-console-api 病毒扫描计划列表接口
-
-> Proxy Route: /api/v1/plan/list
-
-> Downstream: ../sase-console-api
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **scan_type**: integer 1:快速扫描 2:全盘扫描 3:自定义路径扫描 4:漏洞修复 5:安装软件 6:卸载软件 7:更新软件 8:发送文件
-  - **plan_type**: integer 1:立即执行 2:计划执行
-  - **type**: string (required) 业务类型: kill_plan查杀计划, leak_repair漏洞修复, distribute_software分发软件, distribute_file发送文件
-  - **search_content**: string 
-  - **page**: integer (required) 页码
-  - **limit**: integer (required) 每页数量
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **total**: integer 
-    - **items**: array<object> 
-
----
-
-### 病毒扫描执行记录
-
-**POST** `/open_api/rm/v1/virus_scan/scan_record`
-
-open_api 代理接口；按 proxy_routes.go 转发到 ratp-console/services/console，下游 request/response 以当前代码为准。
-
-> Proxy Route: /api/v1/virus_scan/scan_record
-
-> Downstream: ../ratp-console/services/console
-
-**Request Body**:
-
-Content-Type: `application/json`
-
-```json
-  - **page**: integer 
-  - **limit**: integer 
-  - **rid**: string 
-  - **task_id**: string 
-  - **execution_batch**: string 
-  - **host_name**: string 
-  - **client_id**: string 
-  - **scan_type**: string 
-  - **status**: string 
-  - **start_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-  - **end_time**:     - **time_range**:       - **start**: integer 
-      - **end**: integer  
-    - **quick_time**:       - **time_num**: integer 
-      - **time_span**: string 
-      - **time_type**: string   
-```
-
-**Responses**:
-
-- `200`: HTTP 200 + error/message/data
-  - `application/json`:
-    - error: integer
-    - message: string
-    - data:     - **total**: integer 
-    - **results**: array<object> 
-
----
-
-
-
-# 自动响应的策略
-
-## POST 列表查询
-
 POST /open_api/rm/v1/instruction_policy/list
+```
 
-> Body 请求参数
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌，直接传递 token 值 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| policy_type | Body | Integer | 否 | 策略类型：1-内置策略，2-自定义策略 |
+| name | Body | String | 否 | 策略名称 |
+| operation_user | Body | String | 否 | 操作人 |
+| scopes | Body | String | 否 | 范围：1-隔离网络，2-智能响应 |
+| action | Body | Integer | 否 | 操作：1-隔离网络，2-智能响应 |
+| status | Body | Integer | 否 | 状态：1-启用，2-禁用 |
+| create_time | Body | Object | 否 | 创建时间范围 |
+| create_time.time_range.start | Body | Integer | 是 | 开始时间戳 |
+| create_time.time_range.end | Body | Integer | 是 | 结束时间戳 |
+| update_time | Body | Object | 否 | 更新时间范围 |
+
+**请求示例**
 
 ```json
 {
   "policy_type": 1,
-  "name": "sss",
-  "operation_user": "水水水水",
+  "name": "测试策略",
+  "operation_user": "admin",
   "scopes": "1",
   "action": 1,
-  "status": 1
+  "status": 1,
+  "create_time": {
+    "time_range": {
+      "start": 1712553600,
+      "end": 1712640000
+    }
+  }
 }
 ```
 
-### 请求参数
-
-|名称|位置|类型|必选|说明|
-|---|---|---|---|---|
-|body|body|object| 是 |none|
-|» policy_type|body|integer| 否 |1 内置策略 2 自定义策略|
-|» name|body|string| 否 |none|
-|» operation_user|body|string| 否 |none|
-|» scopes|body|string| 否 |// 1 隔离网络 // 2 智能响应|
-|» action|body|integer| 否 |// 1 隔离网络 // 2 智能响应|
-|» status|body|integer| 否 |// 1 启用 2 禁用|
-|» create_time|body|object| 否 |none|
-|»» time_range|body|object| 是 |none|
-|»»» start|body|integer| 是 |none|
-|»»» end|body|integer| 是 |none|
-|» update_time|body|object| 否 |none|
-|»» time_range|body|object| 是 |none|
-|»»» start|body|integer| 是 |none|
-|»»» end|body|integer| 是 |none|
-
-> 返回示例
-
-> 200 Response
+**响应示例**
 
 ```json
 {
@@ -1644,1383 +216,69 @@ POST /open_api/rm/v1/instruction_policy/list
       {
         "rid": "1962463468078501888",
         "policy_type": 2,
-        "name": "testmf",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2,
-          1
-        ],
+        "name": "测试策略",
+        "action": [2, 1],
         "client_id": "d0bf954479f84a1fa3e176ee079021d7",
         "scope": 2,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
         "scope_content": "DESKTOP-I5L1OH7",
-        "group_ids": [],
         "operation_user": "171****5221",
         "create_time": 1756722726,
         "update_time": 1769482142,
         "status": 1,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1998702940830830592",
-        "policy_type": 2,
-        "name": "adfasdfasdf",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "98574e36f33ebbadd153fcf3a4177c2a",
-        "scope": 2,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "kylin-pc",
-        "group_ids": [],
-        "operation_user": "123456789011111",
-        "create_time": 1765362889,
-        "update_time": 1765871279,
-        "status": 1,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1996146956669292544",
-        "policy_type": 2,
-        "name": "士大夫但是",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "All",
-        "group_ids": [],
-        "operation_user": "123456789011111",
-        "create_time": 1764753495,
-        "update_time": 1765952748,
-        "status": 1,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1960987025683255296",
-        "policy_type": 2,
-        "name": "test",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "4b52dd63e9fb4c94820a8c5f34f1f0c9",
-        "scope": 2,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "DESKTOP-I5L1OH7",
-        "group_ids": [],
-        "operation_user": "176****2470",
-        "create_time": 1756370714,
-        "update_time": 1767956912,
-        "status": 1,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1960988795289473024",
-        "policy_type": 2,
-        "name": "fdsf",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "",
-        "scope": 3,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "",
-        "group_ids": [
-          292
-        ],
-        "operation_user": "176****2470",
-        "create_time": 1756371136,
-        "update_time": 1767956913,
-        "status": 1,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "2019715677614510080",
-        "policy_type": 2,
-        "name": "手动阀手动阀撒",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "All",
-        "group_ids": [],
-        "operation_user": "123456789011111",
-        "create_time": 1770372716,
-        "update_time": 1770372734,
-        "status": 1,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1284141750721056768",
-        "policy_type": 1,
-        "name": "CobaltStrike远控响应策略",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2,
-          1
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "全网主机",
-        "group_ids": [],
-        "operation_user": "",
-        "create_time": 1761891231,
-        "update_time": 1764301552,
-        "status": 1,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "2032325973063503872",
-        "policy_type": 2,
-        "name": "拦截龙虾进程",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2,
-          1
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "All",
-        "group_ids": [],
-        "operation_user": "155****3036",
-        "create_time": 1773379245,
-        "update_time": 1773379362,
-        "status": 1,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "2039626466089504768",
-        "policy_type": 2,
-        "name": "侧是",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "All",
-        "group_ids": [],
-        "operation_user": "177****6010",
-        "create_time": 1775119818,
-        "update_time": 1775119818,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "2036728724501565440",
-        "policy_type": 2,
-        "name": "test auto",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "All",
-        "group_ids": [],
-        "operation_user": "135****1247",
-        "create_time": 1774428943,
-        "update_time": 1774428943,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "2019973335835742208",
-        "policy_type": 2,
-        "name": "test-m",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "All",
-        "group_ids": [],
-        "operation_user": "135****4246",
-        "create_time": 1770434147,
-        "update_time": 1770434406,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "2019974316434657280",
-        "policy_type": 2,
-        "name": "test-m1",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "All",
-        "group_ids": [],
-        "operation_user": "135****4246",
-        "create_time": 1770434381,
-        "update_time": 1770434404,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1237061059751841792",
-        "policy_type": 1,
-        "name": "银狐远控响应策略",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2,
-          1
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "全网主机",
-        "group_ids": [],
-        "operation_user": "",
-        "create_time": 1750666320,
-        "update_time": 1764301557,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1237061185803259904",
-        "policy_type": 1,
-        "name": "Ghost远控响应策略",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2,
-          1
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "全网主机",
-        "group_ids": [],
-        "operation_user": "",
-        "create_time": 1750666350,
-        "update_time": 1764301555,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1284148151589670912",
-        "policy_type": 1,
-        "name": "勒索攻击响应策略",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2,
-          1
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "全网主机",
-        "group_ids": [],
-        "operation_user": "",
-        "create_time": 1761892757,
-        "update_time": 1764301554,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1284143021666471936",
-        "policy_type": 1,
-        "name": "钓鱼攻击响应策略",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2,
-          1
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "全网主机",
-        "group_ids": [],
-        "operation_user": "",
-        "create_time": 1761891534,
-        "update_time": 1764301554,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1962415055412662272",
-        "policy_type": 2,
-        "name": "698363",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "All",
-        "group_ids": [],
-        "operation_user": "1p8_g357joa2oc",
-        "create_time": 1756711183,
-        "update_time": 1756713655,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1962416311812231168",
-        "policy_type": 2,
-        "name": "tttt",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "All",
-        "group_ids": [],
-        "operation_user": "1p8_g357joa2oc",
-        "create_time": 1756711483,
-        "update_time": 1756711483,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1962414762859958272",
-        "policy_type": 2,
-        "name": "123123",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "All",
-        "group_ids": [],
-        "operation_user": "1p8_g357joa2oc",
-        "create_time": 1756711114,
-        "update_time": 1756711114,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1962413808420917248",
-        "policy_type": 2,
-        "name": "test77",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "",
-        "scope": 1,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "All",
-        "group_ids": [],
-        "operation_user": "1p8_g357joa2oc",
-        "create_time": 1756710886,
-        "update_time": 1756710886,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
-      },
-      {
-        "rid": "1962412804409397248",
-        "policy_type": 2,
-        "name": "fdsf_test9",
-        "condition_list": {
-          "sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "metas": {}
-            }
-          ],
-          "version": "1.0",
-          "metas": {}
-        },
-        "action": [
-          2
-        ],
-        "client_id": "",
-        "scope": 3,
-        "tq_group": {
-          "groups": null,
-          "show_data": ""
-        },
-        "scope_content": "",
-        "group_ids": [
-          296,
-          292
-        ],
-        "operation_user": "1p8_g357joa2oc",
-        "create_time": 1756710647,
-        "update_time": 1756710742,
-        "status": 2,
-        "task_num": 0,
-        "task_start_time": 1775059200,
-        "task_end_time": 1775121820
+        "task_num": 0
       }
     ]
   }
 }
 ```
 
-### 返回结果
+**响应参数说明**
 
-|状态码|状态码含义|说明|数据模型|
-|---|---|---|---|
-|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|none|Inline|
+| 参数名 | 类型 | 说明 |
+|--------|------|------|
+| error | Integer | 错误码，0 表示成功 |
+| message | String | 错误信息 |
+| data.result[].rid | String | 策略ID |
+| data.result[].policy_type | Integer | 策略类型 |
+| data.result[].name | String | 策略名称 |
+| data.result[].status | Integer | 状态：1-启用，2-禁用 |
 
-### 返回数据结构
+---
 
-状态码 **200**
+### 新增策略
 
-|名称|类型|必选|约束|中文名|说明|
-|---|---|---|---|---|---|
-|» error|integer|true|none||none|
-|» message|string|true|none||none|
-|» data|object|true|none||none|
-|»» result|[object]|true|none||none|
-|»»» rid|string|true|none||none|
-|»»» policy_type|integer|true|none||none|
-|»»» name|string|true|none||none|
-|»»» condition_list|object|true|none||none|
-|»»»» sets|[object]|true|none||none|
-|»»»»» sub_sets_logical|string|true|none||none|
-|»»»»» sub_sets|[object]|true|none||none|
-|»»»»»» sub_sets_logical|string|true|none||none|
-|»»»»»» sub_sets|[object]|true|none||none|
-|»»»»»»» sub_sets_logical|string|true|none||none|
-|»»»»»»» sub_sets|null|true|none||none|
-|»»»»»»» access_rules|[object]|true|none||none|
-|»»»»»»»» key|string|true|none||none|
-|»»»»»»»» value|string|true|none||none|
-|»»»»»»»» compare_method|string|true|none||none|
-|»»»»»» access_rules|null|true|none||none|
-|»»»»» metas|object|true|none||none|
-|»»»» version|string|true|none||none|
-|»»»» metas|object|true|none||none|
-|»»» action|[integer]|true|none||none|
-|»»» client_id|string|true|none||none|
-|»»» scope|integer|true|none||none|
-|»»» tq_group|object|true|none||none|
-|»»»» groups|null|true|none||none|
-|»»»» show_data|string|true|none||none|
-|»»» scope_content|string|true|none||none|
-|»»» group_ids|[integer]|true|none||none|
-|»»» operation_user|string|true|none||none|
-|»»» create_time|integer|true|none||none|
-|»»» update_time|integer|true|none||none|
-|»»» status|integer|true|none||none|
-|»»» task_num|integer|true|none||none|
-|»»» task_start_time|integer|true|none||none|
-|»»» task_end_time|integer|true|none||none|
+创建新的策略。
 
-## POST 更新
+**请求 URL**
 
-POST /open_api/rm/v1/instruction_policy/update
-
-> Body 请求参数
-
-```json
-{
-  "name": "testmf",
-  "condition_list": {
-    "sets": [
-      {
-        "sub_sets_logical": "AND",
-        "sub_sets": [
-          {
-            "sub_sets_logical": "AND",
-            "sub_sets": [
-              {
-                "sub_sets_logical": "",
-                "sub_sets": null,
-                "access_rules": [
-                  {
-                    "key": "score",
-                    "value": "1",
-                    "compare_method": "greater_or_equal"
-                  }
-                ]
-              }
-            ],
-            "access_rules": null
-          }
-        ],
-        "metas": {}
-      }
-    ],
-    "version": "1.0",
-    "metas": {}
-  },
-  "action": [
-    2,
-    1
-  ],
-  "scope": 2,
-  "client_id": "46148b9c343b41a2be0c54b630a4fd71",
-  "group_ids": [],
-  "rid": "1962463468078501888",
-  "policy_type": 2,
-  "tq_group": {
-    "groups": null,
-    "show_data": ""
-  },
-  "scope_content": "DESKTOP-I5L1OH7",
-  "operation_user": "171****5221",
-  "create_time": 1756722726,
-  "update_time": 1769482142,
-  "status": 1,
-  "task_num": 0,
-  "task_start_time": 1775059200,
-  "task_end_time": 1775121820,
-  "index": 1
-}
 ```
-
-### 请求参数
-
-|名称|位置|类型|必选|说明|
-|---|---|---|---|---|
-|body|body|object| 否 |none|
-|» name|body|string| 是 |none|
-|» condition_list|body|object| 是 |none|
-|»» sets|body|[object]| 是 |none|
-|»»» sub_sets_logical|body|string| 否 |none|
-|»»» sub_sets|body|[object]| 否 |none|
-|»»»» sub_sets_logical|body|string| 否 |none|
-|»»»» sub_sets|body|[object]| 否 |none|
-|»»»»» sub_sets_logical|body|string| 否 |none|
-|»»»»» sub_sets|body|null| 否 |none|
-|»»»»» access_rules|body|[object]| 否 |none|
-|»»»»»» key|body|string| 否 |none|
-|»»»»»» value|body|string| 否 |none|
-|»»»»»» compare_method|body|string| 否 |none|
-|»»»» access_rules|body|null| 否 |none|
-|»»» metas|body|object| 否 |none|
-|»» version|body|string| 是 |none|
-|»» metas|body|object| 是 |none|
-|» action|body|[integer]| 是 |none|
-|» scope|body|integer| 是 |none|
-|» client_id|body|string| 是 |none|
-|» group_ids|body|[string]| 是 |none|
-|» rid|body|string| 是 |none|
-|» policy_type|body|integer| 是 |none|
-|» tq_group|body|object| 是 |none|
-|»» groups|body|null| 是 |none|
-|»» show_data|body|string| 是 |none|
-|» scope_content|body|string| 是 |none|
-|» operation_user|body|string| 是 |none|
-|» create_time|body|integer| 是 |none|
-|» update_time|body|integer| 是 |none|
-|» status|body|integer| 是 |none|
-|» task_num|body|integer| 是 |none|
-|» task_start_time|body|integer| 是 |none|
-|» task_end_time|body|integer| 是 |none|
-|» index|body|integer| 是 |none|
-
-> 返回示例
-
-> 200 Response
-
-```json
-{}
-```
-
-### 返回结果
-
-|状态码|状态码含义|说明|数据模型|
-|---|---|---|---|
-|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|none|Inline|
-
-### 返回数据结构
-
-## POST 更新状态
-
-POST /open_api/rm/v1/instruction_policy/save_status
-
-> Body 请求参数
-
-```json
-{
-  "rid": "1962463468078501888",
-  "rids": [
-    "1998702940830830592",
-    "1996146956669292544",
-    "1960987025683255296",
-    "1960988795289473024",
-    "2019715677614510080",
-    "1284141750721056768",
-    "2032325973063503872"
-  ]
-}
-```
-
-### 请求参数
-
-|名称|位置|类型|必选|说明|
-|---|---|---|---|---|
-|body|body|object| 是 |none|
-|» rid|body|string| 是 |none|
-|» rids|body|[string]| 是 |none|
-
-> 返回示例
-
-> 200 Response
-
-```json
-{
-  "error": 0,
-  "message": "success",
-  "data": {
-    "name": "testmf"
-  }
-}
-```
-
-### 返回结果
-
-|状态码|状态码含义|说明|数据模型|
-|---|---|---|---|
-|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|none|Inline|
-
-### 返回数据结构
-
-状态码 **200**
-
-|名称|类型|必选|约束|中文名|说明|
-|---|---|---|---|---|---|
-|» error|integer|true|none||none|
-|» message|string|true|none||none|
-|» data|object|true|none||none|
-|»» name|string|true|none||none|
-
-## POST 删除
-
-POST /open_api/rm/v1/instruction_policy/delete
-
-> Body 请求参数
-
-```json
-{
-  "rid": ""
-}
-```
-
-### 请求参数
-
-|名称|位置|类型|必选|说明|
-|---|---|---|---|---|
-|body|body|object| 是 |none|
-|» rid|body|string| 是 |none|
-
-> 返回示例
-
-> 200 Response
-
-```json
-{
-  "error": 0,
-  "message": "success",
-  "data": {
-    "rid": "1998702940830830592",
-    "hit_continue": "0",
-    "is_deleted": 0,
-    "policy_type": 2,
-    "sub_type": "process",
-    "have_resp": true,
-    "name": "adfasdfasdf",
-    "name_en": "adfasdfasdf",
-    "condition_list": {
-      "sets": [
-        {
-          "sub_sets_logical": "AND",
-          "sub_sets": [
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "",
-                  "sub_sets": null,
-                  "access_rules": [
-                    "[Object]"
-                  ]
-                }
-              ],
-              "access_rules": null
-            }
-          ],
-          "metas": {}
-        }
-      ],
-      "version": "1.0",
-      "metas": {}
-    },
-    "operator_list": {
-      "sets": [
-        {
-          "sub_sets_logical": "AND",
-          "sub_sets": [
-            {
-              "sub_sets_logical": "",
-              "sub_sets": null,
-              "access_rules": [
-                {
-                  "key": "org_name",
-                  "value": "rmalpha",
-                  "compare_method": "equal"
-                },
-                {
-                  "key": "client_id",
-                  "value": "98574e36f33ebbadd153fcf3a4177c2a",
-                  "compare_method": "equal"
-                }
-              ]
-            },
-            {
-              "sub_sets_logical": "AND",
-              "sub_sets": [
-                {
-                  "sub_sets_logical": "AND",
-                  "sub_sets": [
-                    "[Object]"
-                  ],
-                  "access_rules": null
-                }
-              ],
-              "access_rules": null
-            }
-          ],
-          "metas": {}
-        }
-      ],
-      "version": "1.0",
-      "metas": {}
-    },
-    "action": [
-      2
-    ],
-    "func_list": [
-      "DoQuarantineOperation:intelligent_response"
-    ],
-    "client_id": "98574e36f33ebbadd153fcf3a4177c2a",
-    "group_ids": [],
-    "scope": 2,
-    "tq_group": {
-      "groups": null,
-      "show_data": ""
-    },
-    "scope_content": "kylin-pc",
-    "operation_user": "123456789011111",
-    "operation_uid": "57",
-    "create_time": 1765362889,
-    "update_time": 1765871279
-  }
-}
-```
-
-### 返回结果
-
-|状态码|状态码含义|说明|数据模型|
-|---|---|---|---|
-|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|none|Inline|
-
-### 返回数据结构
-
-状态码 **200**
-
-|名称|类型|必选|约束|中文名|说明|
-|---|---|---|---|---|---|
-|» error|integer|true|none||none|
-|» message|string|true|none||none|
-|» data|object|true|none||none|
-|»» rid|string|true|none||none|
-|»» hit_continue|string|true|none||none|
-|»» is_deleted|integer|true|none||none|
-|»» policy_type|integer|true|none||none|
-|»» sub_type|string|true|none||none|
-|»» have_resp|boolean|true|none||none|
-|»» name|string|true|none||none|
-|»» name_en|string|true|none||none|
-|»» condition_list|object|true|none||none|
-|»»» sets|[object]|true|none||none|
-|»»»» sub_sets_logical|string|false|none||none|
-|»»»» sub_sets|[object]|false|none||none|
-|»»»»» sub_sets_logical|string|false|none||none|
-|»»»»» sub_sets|[object]|false|none||none|
-|»»»»»» sub_sets_logical|string|false|none||none|
-|»»»»»» sub_sets|null|false|none||none|
-|»»»»»» access_rules|[object]|false|none||none|
-|»»»»»»» key|string|false|none||none|
-|»»»»»»» value|string|false|none||none|
-|»»»»»»» compare_method|string|false|none||none|
-|»»»»» access_rules|null|false|none||none|
-|»»»» metas|object|false|none||none|
-|»»» version|string|true|none||none|
-|»»» metas|object|true|none||none|
-|»» operator_list|object|true|none||none|
-|»»» sets|[object]|true|none||none|
-|»»»» sub_sets_logical|string|false|none||none|
-|»»»» sub_sets|[object]|false|none||none|
-|»»»»» sub_sets_logical|string|true|none||none|
-|»»»»» sub_sets|[object]|true|none||none|
-|»»»»»» sub_sets_logical|string|false|none||none|
-|»»»»»» sub_sets|[object]|false|none||none|
-|»»»»»»» sub_sets_logical|string|false|none||none|
-|»»»»»»» sub_sets|null|false|none||none|
-|»»»»»»» access_rules|[object]|false|none||none|
-|»»»»»»»» key|string|false|none||none|
-|»»»»»»»» value|string|false|none||none|
-|»»»»»»»» compare_method|string|false|none||none|
-|»»»»»» access_rules|null|false|none||none|
-|»»»»» access_rules|[object]¦null|true|none||none|
-|»»»»»» key|string|true|none||none|
-|»»»»»» value|string|true|none||none|
-|»»»»»» compare_method|string|true|none||none|
-|»»»» metas|object|false|none||none|
-|»»» version|string|true|none||none|
-|»»» metas|object|true|none||none|
-|»» action|[integer]|true|none||none|
-|»» func_list|[string]|true|none||none|
-|»» client_id|string|true|none||none|
-|»» group_ids|[string]|true|none||none|
-|»» scope|integer|true|none||none|
-|»» tq_group|object|true|none||none|
-|»»» groups|null|true|none||none|
-|»»» show_data|string|true|none||none|
-|»» scope_content|string|true|none||none|
-|»» operation_user|string|true|none||none|
-|»» operation_uid|string|true|none||none|
-|»» create_time|integer|true|none||none|
-|»» update_time|integer|true|none||none|
-
-## POST 操作顺序
-
-POST /open_api/rm/v1/instruction_policy/save_sort
-
-> Body 请求参数
-
-```json
-{
-  "rids": [
-    "1996146956669292544",
-    "1960987025683255296",
-    "1960988795289473024",
-    "2019715677614510080",
-    "2032325973063503872",
-    "1284141750721056768"
-  ]
-}
-```
-
-### 请求参数
-
-|名称|位置|类型|必选|说明|
-|---|---|---|---|---|
-|body|body|object| 是 |none|
-|» rids|body|[string]| 是 |none|
-
-> 返回示例
-
-> 200 Response
-
-```json
-{}
-```
-
-### 返回结果
-
-|状态码|状态码含义|说明|数据模型|
-|---|---|---|---|
-|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|none|Inline|
-
-### 返回数据结构
-
-## POST 新增策略
-
 POST /open_api/rm/v1/instruction_policy/add_policy
+```
 
-> Body 请求参数
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| name | Body | String | 是 | 策略名称 |
+| condition_list | Body | Object | 是 | 条件列表 |
+| condition_list.sets | Body | Array | 是 | 条件集合 |
+| condition_list.version | Body | String | 是 | 版本号 |
+| action | Body | Array | 否 | 执行动作：[1]-隔离网络，[2]-智能响应 |
+| scope | Body | Integer | 是 | 范围：1-全网，2-指定终端，3-指定分组 |
+| client_id | Body | String | 否 | 终端ID |
+| group_ids | Body | Array | 否 | 分组ID列表 |
+
+**请求示例**
 
 ```json
 {
-  "name": "侧是",
+  "name": "新策略",
   "condition_list": {
     "sets": [
       {
@@ -3033,13 +291,8 @@ POST /open_api/rm/v1/instruction_policy/add_policy
                 "access_rules": [
                   {
                     "key": "incident_name",
-                    "value": "本地机器学习检测到\"Ransom.Win32.Wannacrypt.C\"木马事件",
+                    "value": "木马事件",
                     "compare_method": "regex"
-                  },
-                  {
-                    "key": "score",
-                    "value": "10",
-                    "compare_method": "greater_or_equal"
                   }
                 ]
               }
@@ -3047,48 +300,1998 @@ POST /open_api/rm/v1/instruction_policy/add_policy
           }
         ]
       }
-    ]
+    ],
+    "version": "1.0"
   },
-  "action": [
-    2
-  ],
-  "scope": 1,
-  "client_id": "",
-  "group_ids": []
+  "action": [2],
+  "scope": 1
 }
 ```
 
-### 请求参数
-
-|名称|位置|类型|必选|说明|
-|---|---|---|---|---|
-|body|body|object| 是 |none|
-|» name|body|string| 否 |none|
-|» condition_list|body|object| 否 |none|
-|»» sets|body|[object]| 是 |none|
-|»»» sub_sets_logical|body|string| 否 |none|
-|»»» sub_sets|body|[object]| 否 |none|
-|»»»» sub_sets_logical|body|string| 否 |none|
-|»»»» sub_sets|body|[object]| 否 |none|
-|»»»»» access_rules|body|[object]| 否 |none|
-|»»»»»» key|body|string| 是 |none|
-|»»»»»» value|body|string| 是 |none|
-|»»»»»» compare_method|body|string| 是 |none|
-|» action|body|[integer]| 是 |none|
-|» scope|body|integer| 是 |none|
-|» client_id|body|string| 是 |none|
-|» group_ids|body|[string]| 是 |none|
-
-> 返回示例
-
-> 200 Response
+**响应示例**
 
 ```json
-{}
+{
+  "error": 0,
+  "message": "success",
+  "data": null
+}
 ```
 
-### 返回结果
+---
 
-|状态码|状态码含义|说明|数据模型|
-|---|---|---|---|
-|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|none|Inline|
+### 更新策略
+
+更新已有策略。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/instruction_policy/update
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| rid | Body | String | 是 | 策略ID |
+| name | Body | String | 是 | 策略名称 |
+| condition_list | Body | Object | 是 | 条件列表 |
+| action | Body | Array | 是 | 执行动作 |
+| scope | Body | Integer | 是 | 范围 |
+| client_id | Body | String | 是 | 终端ID |
+| group_ids | Body | Array | 是 | 分组ID列表 |
+| policy_type | Body | Integer | 是 | 策略类型 |
+| status | Body | Integer | 是 | 状态 |
+
+**请求示例**
+
+```json
+{
+  "name": "更新后的策略",
+  "condition_list": {
+    "sets": [...],
+    "version": "1.0"
+  },
+  "action": [2, 1],
+  "scope": 2,
+  "client_id": "46148b9c343b41a2be0c54b630a4fd71",
+  "group_ids": [],
+  "rid": "1962463468078501888",
+  "policy_type": 2,
+  "status": 1
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": null
+}
+```
+
+---
+
+### 更新策略状态
+
+更新策略的启用/禁用状态。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/instruction_policy/save_status
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| rid | Body | String | 是 | 策略ID |
+| rids | Body | Array | 是 | 策略ID列表（批量操作） |
+
+**请求示例**
+
+```json
+{
+  "rid": "1962463468078501888",
+  "rids": ["1998702940830830592", "1996146956669292544"]
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "name": "testmf"
+  }
+}
+```
+
+---
+
+### 删除策略
+
+删除指定策略。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/instruction_policy/delete
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| rid | Body | String | 是 | 策略ID |
+
+**请求示例**
+
+```json
+{
+  "rid": "1998702940830830592"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "rid": "1998702940830830592",
+    "hit_continue": "0",
+    "is_deleted": 0,
+    "policy_type": 2,
+    "name": "adfasdfasdf"
+  }
+}
+```
+
+---
+
+### 策略排序
+
+调整策略的执行顺序。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/instruction_policy/save_sort
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| rids | Body | Array | 是 | 策略ID列表，按排序顺序传入 |
+
+**请求示例**
+
+```json
+{
+  "rids": [
+    "1996146956669292544",
+    "1960987025683255296",
+    "1960988795289473024"
+  ]
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": null
+}
+```
+
+---
+
+## 2.3 IOA 配置
+
+### IOA 白名单列表
+
+查询 IOA 加白名单列表。
+
+**请求 URL**
+
+```
+POST /open_api_server/rm/v1/configure/ioa/list
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| exclusion_name | Body | String | 否 | 加白名称 |
+| t_name | Body | String | 否 | 战术名称 |
+| operate_user | Body | String | 否 | 操作人 |
+| file_name | Body | String | 否 | 文件名 |
+| ioa_name | Body | String | 否 | IOA名称 |
+| host_type | Body | String | 否 | 主机类型 |
+| command_line | Body | String | 否 | 命令行 |
+| ta_name | Body | String | 否 | 战术分类名称 |
+| update_time | Body | Array | 是 | 更新时间范围 |
+| group_ids | Body | Array | 否 | 分组ID |
+| page | Body | Integer | 否 | 页码 |
+| limit | Body | Integer | 否 | 每页数量 |
+
+**请求示例**
+
+```json
+{
+  "exclusion_name": "",
+  "ioa_name": "",
+  "update_time": ["2026-04-01 00:00:00", "2026-04-30 23:59:59"],
+  "group_ids": [],
+  "page": 1,
+  "limit": 10
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "results": [
+      {
+        "exclusion_id": "4d4d17bc4c17436b9dca94a7ee013950",
+        "ioa_id": "1691726446122242048",
+        "ta_name": "凭据访问",
+        "t_name": "系统凭据转储",
+        "ioa_name": "疑似mimikatz攻击",
+        "description": "攻击者可能会尝试转储凭据...",
+        "file_name": "C:\\Users\\John\\Desktop\\mimikatz_x64.exe",
+        "command_line": "mimikatz_x64.exe",
+        "host_type": "ALL",
+        "exclusion_name": "测试加白",
+        "create_time": 1775137280,
+        "update_time": 1775141347,
+        "operate_user": "177****6010"
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
+---
+
+### 创建 IOA 白名单
+
+创建新的 IOA 加白规则。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/configure/ioa/add
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| ioa_name | Body | String | 是 | IOA名称 |
+| exclusion_name | Body | String | 是 | 加白名称 |
+| description | Body | String | 是 | 描述 |
+| file_name | Body | String | 是 | 文件名（支持正则） |
+| command_line | Body | String | 是 | 命令行（支持正则） |
+| host_type | Body | String | 是 | 主机类型：ALL/WINDOWS/LINUX |
+| group_ids | Body | Array | 是 | 分组ID列表 |
+| ioa_id | Body | String | 是 | IOA规则ID |
+| ta_id | Body | String | 是 | 战术分类ID |
+| t_id | Body | String | 是 | 技术ID |
+
+**请求示例**
+
+```json
+{
+  "ioa_name": "疑似mimikatz攻击",
+  "exclusion_name": "测试加白",
+  "description": "攻击者可能会尝试转储凭据...",
+  "file_name": "C:\\\\Users\\\\John\\\\Desktop\\\\mimikatz_x64\\.exe",
+  "command_line": "mimikatz_x64\\.exe",
+  "host_type": "ALL",
+  "group_ids": [],
+  "ioa_id": "1691726446122242048",
+  "ta_id": "TA0006",
+  "t_id": "T1003"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "exclusion_id": "4d4d17bc4c17436b9dca94a7ee013950",
+    "ioa_id": "1691726446122242048",
+    "ta_name": "凭据访问",
+    "ioa_name": "疑似mimikatz攻击",
+    "create_time": 1775137280
+  }
+}
+```
+
+---
+
+### 更新 IOA 白名单
+
+更新已有的 IOA 加白规则。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/configure/ioa/update
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| ioa_name | Body | String | 是 | IOA名称 |
+| exclusion_name | Body | String | 是 | 加白名称 |
+| description | Body | String | 是 | 描述 |
+| file_name | Body | String | 是 | 文件名 |
+| command_line | Body | String | 是 | 命令行 |
+| host_type | Body | String | 是 | 主机类型 |
+| group_ids | Body | Array | 是 | 分组ID列表 |
+| ioa_id | Body | String | 是 | IOA规则ID |
+| id | Body | String | 是 | 白名单记录ID |
+
+**请求示例**
+
+```json
+{
+  "ioa_name": "疑似mimikatz攻击",
+  "exclusion_name": "更新后的名称",
+  "description": "更新后的描述",
+  "file_name": "C:\\\\Users\\\\John\\\\Desktop\\\\mimikatz_x64.exe",
+  "command_line": "mimikatz_x64.exe",
+  "host_type": "ALL",
+  "group_ids": [],
+  "ioa_id": "1691726446122242048",
+  "id": "4d4d17bc4c17436b9dca94a7ee013950"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success"
+}
+```
+
+---
+
+### 删除 IOA 白名单
+
+删除指定的 IOA 加白规则。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/configure/ioa/delete
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| id | Body | String | 是 | 白名单记录ID |
+
+**请求示例**
+
+```json
+{
+  "id": "4d4d17bc4c17436b9dca94a7ee013950"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": null
+}
+```
+
+---
+
+### IOA 加白活动审计
+
+查询 IOA 加白后的活动审计记录。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/configure/ioa/audit_log
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| event_time | Body | Object | 否 | 事件时间范围 |
+| event_time.time_range.start | Body | Integer | 是 | 开始时间戳 |
+| event_time.time_range.end | Body | Integer | 是 | 结束时间戳 |
+| host_name | Body | String | 否 | 主机名 |
+| ioa_name | Body | String | 否 | IOA名称 |
+| file_name | Body | String | 否 | 文件名 |
+| command_line | Body | String | 否 | 命令行 |
+| page | Body | Integer | 否 | 页码 |
+| limit | Body | Integer | 否 | 每页数量 |
+
+**请求示例**
+
+```json
+{
+  "event_time": {
+    "time_range": {
+      "start": 1712553600,
+      "end": 1712640000
+    }
+  },
+  "host_name": "",
+  "ioa_name": "",
+  "page": 1,
+  "limit": 10
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {}
+}
+```
+
+---
+
+## 2.4 查杀设置
+
+### 获取查杀设置
+
+获取病毒查杀全局策略设置。
+
+**请求 URL**
+
+```
+GET /open_api/rm/v1/strategy/virus_scan_settings/single
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "name": "virus_scan_settings 全局策略",
+    "type": "virus_scan_settings",
+    "content": "virus_scan_settings 全局策略",
+    "status": 1,
+    "is_default": "normal",
+    "strategy_id": "69ce8354aff0f2be4eb260e5",
+    "version_id": "69ce8354aff0f2be4eb260e6",
+    "range_type": 1,
+    "group_ids": [],
+    "config_content": "{\"scan_file_scope\":\"recommended\",\"startup_scan_mode\":\"all_unknown\"}",
+    "create_time": 1775141716,
+    "last_update_time": 0,
+    "operator_id": "92",
+    "operator_name": "177****6010"
+  }
+}
+```
+
+**config_content 字段说明**
+
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| scan_file_scope | String | 扫描文件范围：recommended-推荐，all-全部 |
+| startup_scan_mode | String | 开机扫描模式：all_unknown-全部未知，known_dangerous-已知危险 |
+| archive_size_limit_enabled | Boolean | 是否启用压缩包大小限制 |
+| archive_size_limit | Integer | 压缩包大小限制（MB） |
+| realtime_scan_archive_enabled | Boolean | 是否启用实时扫描压缩包 |
+
+---
+
+### 更新查杀设置
+
+更新病毒查杀策略设置。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/strategy/update
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| name | Body | String | 是 | 策略名称 |
+| type | Body | String | 是 | 策略类型 |
+| content | Body | String | 是 | 策略内容描述 |
+| status | Body | Integer | 是 | 状态：1-启用，2-禁用 |
+| is_default | Body | String | 是 | 是否默认：normal-普通 |
+| strategy_id | Body | String | 是 | 策略ID |
+| version_id | Body | String | 是 | 版本ID |
+| range_type | Body | Integer | 是 | 范围类型：1-全网 |
+| group_ids | Body | Array | 是 | 分组ID列表 |
+| config_content | Body | String | 是 | 配置内容（JSON字符串） |
+| exclude_objects | Body | Object | 是 | 排除对象 |
+
+**请求示例**
+
+```json
+{
+  "name": "virus_scan_settings 全局策略",
+  "type": "virus_scan_settings",
+  "content": "virus_scan_settings 全局策略",
+  "status": 1,
+  "is_default": "normal",
+  "strategy_id": "69ce8354aff0f2be4eb260e5",
+  "version_id": "69ce8354aff0f2be4eb260e6",
+  "range_type": 1,
+  "group_ids": [],
+  "config_content": "{\"scan_file_scope\":\"recommended\",\"startup_scan_mode\":\"known_dangerous\"}",
+  "exclude_objects": {
+    "users": [],
+    "user_groups": [],
+    "host_groups": [],
+    "client_ids": [],
+    "departs": []
+  }
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "name": "virus_scan_settings 全局策略",
+    "version_id": "69ce8654aff0f2be4eb260ea",
+    "status": 1
+  }
+}
+```
+
+---
+
+## 2.5 终端管理
+
+### 终端列表查询
+
+查询终端列表。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/hosts/globalization/list
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| page | Body | Integer | 是 | 页码 |
+| limit | Body | Integer | 是 | 每页数量 |
+| hostname | Body | String | 否 | 主机名 |
+| client_ids | Body | Array | 否 | 终端ID列表 |
+| client_version | Body | String | 否 | 客户端版本 |
+| status | Body | String | 否 | 在线状态：online-在线，offline-离线 |
+| importance | Body | Integer | 否 | 重要程度：1-高，2-中，3-低 |
+| win_version | Body | String | 否 | Windows版本 |
+| system_type | Body | Integer | 否 | 系统类型：1-Windows，2-Linux |
+| client_ip | Body | String | 否 | 终端IP |
+| mac_address | Body | String | 否 | MAC地址 |
+| username | Body | String | 否 | 用户名 |
+| last_logon_time | Body | Object | 否 | 最近登录时间范围 |
+| last_seen_time | Body | Object | 否 | 最后活跃时间范围 |
+
+**请求示例**
+
+```json
+{
+  "page": 1,
+  "limit": 10,
+  "hostname": "",
+  "status": "online",
+  "importance": 1
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {}
+}
+```
+
+---
+
+### 终端加入黑名单
+
+将指定终端加入黑名单。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/hosts/add_blacklist
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| client_ids | Body | Array | 是 | 终端ID列表 |
+| reason | Body | String | 是 | 加入黑名单原因 |
+
+**请求示例**
+
+```json
+{
+  "client_ids": ["0772a7a958c349e6a5266363c2d4d3c6"],
+  "reason": "异常行为"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": null
+}
+```
+
+---
+
+### 移除主机
+
+从管理中移除指定主机。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/hosts/remove_host
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| client_ids | Body | Array | 是 | 终端ID列表 |
+
+**请求示例**
+
+```json
+{
+  "client_ids": ["4fcd2d2073104b66adfc2e8e5869a5d4"]
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": null
+}
+```
+
+---
+
+### 离线终端管理查询
+
+查询离线终端管理设置。
+
+**请求 URL**
+
+```
+GET /open_api/rm/v1/client_setting/host_offline
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "id": "69ce716c20f4277efc0ee2bc",
+    "org_name": "AA0000040900000302",
+    "status": 1,
+    "type": "host_offline",
+    "setting": {
+      "offline_days": 180
+    },
+    "create_time": 1775137132,
+    "update_time": 1775137132
+  }
+}
+```
+
+**响应参数说明**
+
+| 参数名 | 类型 | 说明 |
+|--------|------|------|
+| data.status | Integer | 状态：1-开启，2-关闭 |
+| data.setting.offline_days | Integer | 离线天数阈值 |
+
+---
+
+### 离线终端管理更新
+
+更新离线终端管理设置。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/client_setting/host_offline
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| status | Body | Integer | 是 | 状态：1-开启，2-关闭 |
+| setting.offline_days | Body | Integer | 是 | 离线天数阈值 |
+
+**请求示例**
+
+```json
+{
+  "status": 1,
+  "setting": {
+    "offline_days": 15
+  }
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "id": "69ce716c20f4277efc0ee2bc",
+    "status": 1,
+    "setting": {
+      "offline_days": 15
+    }
+  }
+}
+```
+
+---
+
+## 2.6 查杀计划
+
+### 2.6 查杀计划列表
+
+查询查杀计划列表。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/plan/list
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| type | Body | String | 是 | 计划类型：`kill_plan`-查杀计划 |
+| page | Body | Integer | 是 | 页码 |
+| limit | Body | Integer | 是 | 每页数量 |
+
+**请求示例**
+
+```json
+{
+  "type": "kill_plan",
+  "page": 1,
+  "limit": 10
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "total": 17,
+    "items": [
+      {
+        "rid": "2036374019992719360",
+        "org_name": "AA0000040900000302",
+        "plan_name": "0324",
+        "plan_type": 1,
+        "execute_cycle": 1,
+        "scope": 1,
+        "scope_content": "",
+        "contents": "{\"scan_path\":[\"C:\\\\Users\\\\John\\\\Desktop\"],\"scan_type\":3}",
+        "scan_type": 3,
+        "create_time": 1774344375,
+        "update_time": 1774540800,
+        "operation_user": "admin",
+        "status": 4,
+        "type": "kill_plan"
+      }
+    ]
+  }
+}
+```
+
+**响应参数说明**
+
+| 参数名 | 类型 | 说明 |
+|--------|------|------|
+| data.total | Integer | 总数 |
+| data.items[].rid | String | 计划ID |
+| data.items[].plan_name | String | 计划名称 |
+| data.items[].plan_type | Integer | 计划类型 |
+| data.items[].execute_cycle | Integer | 执行周期 |
+| data.items[].status | Integer | 状态：1-待执行，2-执行中，4-已完成 |
+| data.items[].scan_type | Integer | 扫描类型：1-快速扫描，2-全盘扫描，3-自定义扫描 |
+
+---
+
+### 新建查杀计划
+
+创建新的查杀计划。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/plan/add
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| plan_name | Body | String | 是 | 计划名称 |
+| plan_type | Body | Integer | 是 | 计划类型：1-立即执行，2-定时执行，3-周期执行 |
+| scope | Body | Integer | 是 | 范围：1-全网，2-指定终端，3-指定分组 |
+| scan_type | Body | Integer | 是 | 扫描类型：1-快速扫描，2-全盘扫描，3-自定义扫描 |
+| execute_cycle | Body | Integer | 是 | 执行周期 |
+| expired_setting | Body | Integer | 是 | 过期设置：0-不过期，1-过期 |
+| expired_time | Body | Integer | 否 | 过期时间（时间戳） |
+| type | Body | String | 是 | 类型：`kill_plan` |
+| contents | Body | Object | 是 | 计划内容 |
+| contents.scan_type | Body | Integer | 是 | 扫描类型 |
+| contents.scan_path | Body | Array | 否 | 扫描路径 |
+| contents.isolation_setting | Body | Array | 否 | 隔离设置 |
+
+**请求示例**
+
+```json
+{
+  "plan_name": "周常查杀",
+  "plan_type": 1,
+  "scope": 3,
+  "scan_type": 1,
+  "execute_cycle": 1,
+  "expired_setting": 1,
+  "expired_time": 1775318400,
+  "type": "kill_plan",
+  "contents": {
+    "scan_type": 1,
+    "scan_path": ["C:\\Users"],
+    "isolation_setting": ["auto_isolation"]
+  }
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": null
+}
+```
+
+---
+
+### 编辑查杀计划
+
+编辑已有的查杀计划。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/plan/edit
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| plan_name | Body | String | 是 | 计划名称 |
+| plan_type | Body | Integer | 是 | 计划类型 |
+| scope | Body | Integer | 是 | 范围 |
+| scan_type | Body | Integer | 是 | 扫描类型 |
+| execute_cycle | Body | Integer | 是 | 执行周期 |
+| repeat_cycle | Body | Array | 是 | 重复周期 |
+| execution_time | Body | String | 是 | 执行时间 |
+| expired_setting | Body | Integer | 是 | 过期设置 |
+| device_client_ids | Body | Array | 是 | 终端ID列表 |
+| group_ids | Body | Array | 是 | 分组ID列表 |
+| type | Body | String | 是 | 类型 |
+| contents | Body | Object | 是 | 计划内容 |
+| rid | Body | String | 是 | 计划ID |
+
+**请求示例**
+
+```json
+{
+  "plan_name": "更新后的计划",
+  "plan_type": 3,
+  "scope": 3,
+  "scan_type": 1,
+  "execute_cycle": 1,
+  "repeat_cycle": [],
+  "execution_time": "07:04",
+  "expired_setting": 0,
+  "device_client_ids": [],
+  "group_ids": [],
+  "type": "kill_plan",
+  "contents": {
+    "scan_type": 1,
+    "scan_path": [],
+    "isolation_setting": ["auto_isolation"]
+  },
+  "rid": "2039728820453380096"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": null
+}
+```
+
+---
+
+### 取消查杀计划
+
+取消指定的查杀计划。
+
+**请求 URL**
+
+```
+PUT /open_api/rm/v1/plan/cancel/{id}
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**路径参数**
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| id | String | 是 | 计划ID |
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": null
+}
+```
+
+---
+
+### 查看查杀任务
+
+查看查杀任务的执行记录。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/virus_scan/scan_record
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| page | Body | Integer | 是 | 页码 |
+| limit | Body | Integer | 是 | 每页数量 |
+| rid | Body | String | 否 | 计划ID |
+| host_name | Body | String | 否 | 主机名 |
+| scan_type | Body | String | 否 | 扫描类型 |
+| status | Body | String | 否 | 任务状态 |
+| task_id | Body | String | 否 | 任务ID |
+| start_time | Body | Object | 否 | 开始时间范围 |
+| end_time | Body | Object | 否 | 结束时间范围 |
+
+**请求示例**
+
+```json
+{
+  "page": 1,
+  "limit": 10,
+  "rid": "2039728820453380096"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {}
+}
+```
+
+---
+
+## 2.7 病毒统计
+
+### 按主机统计
+
+按主机维度查询病毒统计信息。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/virus/host/list
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| page | Body | Integer | 是 | 页码 |
+| limit | Body | Integer | 是 | 每页数量 |
+| status | Body | Integer | 否 | 状态 |
+| importance | Body | Integer | 否 | 重要程度 |
+| last_checked_time | Body | Object | 否 | 最后查杀时间范围 |
+| client_ip | Body | String | 否 | 终端IP |
+| host_name | Body | String | 否 | 主机名 |
+| client_id | Body | String | 否 | 终端ID |
+| mac_address | Body | String | 否 | MAC地址 |
+
+**请求示例**
+
+```json
+{
+  "page": 1,
+  "limit": 10,
+  "status": 0,
+  "importance": 1,
+  "host_name": "WIN10"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "total": 3,
+    "results": [
+      {
+        "host_name": "WINDOWS11",
+        "client_id": "f4fa9b70c5f24aac9260cd2ed9bbf195",
+        "status": 2,
+        "username": "John",
+        "importance": 2,
+        "client_ip": "192.168.111.75",
+        "mac_address": "00:0C:29:32:A8:BF",
+        "virus_file_count": 7,
+        "virus_memory_count": 0,
+        "last_checked_time": 1774349304,
+        "host_status": "uninstall"
+      }
+    ]
+  }
+}
+```
+
+**响应参数说明**
+
+| 参数名 | 类型 | 说明 |
+|--------|------|------|
+| data.total | Integer | 总数 |
+| data.results[].host_name | String | 主机名 |
+| data.results[].client_id | String | 终端ID |
+| data.results[].status | Integer | 状态 |
+| data.results[].virus_file_count | Integer | 文件病毒数 |
+| data.results[].virus_memory_count | Integer | 内存病毒数 |
+| data.results[].last_checked_time | Integer | 最后查杀时间 |
+
+---
+
+### 按 Hash 统计
+
+按文件 Hash 查询病毒统计。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/virus/hash/list
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| page | Body | Integer | 是 | 页码 |
+| limit | Body | Integer | 是 | 每页数量 |
+| sha1 | Body | String | 否 | SHA1 值 |
+| md5 | Body | String | 否 | MD5 值 |
+| name | Body | String | 否 | 病毒名称 |
+| end_time | Body | Object | 否 | 结束时间范围 |
+
+**请求示例**
+
+```json
+{
+  "page": 1,
+  "limit": 10,
+  "sha1": "",
+  "md5": "",
+  "name": "WannaCry"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {}
+}
+```
+
+---
+
+### Hash 关联主机列表
+
+查看指定 Hash 关联的主机列表。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/virus/hash/host_list
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| page | Body | Integer | 是 | 页码 |
+| limit | Body | Integer | 是 | 每页数量 |
+| sha1 | Body | String | 是 | SHA1 值 |
+| md5 | Body | String | 否 | MD5 值 |
+
+**请求示例**
+
+```json
+{
+  "page": 1,
+  "limit": 10,
+  "sha1": "970A81F93F588D24FE2603EC8F760D5F0E52261A"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {}
+}
+```
+
+---
+
+## 2.8 任务下发
+
+### 下发任务（单终端）
+
+向单个终端下发指令任务。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/instructions/send_instruction
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| instruction_name | Body | String | 是 | 指令名称：`get_suspicious_file`-获取可疑文件 |
+| batch_params | Body | Array | 是 | 批处理参数 |
+| batch_params[].id | Body | String | 否 | 文件ID |
+| batch_params[].path | Body | String | 否 | 文件路径 |
+| batch_params[].sha1 | Body | String | 否 | 文件SHA1 |
+| batch_params[].pid | Body | Integer | 否 | 进程ID |
+| is_batch | Body | Integer | 是 | 是否批量：1-是 |
+| client_id | Body | String | 是 | 终端ID |
+| verify_code | Body | String | 否 | 验证码 |
+
+**请求示例**
+
+```json
+{
+  "instruction_name": "get_suspicious_file",
+  "batch_params": [
+    {
+      "id": "26b25ad1-a6a4-4f8d-aece-399cd43fe23a",
+      "path": "C:\\\\cmd.exe",
+      "sha1": ""
+    }
+  ],
+  "is_batch": 1,
+  "client_id": "4909e4b109454198994a90cf030603b9",
+  "verify_code": "454634"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": null
+}
+```
+
+---
+
+### 批量下发任务
+
+向多个终端批量下发指令任务。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/instructions/batch_send_instruction
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| client_ids | Body | Array | 是 | 终端ID列表 |
+| instruction_name | Body | String | 否 | 指令名称 |
+| batch_params | Body | Array | 否 | 批处理参数 |
+| is_batch | Body | Integer | 是 | 是否批量：1 |
+
+**请求示例**
+
+```json
+{
+  "client_ids": ["4909e4b109454198994a90cf030603b9"],
+  "instruction_name": "batch_quarantine_file",
+  "batch_params": [
+    {
+      "id": "1e91a9e1-5ee3-4c0a-9635-bfea59dacb33",
+      "path": "C:\\\\d.exe",
+      "sha1": ""
+    }
+  ],
+  "is_batch": 1
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "failed": null,
+    "success": ["4909e4b109454198994a90cf030603b9"]
+  }
+}
+```
+
+---
+
+## 2.9 事件管理
+
+### 事件列表
+
+查询安全事件列表。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/incidents/list
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| page | Body | Integer | 是 | 页码 |
+| limit | Body | Integer | 是 | 每页数量 |
+| client_id | Body | String | 否 | 终端ID |
+| hostname | Body | String | 否 | 主机名 |
+| order | Body | String | 是 | 排序方式 |
+| incident_name | Body | String | 否 | 事件名称 |
+| score | Body | String | 否 | 威胁分数 |
+| status | Body | String | 否 | 处置状态 |
+| start_time | Body | Object | 否 | 开始时间范围 |
+
+**order 参数值说明**
+
+| 值 | 说明 |
+|-----|------|
+| start_time_desc | 开始时间倒序 |
+| end_time_desc | 结束时间倒序 |
+| score_asc | 分数升序 |
+| score_desc | 分数降序 |
+
+**请求示例**
+
+```json
+{
+  "page": 1,
+  "limit": 10,
+  "client_id": "",
+  "hostname": "",
+  "order": "score_desc",
+  "status": "2",
+  "start_time": {
+    "time_range": {
+      "start": 1712553600,
+      "end": 1712640000
+    }
+  }
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "incident_list": [
+      {
+        "id": "698c69d561e091238897087d",
+        "incident_id": "ff55ff8aa2ae484eba0e6560d4e3d88e-20260211191013",
+        "incident_name": "qax-PC-20260211191013",
+        "score": 0,
+        "client_id": "ff55ff8aa2ae484eba0e6560d4e3d88e",
+        "start_time": 1770808213,
+        "end_time": 1770897210,
+        "status": 1,
+        "host_name": "qax-PC",
+        "host_status": "uninstall",
+        "ioa_data": [
+          {
+            "threat_level": 2,
+            "count": 605
+          }
+        ],
+        "operating_system": "UOS 20.1070.11018",
+        "external_ip": "192.168.111.1",
+        "platform": 4
+      }
+    ]
+  }
+}
+```
+
+**响应参数说明**
+
+| 参数名 | 类型 | 说明 |
+|--------|------|------|
+| data.incident_list[].incident_id | String | 事件ID |
+| data.incident_list[].incident_name | String | 事件名称 |
+| data.incident_list[].score | Integer | 威胁分数 |
+| data.incident_list[].status | Integer | 状态：1-未处置，2-处置中，3-已处置，4-误报 |
+| data.incident_list[].host_name | String | 主机名 |
+| data.incident_list[].ioa_data[].threat_level | Integer | 威胁级别 |
+
+---
+
+### 事件详情
+
+查询事件的详细信息。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/incident/view
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| incident_id | Body | String | 是 | 事件ID |
+| client_id | Body | String | 是 | 终端ID |
+
+**请求示例**
+
+```json
+{
+  "incident_id": "ff55ff8aa2ae484eba0e6560d4e3d88e-20260211191013",
+  "client_id": "ff55ff8aa2ae484eba0e6560d4e3d88e"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "client_id": "ff55ff8aa2ae484eba0e6560d4e3d88e",
+    "host_info": {
+      "client_id": "ff55ff8aa2ae484eba0e6560d4e3d88e",
+      "client_ip": "192.168.111.1",
+      "hostname": "qax-PC",
+      "mac_address": "00:0C:29:85:1C:D2",
+      "org_name": "AA0000030400000278",
+      "os_version": "UOS 20.1070.11018",
+      "username": "root"
+    },
+    "incident_name": "qax-PC-20260211191013",
+    "ioa_timeline": [
+      {
+        "event_time_int": 1770808199,
+        "ioa_id": "2001576052505186304",
+        "name": "进程创建",
+        "process_name": "bash",
+        "threat_level": "2"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 事件状态批量更新
+
+批量更新事件处置状态。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/incident/batch_deal
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| ids | Body | Array | 是 | 事件ID列表 |
+| scene | Body | String | 是 | 场景：`alone`-单独处理 |
+| status | Body | Integer | 是 | 状态：1-未处置，2-处置中，3-已处置，4-误报反馈 |
+| comment | Body | String | 否 | 备注 |
+| allow | Body | Boolean | 是 | 是否同步更新所有风险检出状态 |
+
+**请求示例**
+
+```json
+{
+  "ids": ["ff55ff8aa2ae484eba0e6560d4e3d88e-20260211191013"],
+  "scene": "alone",
+  "status": 3,
+  "comment": "已确认为正常操作",
+  "allow": false
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": null
+}
+```
+
+---
+
+### 关联风险检出列表
+
+查询事件关联的风险检出列表。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/detection/get_list
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 否 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| page | Body | Integer | 是 | 页码 |
+| limit | Body | Integer | 是 | 每页数量 |
+| incident_id | Body | String | 是 | 事件ID |
+
+**请求示例**
+
+```json
+{
+  "page": 1,
+  "limit": 10,
+  "incident_id": "f46466b589e34ebfb4de81d321cc324e-20260205172620"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "total": 25,
+    "results": [
+      {
+        "detection_id": "f46466b589e34ebfb4de81d321cc324e-96ead0ce-20260205172620",
+        "client_id": "f46466b589e34ebfb4de81d321cc324e",
+        "view_type": "process",
+        "threat_level": "2",
+        "hostname": "dev1-PC",
+        "deal_status": 1,
+        "start_time": 1770287727,
+        "main_ioa": {
+          "ioa_id": "2001576052505186304",
+          "p_name": "cron",
+          "p_command_line": "/usr/sbin/cron -f",
+          "threat_level": 2
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 进程树
+
+获取检测事件的进程树信息。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/detection/view
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 是 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| detection_id | Body | String | 是 | 风险检出ID |
+| client_id | Body | String | 是 | 终端ID |
+| view_type | Body | String | 是 | 视图类型：`process`-进程 |
+| process_uuid | Body | String | 是 | 进程UUID |
+
+**请求示例**
+
+```json
+{
+  "detection_id": "8be90dbce4394ed38d19c62008db8ab4-{c51e1a53-324f-11f1-9a48-cc6b1e18ec4e}-20260407153444",
+  "client_id": "8be90dbce4394ed38d19c62008db8ab4",
+  "view_type": "process",
+  "process_uuid": "{c51e1aa5-324f-11f1-9a48-cc6b1e18ec4e}"
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {
+    "client_id": "8be90dbce4394ed38d19c62008db8ab4",
+    "host_info": {
+      "client_ip": "192.168.111.172",
+      "hostname": "WIN10-CY02",
+      "mac_address": "00:0C:29:AD:1C:5E",
+      "org_name": "AA0000030400000278"
+    },
+    "processes": [
+      {
+        "process_uuid": "{c51e0e73-324f-11f1-9a48-806e6f6e6963}",
+        "process_id": "732",
+        "process_name": "winlogon.exe",
+        "process_path": "C:\\Windows\\System32\\winlogon.exe",
+        "process_md5": "EE86712DDF0C59E6921D548B5548FF9C",
+        "command_line": "winlogon.exe",
+        "process_create_time": 1775545369,
+        "parent_uuid": "{c51e0e6c-324f-11f1-9a48-806e6f6e6963}"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 2.10 人工响应
+
+### 人工响应任务列表
+
+查询人工响应任务列表。
+
+**请求 URL**
+
+```
+POST /open_api/rm/v1/instructions/tasks
+```
+
+**请求头**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| Authorization | Header | String | 否 | 访问令牌 |
+
+**请求参数**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|--------|------|------|------|------|
+| page | Body | Integer | 是 | 页码 |
+| limit | Body | Integer | 是 | 每页数量 |
+| instruction_type | Body | Integer | 是 | 指令类型 |
+| id | Body | String | 否 | 任务ID |
+| host_name | Body | String | 否 | 主机名 |
+| client_id | Body | String | 否 | 终端ID |
+| instruction_name | Body | String | 否 | 指令名称 |
+| create_time | Body | Object | 否 | 创建时间范围 |
+| status | Body | String | 否 | 任务状态 |
+| user | Body | String | 否 | 操作人 |
+| content | Body | String | 否 | 任务内容 |
+| update_time | Body | Object | 否 | 更新时间范围 |
+
+**请求示例**
+
+```json
+{
+  "page": 1,
+  "limit": 10,
+  "instruction_type": 0,
+  "status": "0",
+  "create_time": {
+    "time_range": {
+      "start": 1712553600,
+      "end": 1712640000
+    }
+  }
+}
+```
+
+**响应示例**
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {}
+}
+```
+
+---
+
+## 3. 通用响应说明
+
+### 响应结构
+
+所有接口均返回以下统一格式：
+
+```json
+{
+  "error": 0,
+  "message": "success",
+  "data": {}
+}
+```
+
+### 错误码说明
+
+| 错误码 | 说明 |
+|--------|------|
+| 0 | 成功 |
+| 1001 | 参数错误 |
+| 1002 | 认证失败 |
+| 1003 | 权限不足 |
+| 1004 | 资源不存在 |
+| 1005 | 操作失败 |
+| 5000 | 服务器内部错误 |
+
+### 分页参数
+
+列表类接口通常包含分页参数：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| page | Integer | 是 | 页码，从1开始 |
+| limit | Integer | 是 | 每页数量，最大100 |
+
+返回结果中的分页信息：
+
+```json
+{
+  "data": {
+    "total": 100,
+    "results": [...]
+  }
+}
+```
+
+### 时间格式
+
+- 时间戳：Unix 时间戳（秒），如 `1712553600`
+- 时间范围：包含 `start` 和 `end` 两个时间戳
+
+### 认证方式
+
+除获取Token接口外，其他所有接口都需要在请求头中携带访问令牌：
+
+```
+Authorization: {token}
+```
+
+---
+
+### 常见问题
+
+**1. 认证失败 (error: 1002)**
+- 检查 token 是否过期
+- 检查 token 格式是否正确
+- 确认 app_key 和 app_secret 是否有效
+
+**2. 参数错误 (error: 1001)**
+- 检查必填参数是否完整
+- 检查参数类型是否正确
+- 检查时间戳格式是否正确
+
+**3. 权限不足 (error: 1003)**
+- 确认账户是否有权限访问该接口
+- 确认操作对象是否在授权范围内
+
+---
