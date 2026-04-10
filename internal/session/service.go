@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,11 +50,53 @@ type Service struct {
 	logger    *logx.Logger
 	runMu     sync.Mutex
 	runs      map[string]runState
+	dedupCache *toolDedupCache
 }
 
 type runState struct {
 	id     string
 	cancel context.CancelFunc
+}
+
+type dedupEntry struct {
+	result string
+	err    error
+	doneAt time.Time
+	ttl    time.Duration
+}
+
+func (e *dedupEntry) isFresh() bool {
+	return e.ttl > 0 && time.Since(e.doneAt) < e.ttl
+}
+
+type toolDedupCache struct {
+	mu    sync.Mutex
+	items map[string]*dedupEntry
+	ttl   time.Duration
+}
+
+func newToolDedupCache(ttl time.Duration) *toolDedupCache {
+	return &toolDedupCache{items: make(map[string]*dedupEntry), ttl: ttl}
+}
+
+func (c *toolDedupCache) GetOrSubmit(key string) (string, error, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if entry, ok := c.items[key]; ok && entry.isFresh() {
+		return entry.result, entry.err, true
+	}
+	c.items[key] = &dedupEntry{ttl: c.ttl}
+	return "", nil, false
+}
+
+func (c *toolDedupCache) Done(key string, result string, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if entry, ok := c.items[key]; ok {
+		entry.result = result
+		entry.err = err
+		entry.doneAt = time.Now()
+	}
 }
 
 func NewService(cfg config.Config, store store.Store, modelClient model.Client, compactor *compression.Service, progressService *progress.Service, detailAgentService *detailagent.Service, routerService *router.Service, plannerService *planner.Service, memoryService *memory.Service, artifactService *artifact.Service, i18nService *i18n.Service, knowledgeService *knowledge.Service, promptService *prompt.Service, edrClient edr.Client, logger *logx.Logger) *Service {
@@ -73,6 +117,7 @@ func NewService(cfg config.Config, store store.Store, modelClient model.Client, 
 		edr:       edrClient,
 		logger:    logger,
 		runs:      make(map[string]runState),
+		dedupCache: newToolDedupCache(30 * time.Second),
 	}
 }
 
@@ -832,6 +877,73 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 	return strings.Join(parts, "||")
 }
 
+func toolCallCacheKey(call planner.ToolCall) string {
+	data := strings.Join([]string{
+		call.Name,
+		call.ClientID,
+		call.Hostname,
+		call.ClientIP,
+		call.OSType,
+		call.Operation,
+		call.StartTime,
+		call.EndTime,
+		call.FilterField,
+		call.FilterOp,
+		call.FilterValue,
+		fmt.Sprintf("p=%d", call.Page),
+		fmt.Sprintf("ps=%d", call.PageSize),
+		call.IncidentID,
+		call.DetectionID,
+		call.ViewType,
+		call.ProcessUUID,
+		call.ArtifactID,
+		call.Query,
+		fmt.Sprintf("sl=%d", call.StartLine),
+		fmt.Sprintf("lc=%d", call.LineCount),
+		call.MemoryKey,
+		call.MemoryValue,
+		call.TaskID,
+		call.TaskTitle,
+		call.TaskPrompt,
+		call.TaskAction,
+		call.TaskStatus,
+		call.TaskFeedback,
+		fmt.Sprintf("ti=%d", call.TaskIntervalMinutes),
+		call.InstructionName,
+		call.Path,
+		call.KBTitle,
+		call.KBQuery,
+		call.KBContent,
+		call.KBMode,
+		call.KBOldText,
+		call.KBNewText,
+		call.Reason,
+		call.IOCAction,
+		call.IOCID,
+		call.IOCHash,
+		call.IOCDescription,
+		call.IOCExpirationDate,
+		call.IOCFileName,
+		call.IOCHostType,
+		call.IsolateFileGUIDs,
+		call.PlanName,
+		fmt.Sprintf("st=%d", call.ScanType),
+		fmt.Sprintf("pt=%d", call.PlanType),
+		fmt.Sprintf("scope=%d", call.Scope),
+		call.RID,
+		fmt.Sprintf("time=%d", call.Time),
+		fmt.Sprintf("pid=%d", call.Pid),
+		call.Ids,
+		fmt.Sprintf("allow=%t", call.Allow),
+		fmt.Sprintf("status=%d", call.Status),
+		call.Scene,
+		call.Comment,
+		call.Type,
+	}, "|")
+	hash := md5.Sum([]byte(data))
+	return hex.EncodeToString(hash[:])
+}
+
 func callNeedsGroundedEDRAnswer(name string) bool {
 	switch name {
 	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_plan_list", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts", "edr_virus_scan_record", "edr_instruction_policy_list":
@@ -979,6 +1091,20 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 }
 
 func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, error) {
+	if !call.Critical && !isCriticalTool(call.Name) {
+		key := toolCallCacheKey(call)
+		if result, err, hit := s.dedupCache.GetOrSubmit(key); hit {
+			s.logger.Info("tool call dedup hit", "session_key", sessionKey, "tool", call.Name, "key", key)
+			return result, err
+		}
+		result, err := s.executeToolImpl(ctx, sessionKey, call, locale, reporter)
+		s.dedupCache.Done(key, result, err)
+		return result, err
+	}
+	return s.executeToolImpl(ctx, sessionKey, call, locale, reporter)
+}
+
+func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, error) {
 	switch call.Name {
 	case "memory_upsert":
 		if err := s.memory.Upsert(ctx, sessionKey, call.MemoryKey, call.MemoryValue); err != nil {
