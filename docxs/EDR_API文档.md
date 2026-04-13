@@ -1807,7 +1807,7 @@ POST /open_api/rm/v1/instructions/batch_send_instruction
 **请求 URL**
 
 ```
-POST /open_api/rm/v1/incidents/list
+POST /open_api/rm/v1/incident/r2/list
 ```
 
 **请求头**

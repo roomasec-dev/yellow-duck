@@ -583,8 +583,8 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			t.Skip("no detection to update status")
 		}
 		// 获取第一个检测的 id
-		detectionID, ok := result.Results[0]["id"].(string)
-		if !ok || detectionID == "" {
+		detectionID := result.Results[0].DetectionID
+		if detectionID == "" {
 			t.Skip("no detection id found")
 		}
 		t.Logf("updating detection status: id=%s", detectionID)

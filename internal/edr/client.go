@@ -1452,7 +1452,7 @@ func (c *OpenAPIClient) ListIncidents(ctx context.Context, req ListIncidentsRequ
 	}
 	fmt.Printf("=== payload = %v", payload)
 	var envelope apiEnvelope[ListIncidentsResponse]
-	if err := c.postPlatform(ctx, "/incidents/list", payload, &envelope); err != nil {
+	if err := c.postPlatform(ctx, "/incident/r2/list", payload, &envelope); err != nil {
 		return ListIncidentsResponse{}, err
 	}
 	if envelope.Error != 0 {
