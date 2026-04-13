@@ -43,7 +43,7 @@ max_tokens = 4096
 [models.providers.deepseek]
 type = "deepseek"
 base_url = "https://api.deepseek.com"
-api_key_env = "DEEPSEEK_API_KEY"
+api_key = "DEEPSEEK_API_KEY"
 model = "deepseek-reasoner"
 max_tokens = 4096
 
@@ -111,10 +111,10 @@ default_page_size = 10
 allow_actions = ["hosts", "isolate", "release", "incidents", "detections", "logs", "incident-view", "detection-view"]
 
 [edr.platform]
-enabled = false
+enabled = true
 base_url = "https://alpha-openapi.rongma.tech/open_api/rm/v1"
-app_key_env = "EDR_PLATFORM_APP_KEY"
-app_secret_env = "EDR_PLATFORM_APP_SECRET"
+app_key = "EDR_PLATFORM_APP_KEY"
+app_secret = "EDR_PLATFORM_APP_SECRET"
 
 [edr.headers]
 # X-API-Key = "replace-me"
