@@ -38,7 +38,7 @@ type Store interface {
 	GetScheduledTaskByID(ctx context.Context, taskID string) (protocol.ScheduledTask, error)
 	UpdateScheduledTask(ctx context.Context, scopeKey string, taskID string, patch protocol.ScheduledTaskPatch) (protocol.ScheduledTask, error)
 	DeleteScheduledTask(ctx context.Context, scopeKey string, taskID string) error
-	ListDueScheduledTasks(ctx context.Context, now time.Time, limit int) ([]protocol.ScheduledTask, error)
+	ListDueScheduledTasks(ctx context.Context, scopeKey string, now time.Time, limit int) ([]protocol.ScheduledTask, error)
 	MarkScheduledTaskRunning(ctx context.Context, taskID string, lastRunAt time.Time, nextRunAt time.Time) error
 	SaveScheduledTaskRun(ctx context.Context, run protocol.ScheduledTaskRun) error
 	GetLatestScheduledTaskRun(ctx context.Context, scopeKey string) (protocol.ScheduledTaskRun, error)

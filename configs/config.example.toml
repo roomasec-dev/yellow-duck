@@ -93,6 +93,7 @@ enabled = true
 poll_seconds = 30
 model = "deepseek/deepseek-chat"
 default_interval_minutes = 5
+scope_key = ""  # 留空则不限制 scope_key，运行所有到期任务；填写具体值如 "feishu:xxx:oc_yyyy" 则只处理该 scope_key 下的任务
 
 [knowledge_base]
 enabled = true

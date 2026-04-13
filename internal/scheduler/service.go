@@ -47,7 +47,7 @@ func (s *Service) Start(ctx context.Context) {
 
 func (s *Service) runOnce(ctx context.Context) {
 	now := time.Now().UTC()
-	tasks, err := s.store.ListDueScheduledTasks(ctx, now, 10)
+	tasks, err := s.store.ListDueScheduledTasks(ctx, s.cfg.ScopeKey, now, 10)
 	if err != nil {
 		s.logger.Warn("list due scheduled tasks failed", "error", err)
 		return

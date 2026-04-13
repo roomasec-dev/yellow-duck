@@ -742,12 +742,12 @@ func (s *SQLiteStore) DeleteScheduledTask(ctx context.Context, scopeKey string, 
 	return nil
 }
 
-func (s *SQLiteStore) ListDueScheduledTasks(ctx context.Context, now time.Time, limit int) ([]protocol.ScheduledTask, error) {
+func (s *SQLiteStore) ListDueScheduledTasks(ctx context.Context, scopeKey string, now time.Time, limit int) ([]protocol.ScheduledTask, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT task_id, scope_key, session_key, channel, tenant_key, chat_id, thread_id, creator_id, title, prompt, interval_seconds, status, last_summary, next_run_at, last_run_at, created_at, updated_at
-		FROM scheduled_tasks WHERE status='active' AND next_run_at <= ? ORDER BY next_run_at ASC LIMIT ?`, now, limit)
+		FROM scheduled_tasks WHERE status='active' AND next_run_at <= ? AND (scope_key=? OR ''=?) ORDER BY next_run_at ASC LIMIT ?`, now, scopeKey, scopeKey, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list due scheduled tasks: %w", err)
 	}

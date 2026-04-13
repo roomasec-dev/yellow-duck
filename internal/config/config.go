@@ -134,6 +134,7 @@ type SchedulerConfig struct {
 	PollSeconds      int    `toml:"poll_seconds"`
 	Model            string `toml:"model"`
 	DefaultIntervalM int    `toml:"default_interval_minutes"`
+	ScopeKey         string `toml:"scope_key"`
 }
 
 type KnowledgeBaseConfig struct {
