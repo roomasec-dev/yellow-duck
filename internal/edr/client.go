@@ -1187,7 +1187,7 @@ type ListIncidentsRequest struct {
 
 type ListIncidentsResponse struct {
 	Total     int        `json:"total"`
-	Incidents []Incident `json:"data"`
+	Incidents []Incident `json:"incident_list"`
 }
 
 type BatchDealIncidentRequest struct {
