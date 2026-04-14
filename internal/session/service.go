@@ -33,23 +33,23 @@ import (
 )
 
 type Service struct {
-	cfg       config.Config
-	store     store.Store
-	model     model.Client
-	compactor *compression.Service
-	progress  *progress.Service
-	detailer  *detailagent.Service
-	router    *router.Service
-	planner   *planner.Service
-	memory    *memory.Service
-	artifacts *artifact.Service
-	i18n      *i18n.Service
-	knowledge *knowledge.Service
-	prompt    *prompt.Service
-	edr       edr.Client
-	logger    *logx.Logger
-	runMu     sync.Mutex
-	runs      map[string]runState
+	cfg        config.Config
+	store      store.Store
+	model      model.Client
+	compactor  *compression.Service
+	progress   *progress.Service
+	detailer   *detailagent.Service
+	router     *router.Service
+	planner    *planner.Service
+	memory     *memory.Service
+	artifacts  *artifact.Service
+	i18n       *i18n.Service
+	knowledge  *knowledge.Service
+	prompt     *prompt.Service
+	edr        edr.Client
+	logger     *logx.Logger
+	runMu      sync.Mutex
+	runs       map[string]runState
 	dedupCache *toolDedupCache
 }
 
@@ -101,22 +101,22 @@ func (c *toolDedupCache) Done(key string, result string, err error) {
 
 func NewService(cfg config.Config, store store.Store, modelClient model.Client, compactor *compression.Service, progressService *progress.Service, detailAgentService *detailagent.Service, routerService *router.Service, plannerService *planner.Service, memoryService *memory.Service, artifactService *artifact.Service, i18nService *i18n.Service, knowledgeService *knowledge.Service, promptService *prompt.Service, edrClient edr.Client, logger *logx.Logger) *Service {
 	return &Service{
-		cfg:       cfg,
-		store:     store,
-		model:     modelClient,
-		compactor: compactor,
-		progress:  progressService,
-		detailer:  detailAgentService,
-		router:    routerService,
-		planner:   plannerService,
-		memory:    memoryService,
-		artifacts: artifactService,
-		i18n:      i18nService,
-		knowledge: knowledgeService,
-		prompt:    promptService,
-		edr:       edrClient,
-		logger:    logger,
-		runs:      make(map[string]runState),
+		cfg:        cfg,
+		store:      store,
+		model:      modelClient,
+		compactor:  compactor,
+		progress:   progressService,
+		detailer:   detailAgentService,
+		router:     routerService,
+		planner:    plannerService,
+		memory:     memoryService,
+		artifacts:  artifactService,
+		i18n:       i18nService,
+		knowledge:  knowledgeService,
+		prompt:     promptService,
+		edr:        edrClient,
+		logger:     logger,
+		runs:       make(map[string]runState),
 		dedupCache: newToolDedupCache(30 * time.Second),
 	}
 }
@@ -1190,7 +1190,7 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 		return formatEventLogAlarms(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_logs":
 		reporter.Step(ctx, "我在拉取行为日志。")
-		result, err := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: call.ClientID, OSType: call.OSType, Operation: call.Operation, StartTime: call.StartTime, EndTime: call.EndTime, FilterField: call.FilterField, FilterOperator: call.FilterOp, FilterValue: call.FilterValue, Page: positiveOr(call.Page, 1), PageSize: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		result, err := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: call.ClientID, OSType: call.OSType, Operation: call.Operation, StartTime: call.StartTime, EndTime: call.EndTime, FilterField: call.FilterField, FilterOperator: call.FilterOp, FilterValue: call.FilterValue, Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
@@ -1852,7 +1852,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		reporter.Step(ctx, "我在从平台 API 拉取行为日志，先把关键操作线索整理出来。")
 		clientID, page, pageSize := parseIncidentListArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var result edr.ListLogsResponse
-		result, err = s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: clientID, Page: page, PageSize: pageSize})
+		result, err = s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: clientID, Limit: pageSize})
 		if err == nil {
 			response = s.formatLogs(ctx, result, page, pageSize, planner.ToolCall{ClientID: clientID, Page: page, PageSize: pageSize})
 		}
@@ -1938,7 +1938,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		reporter.Step(ctx, "我在拉取行为日志，先把和你问题最相关的记录整理出来。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
-		result, callErr := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: decision.ClientID, Page: page, PageSize: pageSize})
+		result, callErr := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: decision.ClientID, Limit: pageSize})
 		err = callErr
 		if err == nil {
 			toolResult = s.formatLogs(ctx, result, page, pageSize, planner.ToolCall{ClientID: decision.ClientID, Page: page, PageSize: pageSize})
