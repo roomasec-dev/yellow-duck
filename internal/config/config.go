@@ -21,7 +21,6 @@ type Config struct {
 	Scheduler     SchedulerConfig     `toml:"scheduler"`
 	KnowledgeBase KnowledgeBaseConfig `toml:"knowledge_base"`
 	EDR           EDRConfig           `toml:"edr"`
-	Policy        PolicyConfig        `toml:"policy"`
 }
 
 type ServerConfig struct {
@@ -35,7 +34,7 @@ type StorageConfig struct {
 }
 
 type ChannelConfig struct {
-	Feishu  FeishuConfig  `toml:"feishu"`
+	Feishu   FeishuConfig   `toml:"feishu"`
 	Dingtalk DingtalkConfig `toml:"dingtalk"`
 }
 
@@ -52,14 +51,14 @@ type FeishuConfig struct {
 }
 
 type DingtalkConfig struct {
-	Enabled         bool   `toml:"enabled"`
-	Mode            string `toml:"mode"`
-	ClientID        string `toml:"client_id"`
-	ClientSecret    string `toml:"client_secret"`
-	BaseURL         string `toml:"base_url"`
-	WebhookPath     string `toml:"webhook_path"`
-	ReplyMode       string `toml:"reply_mode"`
-	EncryptKey      string `toml:"encrypt_key"`
+	Enabled           bool   `toml:"enabled"`
+	Mode              string `toml:"mode"`
+	ClientID          string `toml:"client_id"`
+	ClientSecret      string `toml:"client_secret"`
+	BaseURL           string `toml:"base_url"`
+	WebhookPath       string `toml:"webhook_path"`
+	ReplyMode         string `toml:"reply_mode"`
+	EncryptKey        string `toml:"encrypt_key"`
 	VerificationToken string `toml:"verification_token"`
 }
 
@@ -150,7 +149,6 @@ type EDRConfig struct {
 	AuthToken        string            `toml:"auth_token"`
 	Headers          map[string]string `toml:"headers"`
 	DefaultConnectIP string            `toml:"default_connect_ip"`
-	AllowActions     []string          `toml:"allow_actions"`
 	DefaultPageSize  int               `toml:"default_page_size"`
 	Platform         PlatformAPIConfig `toml:"platform"`
 }
@@ -162,11 +160,6 @@ type PlatformAPIConfig struct {
 	AppSecret    string `toml:"app_secret"`
 	AppKeyEnv    string `toml:"app_key_env"`
 	AppSecretEnv string `toml:"app_secret_env"`
-}
-
-type PolicyConfig struct {
-	DangerousActionKeywords []string `toml:"dangerous_action_keywords"`
-	ApprovedUsers           []string `toml:"approved_users"`
 }
 
 type LogLevel string

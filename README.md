@@ -265,6 +265,9 @@ $env:EDR_PLATFORM_APP_SECRET="你的平台 AppSecret"
 go run . -config configs/config.example.toml
 ```
 
+## EDR API 文档
+https://qax-console.zboundary.com/main/docs?id=19c548c5-1f18-4439-9a5b-fa3ad5f96c44
+
 ## 知识库配置
 
 - 知识库目录由 `knowledge_base.path` 控制，可以是相对路径，也可以是外部绝对路径

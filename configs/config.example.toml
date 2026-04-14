@@ -103,22 +103,17 @@ search_limit = 5
 snippet_length = 240
 
 [edr]
-base_url = "https://alpha-openapi.rongma.tech/open_api/rm/v1"
+base_url = "https://qax-openapi.zboundary.com/sase/open_api/rm/v1"
 timeout_seconds = 15
 auth_token = ""
 default_connect_ip = ""
 default_page_size = 10
-allow_actions = ["hosts", "isolate", "release", "incidents", "detections", "logs", "incident-view", "detection-view"]
 
 [edr.platform]
 enabled = true
-base_url = "https://alpha-openapi.rongma.tech/open_api/rm/v1"
+base_url = "https://qax-openapi.zboundary.com/sase/open_api/rm/v1"
 app_key = "EDR_PLATFORM_APP_KEY"
 app_secret = "EDR_PLATFORM_APP_SECRET"
 
 [edr.headers]
 # X-API-Key = "replace-me"
-
-[policy]
-dangerous_action_keywords = ["isolate", "release", "kill", "quarantine"]
-approved_users = []
