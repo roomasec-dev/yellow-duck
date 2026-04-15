@@ -1343,7 +1343,7 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 		return formatEventLogAlarms(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_logs":
 		reporter.ToolStart(ctx, call.Name, "我在拉取行为日志。")
-		result, err := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: call.ClientID, OSType: call.OSType, Operation: call.Operation, StartTime: call.StartTime, EndTime: call.EndTime, FilterField: call.FilterField, FilterOperator: call.FilterOp, FilterValue: call.FilterValue, Page: positiveOr(call.Page, 1), PageSize: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		result, err := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: call.ClientID, OSType: call.OSType, Operation: call.Operation, StartTime: call.StartTime, EndTime: call.EndTime, FilterField: call.FilterField, FilterOperator: call.FilterOp, FilterValue: call.FilterValue, Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
@@ -2015,7 +2015,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		reporter.ToolStart(ctx, "edr_logs", "我在从平台 API 拉取行为日志，先把关键操作线索整理出来。")
 		clientID, page, pageSize := parseIncidentListArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var result edr.ListLogsResponse
-		result, err = s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: clientID, Page: page, PageSize: pageSize})
+		result, err = s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: clientID, Limit: pageSize})
 		if err == nil {
 			response = s.formatLogs(ctx, result, page, pageSize, planner.ToolCall{ClientID: clientID, Page: page, PageSize: pageSize})
 		}
@@ -2101,7 +2101,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		reporter.ToolStart(ctx, "edr_logs", "我在拉取行为日志，先把和你问题最相关的记录整理出来。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
-		result, callErr := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: decision.ClientID, Page: page, PageSize: pageSize})
+		result, callErr := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: decision.ClientID, Limit: pageSize})
 		err = callErr
 		if err == nil {
 			toolResult = s.formatLogs(ctx, result, page, pageSize, planner.ToolCall{ClientID: decision.ClientID, Page: page, PageSize: pageSize})

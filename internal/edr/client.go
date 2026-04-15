@@ -1263,8 +1263,7 @@ type Incident struct {
 }
 
 type ListLogsRequest struct {
-	Page           int
-	PageSize       int
+	Limit          int
 	ClientID       string
 	OSType         string
 	Operation      string
@@ -1603,21 +1602,24 @@ func (c *OpenAPIClient) UpdateDetectionStatus(ctx context.Context, req UpdateDet
 
 func (c *OpenAPIClient) ListLogs(ctx context.Context, req ListLogsRequest) (ListLogsResponse, error) {
 	log.Printf("ListLogs req: %+v", req)
-	if req.Page <= 0 {
-		req.Page = 1
+	if req.Limit <= 0 {
+		req.Limit = c.cfg.DefaultPageSize
 	}
-	if req.PageSize <= 0 {
-		req.PageSize = c.cfg.DefaultPageSize
-	}
+
 	payload := map[string]any{
-		"page": map[string]any{
-			"cur_page":  req.Page,
-			"page_size": req.PageSize,
+		"limit": req.Limit,
+		"quick_time": map[string]any{
+			"time_span": "last",
+			"time_num":  15,
+			"time_type": "minutes",
 		},
-		"sort": []map[string]string{{
-			"order":    "desc",
-			"sort_key": "time",
-		}},
+		"search": map[string]any{
+			"search_sentence": "",
+			"search_type":     "KQL",
+		},
+	}
+	if req.ClientID != "" {
+		payload["client_id"] = req.ClientID
 	}
 	filters := make([]map[string]any, 0, 4)
 	if strings.TrimSpace(req.ClientID) != "" {
@@ -1679,12 +1681,11 @@ func (c *OpenAPIClient) ListLogs(ctx context.Context, req ListLogsRequest) (List
 	if len(filters) > 0 {
 		payload["filter"] = filters
 	}
-
 	jsonBytes, _ := json.MarshalIndent(payload, "", "  ")
 	log.Printf("ListLogs request body:\n%s", string(jsonBytes))
 
 	var envelope apiEnvelope[ListLogsResponse]
-	if err := c.postPlatform(ctx, "/logs/list", payload, &envelope); err != nil {
+	if err := c.postPlatform(ctx, "/detection/events/list", payload, &envelope); err != nil {
 		return ListLogsResponse{}, err
 	}
 	if envelope.Error != 0 {
