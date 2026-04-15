@@ -2032,7 +2032,7 @@ func decodeDetailPayload(raw json.RawMessage, operation string, message string) 
 	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
 		return map[string]any{}, nil
 	}
-
+	fmt.Println("raw data:", string(raw))
 	switch raw[0] {
 	case '{':
 		var payload map[string]any

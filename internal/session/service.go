@@ -33,23 +33,23 @@ import (
 )
 
 type Service struct {
-	cfg       config.Config
-	store     store.Store
-	model     model.Client
-	compactor *compression.Service
-	progress  *progress.Service
-	detailer  *detailagent.Service
-	router    *router.Service
-	planner   *planner.Service
-	memory    *memory.Service
-	artifacts *artifact.Service
-	i18n      *i18n.Service
-	knowledge *knowledge.Service
-	prompt    *prompt.Service
-	edr       edr.Client
-	logger    *logx.Logger
-	runMu     sync.Mutex
-	runs      map[string]runState
+	cfg        config.Config
+	store      store.Store
+	model      model.Client
+	compactor  *compression.Service
+	progress   *progress.Service
+	detailer   *detailagent.Service
+	router     *router.Service
+	planner    *planner.Service
+	memory     *memory.Service
+	artifacts  *artifact.Service
+	i18n       *i18n.Service
+	knowledge  *knowledge.Service
+	prompt     *prompt.Service
+	edr        edr.Client
+	logger     *logx.Logger
+	runMu      sync.Mutex
+	runs       map[string]runState
 	dedupCache *toolDedupCache
 }
 
@@ -101,22 +101,22 @@ func (c *toolDedupCache) Done(key string, result string, err error) {
 
 func NewService(cfg config.Config, store store.Store, modelClient model.Client, compactor *compression.Service, progressService *progress.Service, detailAgentService *detailagent.Service, routerService *router.Service, plannerService *planner.Service, memoryService *memory.Service, artifactService *artifact.Service, i18nService *i18n.Service, knowledgeService *knowledge.Service, promptService *prompt.Service, edrClient edr.Client, logger *logx.Logger) *Service {
 	return &Service{
-		cfg:       cfg,
-		store:     store,
-		model:     modelClient,
-		compactor: compactor,
-		progress:  progressService,
-		detailer:  detailAgentService,
-		router:    routerService,
-		planner:   plannerService,
-		memory:    memoryService,
-		artifacts: artifactService,
-		i18n:      i18nService,
-		knowledge: knowledgeService,
-		prompt:    promptService,
-		edr:       edrClient,
-		logger:    logger,
-		runs:      make(map[string]runState),
+		cfg:        cfg,
+		store:      store,
+		model:      modelClient,
+		compactor:  compactor,
+		progress:   progressService,
+		detailer:   detailAgentService,
+		router:     routerService,
+		planner:    plannerService,
+		memory:     memoryService,
+		artifacts:  artifactService,
+		i18n:       i18nService,
+		knowledge:  knowledgeService,
+		prompt:     promptService,
+		edr:        edrClient,
+		logger:     logger,
+		runs:       make(map[string]runState),
 		dedupCache: newToolDedupCache(30 * time.Second),
 	}
 }
@@ -138,7 +138,6 @@ func (s *Service) HandleInbound(ctx context.Context, msg protocol.InboundMessage
 	ctx, finishRun := s.startRun(ctx, sessionKey)
 	defer finishRun()
 	reporter := s.progress.NewReporter(sessionRef, sink)
-	reporter.Step(ctx, "收到用户新消息，正在整理会话上下文并判断该走通用问答还是 EDR 操作。")
 
 	if err := s.store.AppendTurn(ctx, sessionKey, string(model.RoleUser), msg.Text); err != nil {
 		return "", err
@@ -164,14 +163,10 @@ func (s *Service) HandleInbound(ctx context.Context, msg protocol.InboundMessage
 		return s.storeAssistantReply(ctx, sessionKey, response)
 	}
 
-	reporter.Step(ctx, "正在读取历史摘要和最近几轮消息，把上下文串起来。")
-
 	messages, err := s.buildBaseMessages(ctx, sessionKey)
 	if err != nil {
 		return "", err
 	}
-
-	reporter.Step(ctx, "主模型开始思考了，我在把关键信息收束成一个直接可用的答复。")
 
 	result, err := s.model.Chat(ctx, model.ChatRequest{
 		SessionKey: sessionKey,
@@ -381,6 +376,9 @@ func (s *Service) handlePlannedTools(ctx context.Context, sessionKey string, tex
 		s.logger.Warn("planner failed", "error", err)
 		return "", false, nil
 	}
+	if reporter != nil && strings.TrimSpace(plan.PlanPreview) != "" {
+		reporter.Stage(ctx, plan.Phase, "调查计划："+plan.PlanPreview)
+	}
 	if len(plan.ToolCalls) == 0 {
 		if plan.DirectReply == "" {
 			return "", false, nil
@@ -389,7 +387,7 @@ func (s *Service) handlePlannedTools(ctx context.Context, sessionKey string, tex
 		return plan.DirectReply, true, err
 	}
 
-	response, err := s.executeToolPlan(ctx, sessionKey, text, locale, plan.ToolCalls, reporter)
+	response, err := s.executeToolPlan(ctx, sessionKey, text, locale, plan, reporter)
 	if err != nil {
 		return "", true, err
 	}
@@ -716,16 +714,27 @@ func (s *Service) storeAssistantReply(ctx context.Context, sessionKey string, te
 	return text, nil
 }
 
-func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userText string, locale string, calls []planner.ToolCall, reporter *progress.Reporter) (string, error) {
+func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userText string, locale string, plan planner.Plan, reporter *progress.Reporter) (string, error) {
 	var allToolResults []string
-	currentCalls := calls
+	currentCalls := plan.ToolCalls
 	finalDirectReply := ""
 	seenSignatures := make(map[string]int)
 	hasGroundedEDRTool := false
+	taskMode := plan.TaskMode
+	phase := plan.Phase
+	maxRounds := maxRoundsForTaskMode(taskMode)
+	artifactDeepDiveRounds := 0
+	rounds := 0
 
 	for {
 		if err := ctx.Err(); err != nil {
 			return "", err
+		}
+		rounds++
+		if rounds > maxRounds {
+			s.logger.Info("tool chain stopped by task budget", "session_key", sessionKey, "task_mode", taskMode, "rounds", rounds, "max_rounds", maxRounds)
+			reporter.Stage(ctx, "answer", "我已经拿到足够线索，先收口整理结论；如果你要更深挖，我再继续。")
+			break
 		}
 		signature := toolCallsSignature(currentCalls)
 		seenSignatures[signature]++
@@ -751,6 +760,11 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 				break
 			}
 		}
+		if allArtifactExplorationCalls(currentCalls) {
+			artifactDeepDiveRounds++
+		} else {
+			artifactDeepDiveRounds = 0
+		}
 
 		toolContext := strings.Join(allToolResults, "\n\n")
 		s.logger.Info("tool round context ready", "session_key", sessionKey, "result_count", len(allToolResults), "context_preview", shortResult(toolContext))
@@ -770,6 +784,26 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 			s.logger.Warn("follow-up planner failed", "error", err)
 			break
 		}
+		if strings.TrimSpace(nextPlan.TaskMode) != "" {
+			taskMode = nextPlan.TaskMode
+			maxRounds = maxRoundsForTaskMode(taskMode)
+		}
+		if strings.TrimSpace(nextPlan.Phase) != "" {
+			phase = nextPlan.Phase
+		}
+		if shouldStopAutoThreatPagination(userText, currentCalls, nextPlan.ToolCalls) {
+			s.logger.Info("stop automatic threat pagination", "session_key", sessionKey)
+			reporter.Stage(ctx, "answer", "我先按这一页给你概览，不继续自动翻页；你要更多我再往后看。")
+			break
+		}
+		if shouldStopArtifactOverexploration(taskMode, artifactDeepDiveRounds, currentCalls, nextPlan.ToolCalls) {
+			s.logger.Info("stop artifact overexploration", "session_key", sessionKey, "task_mode", taskMode, "artifact_rounds", artifactDeepDiveRounds)
+			reporter.Stage(ctx, "answer", "这条高危事件的关键证据已经够了，我先把原因和风险点给你讲清楚。")
+			break
+		}
+		if reporter != nil && strings.TrimSpace(nextPlan.PlanPreview) != "" {
+			reporter.Stage(ctx, phase, "下一步计划："+nextPlan.PlanPreview)
+		}
 		if len(nextPlan.ToolCalls) == 0 {
 			finalDirectReply = nextPlan.DirectReply
 			s.logger.Info("tool chain finished planning", "session_key", sessionKey, "final_reply_preview", shortResult(finalDirectReply))
@@ -782,7 +816,7 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 	if len(allToolResults) == 0 && finalDirectReply == "" {
 		return "", nil
 	}
-	reporter.Step(ctx, "我拿到真实工具结果了，正在整理成更自然的回复。")
+	reporter.Stage(ctx, "answer", "我拿到真实工具结果了，正在整理成更自然的回复。")
 	response := finalDirectReply
 	if strings.TrimSpace(response) == "" {
 		if hasGroundedEDRTool {
@@ -803,6 +837,62 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 		s.logger.Warn("compact session failed", "session_key", sessionKey, "error", err)
 	}
 	return response, nil
+}
+
+func maxRoundsForTaskMode(taskMode string) int {
+	switch strings.TrimSpace(taskMode) {
+	case "overview":
+		return 2
+	case "overview_drilldown":
+		return 4
+	case "drill_down":
+		return 5
+	case "exhaustive":
+		return 8
+	case "action":
+		return 3
+	default:
+		return 4
+	}
+}
+
+func allArtifactExplorationCalls(calls []planner.ToolCall) bool {
+	if len(calls) == 0 {
+		return false
+	}
+	for _, call := range calls {
+		switch call.Name {
+		case "artifact_outline", "artifact_search", "artifact_read":
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func shouldStopArtifactOverexploration(taskMode string, artifactRounds int, currentCalls []planner.ToolCall, nextCalls []planner.ToolCall) bool {
+	if taskMode == "exhaustive" || artifactRounds < 3 || len(nextCalls) == 0 {
+		return false
+	}
+	if !allArtifactExplorationCalls(currentCalls) || !allArtifactExplorationCalls(nextCalls) {
+		return false
+	}
+	return samePrimaryArtifact(currentCalls, nextCalls)
+}
+
+func samePrimaryArtifact(currentCalls []planner.ToolCall, nextCalls []planner.ToolCall) bool {
+	currentID := primaryArtifactID(currentCalls)
+	nextID := primaryArtifactID(nextCalls)
+	return currentID != "" && currentID == nextID
+}
+
+func primaryArtifactID(calls []planner.ToolCall) string {
+	for _, call := range calls {
+		if id := strings.TrimSpace(call.ArtifactID); id != "" {
+			return id
+		}
+	}
+	return ""
 }
 
 func toolCallsSignature(calls []planner.ToolCall) string {
@@ -877,6 +967,69 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 	return strings.Join(parts, "||")
 }
 
+func shouldStopAutoThreatPagination(userText string, currentCalls []planner.ToolCall, nextCalls []planner.ToolCall) bool {
+	if userExplicitlyRequestsPagination(userText) || len(currentCalls) == 0 || len(nextCalls) == 0 {
+		return false
+	}
+	if !allThreatListCalls(nextCalls) {
+		return false
+	}
+	for _, next := range nextCalls {
+		matched := false
+		for _, current := range currentCalls {
+			if !sameThreatListQuery(next, current) {
+				continue
+			}
+			if positiveOr(next.Page, 1) > positiveOr(current.Page, 1) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+func allThreatListCalls(calls []planner.ToolCall) bool {
+	for _, call := range calls {
+		if call.Name != "edr_incidents" && call.Name != "edr_detections" {
+			return false
+		}
+	}
+	return true
+}
+
+func sameThreatListQuery(a planner.ToolCall, b planner.ToolCall) bool {
+	return a.Name == b.Name &&
+		strings.TrimSpace(a.ClientID) == strings.TrimSpace(b.ClientID) &&
+		strings.TrimSpace(a.Hostname) == strings.TrimSpace(b.Hostname) &&
+		strings.TrimSpace(a.ClientIP) == strings.TrimSpace(b.ClientIP) &&
+		strings.TrimSpace(a.OSType) == strings.TrimSpace(b.OSType) &&
+		strings.TrimSpace(a.Operation) == strings.TrimSpace(b.Operation) &&
+		strings.TrimSpace(a.StartTime) == strings.TrimSpace(b.StartTime) &&
+		strings.TrimSpace(a.EndTime) == strings.TrimSpace(b.EndTime) &&
+		strings.TrimSpace(a.FilterField) == strings.TrimSpace(b.FilterField) &&
+		strings.TrimSpace(a.FilterOp) == strings.TrimSpace(b.FilterOp) &&
+		strings.TrimSpace(a.FilterValue) == strings.TrimSpace(b.FilterValue) &&
+		strings.TrimSpace(a.IncidentID) == strings.TrimSpace(b.IncidentID)
+}
+
+func userExplicitlyRequestsPagination(text string) bool {
+	plain := strings.TrimSpace(strings.ToLower(text))
+	if plain == "" {
+		return false
+	}
+	keywords := []string{"下一页", "下页", "翻页", "继续翻", "继续看更多", "更多", "全部", "全都", "所有", "第2页", "第二页", "第3页", "第三页", "page", "更多威胁", "更多风险", "更多事件", "更多检出"}
+	for _, keyword := range keywords {
+		if strings.Contains(plain, strings.ToLower(keyword)) {
+			return true
+		}
+	}
+	return false
+}
+
 func toolCallCacheKey(call planner.ToolCall) string {
 	data := strings.Join([]string{
 		call.Name,
@@ -946,7 +1099,7 @@ func toolCallCacheKey(call planner.ToolCall) string {
 
 func callNeedsGroundedEDRAnswer(name string) bool {
 	switch name {
-	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_plan_list", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts", "edr_virus_scan_record", "edr_instruction_policy_list":
+	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_outline", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_plan_list", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts", "edr_virus_scan_record", "edr_instruction_policy_list":
 		return true
 	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_instruction_policy_update", "edr_instruction_policy_save_status", "edr_instruction_policy_delete", "edr_instruction_policy_sort", "edr_instruction_policy_add":
 		return false
@@ -1139,14 +1292,14 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 	case "knowledge_base_delete":
 		return s.deleteKnowledgeBase(call), nil
 	case "edr_hosts":
-		reporter.Step(ctx, "我在查主机状态和基础信息。")
+		reporter.ToolStart(ctx, call.Name, "我在查主机状态和基础信息。")
 		result, err := s.edr.ListHosts(ctx, edr.ListHostsRequest{Hostname: call.Hostname, ClientIP: call.ClientIP})
 		if err != nil {
 			return "", err
 		}
 		return formatHosts(result), nil
 	case "edr_incidents":
-		reporter.Step(ctx, "我在拉取近期事件。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取近期事件。")
 		result, err := s.edr.ListIncidents(ctx, edr.ListIncidentsRequest{ClientID: call.ClientID, Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
@@ -1165,14 +1318,14 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 		}
 		return fmt.Sprintf("批量处置完成：%d 个事件已处理", result.TotalIncident), nil
 	case "edr_incident_r2_summary":
-		reporter.Step(ctx, "我在拉取事件 R2 摘要。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取事件 R2 摘要。")
 		result, err := s.edr.IncidentR2Summary(ctx, call.IncidentID)
 		if err != nil {
 			return "", err
 		}
 		return formatIncidentR2Summary(result), nil
 	case "edr_detections":
-		reporter.Step(ctx, "我在拉取近期行为检出。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取近期行为检出。")
 		result, err := s.edr.ListDetections(ctx, edr.ListDetectionsRequest{
 			Page:       positiveOr(call.Page, 1),
 			Limit:      positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize),
@@ -1182,28 +1335,28 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 		}
 		return formatDetections(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_event_log_alarms":
-		reporter.Step(ctx, "我在拉取事件日志告警列表。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取事件日志告警列表。")
 		result, err := s.edr.ListEventLogAlarms(ctx, edr.ListEventLogAlarmsRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
 		return formatEventLogAlarms(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_logs":
-		reporter.Step(ctx, "我在拉取行为日志。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取行为日志。")
 		result, err := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: call.ClientID, OSType: call.OSType, Operation: call.Operation, StartTime: call.StartTime, EndTime: call.EndTime, FilterField: call.FilterField, FilterOperator: call.FilterOp, FilterValue: call.FilterValue, Page: positiveOr(call.Page, 1), PageSize: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
 		return s.formatLogs(ctx, result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize), call), nil
 	case "edr_incident_view":
-		reporter.Step(ctx, "我在拉取这条 incident 的详情。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取这条 incident 的详情。")
 		result, err := s.edr.ViewIncident(ctx, edr.IncidentViewRequest{IncidentID: call.IncidentID, ClientID: call.ClientID})
 		if err != nil {
 			return "", err
 		}
 		return s.prepareDetailContext(ctx, sessionKey, locale, "incident", call.IncidentID, userHint(call), result, reporter)
 	case "edr_detection_view":
-		reporter.Step(ctx, "我在拉取这条 detection 的详情。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取这条 detection 的详情。")
 		result, err := s.edr.ViewDetection(ctx, edr.DetectionViewRequest{DetectionID: call.DetectionID, ClientID: call.ClientID, ViewType: call.ViewType, ProcessUUID: call.ProcessUUID})
 		if err != nil {
 			return "", err
@@ -1213,80 +1366,90 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 		if s.artifacts == nil {
 			return "", nil
 		}
-		reporter.Step(ctx, "我在大对象详情里做定向搜索。")
+		reporter.ToolStart(ctx, call.Name, "我在大对象详情里做定向搜索。")
 		item, matches, err := s.artifacts.Search(ctx, sessionKey, call.ArtifactID, call.Query, 8)
 		if err != nil {
 			return "", err
 		}
 		return s.formatArtifactSearch(ctx, locale, item, call.Query, matches, reporter), nil
+	case "artifact_outline":
+		if s.artifacts == nil {
+			return "", nil
+		}
+		reporter.ToolStart(ctx, call.Name, "我先快速浏览这份大对象的结构和重点字段。")
+		item, outline, err := s.artifacts.Outline(ctx, sessionKey, call.ArtifactID)
+		if err != nil {
+			return "", err
+		}
+		return s.formatArtifactOutline(locale, item, outline), nil
 	case "artifact_read":
 		if s.artifacts == nil {
 			return "", nil
 		}
-		reporter.Step(ctx, "我在读取大对象详情里的指定片段。")
+		reporter.ToolStart(ctx, call.Name, "我在读取大对象详情里的指定片段。")
 		item, chunk, err := s.artifacts.Read(ctx, sessionKey, call.ArtifactID, call.StartLine, call.LineCount)
 		if err != nil {
 			return "", err
 		}
 		return s.formatArtifactRead(ctx, locale, item, call.StartLine, call.LineCount, chunk, reporter), nil
 	case "edr_iocs":
-		reporter.Step(ctx, "我在拉取 IOC 列表。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取 IOC 列表。")
 		result, err := s.edr.ListIOCs(ctx, edr.ListIOCsRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
 		return s.formatIOCs(ctx, result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_isolate_files":
-		reporter.Step(ctx, "我在拉取隔离文件列表。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取隔离文件列表。")
 		result, err := s.edr.ListIsolateFiles(ctx, edr.ListIsolateFilesRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
 		return s.formatIsolateFiles(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_tasks":
-		reporter.Step(ctx, "我在拉取指令任务列表。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取指令任务列表。")
 		result, err := s.edr.ListTasks(ctx, edr.ListTasksRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
 		return s.formatTasks(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_task_result":
-		reporter.Step(ctx, "我在拉取任务结果。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取任务结果。")
 		result, err := s.edr.GetTaskResult(ctx, call.TaskID)
 		if err != nil {
 			return "", err
 		}
 		return formatTaskResult(result), nil
 	case "edr_plan_list":
-		reporter.Step(ctx, "我在拉取计划列表。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取计划列表。")
 		result, err := s.edr.ListPlans(ctx, edr.ListPlansRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize), Type: call.Type})
 		if err != nil {
 			return "", err
 		}
 		return formatPlans(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_virus_scan_record":
-		reporter.Step(ctx, "我在拉取病毒扫描记录。")
+		reporter.ToolStart(ctx, call.Name, "我在拉取病毒扫描记录。")
 		result, err := s.edr.ListVirusScanRecords(ctx, edr.ListVirusScanRecordsRequest{HostName: call.Hostname, ClientID: call.ClientID, Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
 		return formatVirusScanRecords(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_virus_by_host":
-		reporter.Step(ctx, "我在按主机查询病毒信息。")
+		reporter.ToolStart(ctx, call.Name, "我在按主机查询病毒信息。")
 		result, err := s.edr.ListVirusByHost(ctx, edr.ListVirusByHostRequest{HostName: call.Hostname, ClientID: call.ClientID, Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
 		return formatVirusByHost(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_virus_by_hash":
-		reporter.Step(ctx, "我在按哈希查询病毒信息。")
+		reporter.ToolStart(ctx, call.Name, "我在按哈希查询病毒信息。")
 		result, err := s.edr.ListVirusByHash(ctx, edr.ListVirusByHashRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
 		}
 		return formatVirusByHash(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_virus_hash_hosts":
-		reporter.Step(ctx, "我在按哈希查询关联主机。")
+		reporter.ToolStart(ctx, call.Name, "我在按哈希查询关联主机。")
 		result, err := s.edr.ListVirusHashHosts(ctx, edr.ListVirusHashHostsRequest{HostName: call.Hostname, ClientID: call.ClientID, Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
 			return "", err
@@ -1802,7 +1965,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 
 	switch fields[1] {
 	case "hosts":
-		reporter.Step(ctx, "我在通过 EDR 查这台主机的当前状态和基础信息。")
+		reporter.ToolStart(ctx, "edr_hosts", "我在通过 EDR 查这台主机的当前状态和基础信息。")
 		keyword := ""
 		if len(fields) > 2 {
 			keyword = strings.Join(fields[2:], " ")
@@ -1833,7 +1996,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			response = s.msg(locale, "confirm_release", map[string]string{"client_id": fields[2]})
 		}
 	case "incidents":
-		reporter.Step(ctx, "我在从平台 API 拉取近期事件，整理威胁和主机状态。")
+		reporter.ToolStart(ctx, "edr_incidents", "我在从平台 API 拉取近期事件，整理威胁和主机状态。")
 		clientID, page, pageSize := parseIncidentListArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var result edr.ListIncidentsResponse
 		result, err = s.edr.ListIncidents(ctx, edr.ListIncidentsRequest{ClientID: clientID, Page: page, Limit: pageSize})
@@ -1841,7 +2004,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			response = formatIncidents(result, page, pageSize)
 		}
 	case "detections":
-		reporter.Step(ctx, "我在从平台 API 拉取近期行为检出，看看最近有哪些高风险动作。")
+		reporter.ToolStart(ctx, "edr_detections", "我在从平台 API 拉取近期行为检出，看看最近有哪些高风险动作。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var result edr.ListDetectionsResponse
 		result, err = s.edr.ListDetections(ctx, edr.ListDetectionsRequest{Page: page, Limit: pageSize})
@@ -1849,7 +2012,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			response = formatDetections(result, page, pageSize)
 		}
 	case "logs":
-		reporter.Step(ctx, "我在从平台 API 拉取行为日志，先把关键操作线索整理出来。")
+		reporter.ToolStart(ctx, "edr_logs", "我在从平台 API 拉取行为日志，先把关键操作线索整理出来。")
 		clientID, page, pageSize := parseIncidentListArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var result edr.ListLogsResponse
 		result, err = s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: clientID, Page: page, PageSize: pageSize})
@@ -1857,7 +2020,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			response = s.formatLogs(ctx, result, page, pageSize, planner.ToolCall{ClientID: clientID, Page: page, PageSize: pageSize})
 		}
 	case "incident-view":
-		reporter.Step(ctx, "我在拉取这条 incident 的详情。")
+		reporter.ToolStart(ctx, "edr_incident_view", "我在拉取这条 incident 的详情。")
 		if len(fields) < 4 {
 			response = s.msg(locale, "usage_incident_view", nil)
 			break
@@ -1868,7 +2031,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			response, err = s.prepareDetailContext(ctx, sessionKey, locale, "incident", fields[2], fields[2], result, reporter)
 		}
 	case "detection-view":
-		reporter.Step(ctx, "我在拉取这条 detection 的详情。")
+		reporter.ToolStart(ctx, "edr_detection_view", "我在拉取这条 detection 的详情。")
 		if len(fields) < 4 {
 			response = s.msg(locale, "usage_detection_view", nil)
 			break
@@ -1893,7 +2056,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 	if err != nil {
 		return "", true, err
 	}
-	reporter.Step(ctx, "这一步已经处理好了，我在把结果整理成更好读的说明。")
+	reporter.Stage(ctx, "answer", "这一步已经处理好了，我在把结果整理成更好读的说明。")
 	response, err = s.storeAssistantReply(ctx, sessionKey, response)
 	if err != nil {
 		return "", true, err
@@ -1910,14 +2073,14 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 
 	switch decision.Action {
 	case "hosts":
-		reporter.Step(ctx, "我在按自然语言线索查主机状态和基础信息。")
+		reporter.ToolStart(ctx, "edr_hosts", "我在按自然语言线索查主机状态和基础信息。")
 		result, callErr := s.edr.ListHosts(ctx, edr.ListHostsRequest{Hostname: decision.Hostname, ClientIP: decision.ClientIP})
 		err = callErr
 		if err == nil {
 			toolResult = formatHosts(result)
 		}
 	case "incidents":
-		reporter.Step(ctx, "我在按你的问题拉取近期事件，并整理关键信息。")
+		reporter.ToolStart(ctx, "edr_incidents", "我在按你的问题拉取近期事件，并整理关键信息。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
 		result, callErr := s.edr.ListIncidents(ctx, edr.ListIncidentsRequest{ClientID: decision.ClientID, Page: page, Limit: pageSize})
@@ -1926,7 +2089,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 			toolResult = formatIncidents(result, page, pageSize)
 		}
 	case "detections":
-		reporter.Step(ctx, "我在拉取近期行为检出，看看有哪些直接相关的风险线索。")
+		reporter.ToolStart(ctx, "edr_detections", "我在拉取近期行为检出，看看有哪些直接相关的风险线索。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
 		result, callErr := s.edr.ListDetections(ctx, edr.ListDetectionsRequest{Page: page, Limit: pageSize})
@@ -1935,7 +2098,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 			toolResult = formatDetections(result, page, pageSize)
 		}
 	case "logs":
-		reporter.Step(ctx, "我在拉取行为日志，先把和你问题最相关的记录整理出来。")
+		reporter.ToolStart(ctx, "edr_logs", "我在拉取行为日志，先把和你问题最相关的记录整理出来。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
 		result, callErr := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: decision.ClientID, Page: page, PageSize: pageSize})
@@ -1944,7 +2107,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 			toolResult = s.formatLogs(ctx, result, page, pageSize, planner.ToolCall{ClientID: decision.ClientID, Page: page, PageSize: pageSize})
 		}
 	case "tasks":
-		reporter.Step(ctx, "我在拉取指令任务列表。")
+		reporter.ToolStart(ctx, "edr_tasks", "我在拉取指令任务列表。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
 		result, callErr := s.edr.ListTasks(ctx, edr.ListTasksRequest{Page: page, Limit: pageSize})
@@ -1956,7 +2119,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		if decision.TaskID == "" {
 			return "", fmt.Errorf("查询任务结果需要提供 task_id，请使用类似「查看任务结果 12345」或「task_id=12345」的格式")
 		}
-		reporter.Step(ctx, "我在拉取任务结果。")
+		reporter.ToolStart(ctx, "edr_task_result", "我在拉取任务结果。")
 		result, callErr := s.edr.GetTaskResult(ctx, decision.TaskID)
 		err = callErr
 		if err == nil {
@@ -1989,7 +2152,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 			toolResult = fmt.Sprintf("指令已下发成功，任务ID: %s，主机: %s，重复: %t", result.TaskID, result.HostName, result.Repeat)
 		}
 	case "plan_list":
-		reporter.Step(ctx, "我在拉取计划列表。")
+		reporter.ToolStart(ctx, "edr_plan_list", "我在拉取计划列表。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
 		result, callErr := s.edr.ListPlans(ctx, edr.ListPlansRequest{Page: page, Limit: pageSize, Type: "kill_plan"})
@@ -1998,7 +2161,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 			toolResult = formatPlans(result, page, pageSize)
 		}
 	case "virus_scan_record":
-		reporter.Step(ctx, "我在拉取病毒扫描记录。")
+		reporter.ToolStart(ctx, "edr_virus_scan_record", "我在拉取病毒扫描记录。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
 		result, callErr := s.edr.ListVirusScanRecords(ctx, edr.ListVirusScanRecordsRequest{HostName: decision.Hostname, ClientID: decision.ClientID, Page: page, Limit: pageSize})
@@ -2007,7 +2170,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 			toolResult = formatVirusScanRecords(result, page, pageSize)
 		}
 	case "virus_by_host":
-		reporter.Step(ctx, "我在按主机查询病毒信息。")
+		reporter.ToolStart(ctx, "edr_virus_by_host", "我在按主机查询病毒信息。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
 		result, callErr := s.edr.ListVirusByHost(ctx, edr.ListVirusByHostRequest{HostName: decision.Hostname, ClientID: decision.ClientID, Page: page, Limit: pageSize})
@@ -2016,7 +2179,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 			toolResult = formatVirusByHost(result, page, pageSize)
 		}
 	case "virus_by_hash":
-		reporter.Step(ctx, "我在按哈希查询病毒信息。")
+		reporter.ToolStart(ctx, "edr_virus_by_hash", "我在按哈希查询病毒信息。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
 		result, callErr := s.edr.ListVirusByHash(ctx, edr.ListVirusByHashRequest{Page: page, Limit: pageSize})
@@ -2025,7 +2188,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 			toolResult = formatVirusByHash(result, page, pageSize)
 		}
 	case "virus_hash_hosts":
-		reporter.Step(ctx, "我在按哈希查询关联主机。")
+		reporter.ToolStart(ctx, "edr_virus_hash_hosts", "我在按哈希查询关联主机。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
 		result, callErr := s.edr.ListVirusHashHosts(ctx, edr.ListVirusHashHostsRequest{HostName: decision.Hostname, ClientID: decision.ClientID, Page: page, Limit: pageSize})
@@ -2104,7 +2267,7 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		return "", err
 	}
 
-	reporter.Step(ctx, "我拿到真实 EDR 数据了，正在整理成更贴近你问题的回答。")
+	reporter.Stage(ctx, "answer", "我拿到真实 EDR 数据了，正在整理成更贴近你问题的回答。")
 	response, err := s.answerGroundedByEDR(ctx, sessionKey, userText, toolResult)
 	if err != nil {
 		response = toolResult
@@ -2200,16 +2363,19 @@ func formatIncidents(result edr.ListIncidentsResponse, page int, pageSize int) s
 	page = positiveOr(page, 1)
 	pageSize = positiveOr(pageSize, len(result.Incidents))
 	totalPages := calcTotalPages(result.Total, pageSize)
-	hasMore := "否"
-	if totalPages > 0 && page < totalPages {
-		hasMore = "是"
-	}
-	lines := []string{fmt.Sprintf("共找到 %d 条事件，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Incidents), pageSize, hasMore)}
-	for _, incident := range result.Incidents {
+	showCount := minInt(len(result.Incidents), 6)
+	lines := []string{fmt.Sprintf("共找到 %d 条事件，当前第 %d/%d 页，本页返回 %d 条。默认先基于本页概览，不自动翻页；先展示前 %d 条：", result.Total, page, maxInt(totalPages, 1), len(result.Incidents), showCount)}
+	for i, incident := range result.Incidents {
+		if i >= showCount {
+			break
+		}
 		lines = append(lines, fmt.Sprintf("- %s incident_id=%s score=%.1f host=%s client_id=%s status=%d", incident.IncidentName, incident.IncidentID, incident.Score, incident.HostName, incident.ClientID, incident.Status))
 	}
+	if len(result.Incidents) > showCount {
+		lines = append(lines, fmt.Sprintf("本页其余 %d 条先省略；如果你要继续展开，我再补充本页剩余内容。", len(result.Incidents)-showCount))
+	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr incidents [%s]<page> [page_size]，例如 /edr incidents %d %d", formatOptionalClientPrefix(result.Incidents[0].ClientID), minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("还有后续页；如果你明确要继续翻页，我再去看第 %d 页。", minInt(page+1, totalPages)))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -2236,20 +2402,19 @@ func formatDetections(result edr.ListDetectionsResponse, page int, pageSize int)
 	page = positiveOr(page, 1)
 	pageSize = positiveOr(pageSize, len(result.Results))
 	totalPages := calcTotalPages(result.Total, pageSize)
-	hasMore := "否"
-	if totalPages > 0 && page < totalPages {
-		hasMore = "是"
-	}
-	lines := []string{fmt.Sprintf("共找到 %d 条检测记录，当前第 %d/%d 页，本页 %d 条（page_size=%d，has_more=%s）：", result.Total, page, maxInt(totalPages, 1), len(result.Results), pageSize, hasMore)}
+	showCount := minInt(len(result.Results), 6)
+	lines := []string{fmt.Sprintf("共找到 %d 条检测记录，当前第 %d/%d 页，本页返回 %d 条。默认先基于本页概览，不自动翻页；先展示前 %d 条：", result.Total, page, maxInt(totalPages, 1), len(result.Results), showCount)}
 	for i, item := range result.Results {
-		if i >= 10 {
-			lines = append(lines, fmt.Sprintf("... 还有 %d 条记录", len(result.Results)-10))
+		if i >= showCount {
 			break
 		}
 		lines = append(lines, fmt.Sprintf("- host=%s detection_id=%s level=%s status=%d rootname=%s client_id=%s incident_id=%s", item.HostName, item.DetectionID, item.ThreatLevel, item.DealStatus, item.RootName, item.ClientID, item.IncidentID))
 	}
+	if len(result.Results) > showCount {
+		lines = append(lines, fmt.Sprintf("本页其余 %d 条先省略；如果你要继续展开，我再补充本页剩余内容。", len(result.Results)-showCount))
+	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr detections %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("还有后续页；如果你明确要继续翻页，我再去看第 %d 页。", minInt(page+1, totalPages)))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -2859,17 +3024,13 @@ func (s *Service) prepareDetailContext(ctx context.Context, sessionKey string, l
 	if s.canInlineArtifact(ctx, sessionKey, item, payloadText) {
 		return s.formatViewDetail(locale, kind, payload), nil
 	}
-	if s.detailer != nil && s.detailer.Enabled() {
-		reporter.Step(ctx, "这条详情比较大，我先让辅助分析器提炼一版摘要给主流程继续看。")
-		overview := artifact.BuildOverview(payload)
-		report, summaryErr := s.detailer.SummarizeDetail(ctx, item, overview, payloadText, query)
-		if summaryErr == nil && strings.TrimSpace(report.Summary) != "" {
-			return formatDetailAgentReport(item, report, "detail"), nil
-		}
+	reporter.Step(ctx, "这条详情比较大，我先保留原始结果，再给你一个可继续探索的结构概览。")
+	_, outline, outlineErr := s.artifacts.Outline(ctx, sessionKey, item.ArtifactID)
+	if outlineErr == nil {
+		return s.renderArtifactIntro(kind, item, outline, query), nil
 	}
 	overview := artifact.BuildOverview(payload)
-	excerpt := artifact.BuildSelectiveContext(payloadText, query, 60)
-	return s.msg(locale, "detail_large", map[string]string{"kind": kind, "artifact_id": item.ArtifactID, "overview": overview, "excerpt": excerpt}), nil
+	return fmt.Sprintf("这条 %s 详情比较大，我先把原始结果保留成 artifact 方便继续调查。\n\nartifact_id=%s\n%s\n\n接下来适合先看 artifact_outline，再按关键词 artifact_search，命中后再 artifact_read。", kind, item.ArtifactID, overview), nil
 }
 
 func (s *Service) formatViewDetail(locale string, kind string, payload map[string]any) string {
@@ -2941,19 +3102,13 @@ func formatOptionalClientPrefix(clientID string) string {
 }
 
 func (s *Service) formatArtifactSearch(ctx context.Context, locale string, item protocol.Artifact, query string, matches []protocol.ArtifactMatch, reporter *progress.Reporter) string {
+	_ = ctx
+	_ = reporter
 	if item.ArtifactID == "" {
 		return s.msg(locale, "artifact_none", nil)
 	}
 	if len(matches) == 0 {
 		return s.msg(locale, "artifact_search_none", map[string]string{"artifact_id": item.ArtifactID, "query": query})
-	}
-	if s.shouldUseDetailAgentForArtifact(ctx, item) && s.detailer != nil && s.detailer.Enabled() {
-		reporter.Step(ctx, "这份大详情我先交给辅助分析器解释命中的线索。")
-		raw := s.renderArtifactSearchMatches(locale, item, query, matches)
-		report, err := s.detailer.SummarizeSearch(ctx, item, query, raw)
-		if err == nil && strings.TrimSpace(report.Summary) != "" {
-			return formatDetailAgentReport(item, report, "search")
-		}
 	}
 	return s.renderArtifactSearchMatches(locale, item, query, matches)
 }
@@ -2961,26 +3116,84 @@ func (s *Service) formatArtifactSearch(ctx context.Context, locale string, item 
 func (s *Service) renderArtifactSearchMatches(locale string, item protocol.Artifact, query string, matches []protocol.ArtifactMatch) string {
 	lines := []string{s.msg(locale, "artifact_search_head", map[string]string{"artifact_id": item.ArtifactID, "query": query})}
 	for _, match := range matches {
-		lines = append(lines, s.msg(locale, "artifact_search_line", map[string]string{"line": fmt.Sprintf("%d", match.Line), "snippet": match.Snippet}))
+		prefix := fmt.Sprintf("- line=%d", match.Line)
+		if match.Path != "" {
+			prefix += " path=" + match.Path
+		}
+		if match.StartLine > 0 && match.EndLine >= match.StartLine {
+			prefix += fmt.Sprintf(" window=%d-%d", match.StartLine, match.EndLine)
+		}
+		lines = append(lines, prefix)
+		lines = append(lines, match.Snippet)
 	}
 	return strings.Join(lines, "\n")
 }
 
 func (s *Service) formatArtifactRead(ctx context.Context, locale string, item protocol.Artifact, startLine int, lineCount int, chunk string, reporter *progress.Reporter) string {
+	_ = ctx
+	_ = reporter
 	if item.ArtifactID == "" {
 		return s.msg(locale, "artifact_none", nil)
 	}
 	if strings.TrimSpace(chunk) == "" {
 		return s.msg(locale, "artifact_read_none", map[string]string{"artifact_id": item.ArtifactID})
 	}
-	if s.shouldUseDetailAgentForArtifact(ctx, item) && s.detailer != nil && s.detailer.Enabled() {
-		reporter.Step(ctx, "这份大详情我先交给辅助分析器解释当前片段。")
-		report, err := s.detailer.SummarizeRead(ctx, item, startLine, lineCount, chunk)
-		if err == nil && strings.TrimSpace(report.Summary) != "" {
-			return formatDetailAgentReport(item, report, "read")
+	return s.msg(locale, "artifact_read_head", map[string]string{"artifact_id": item.ArtifactID}) + fmt.Sprintf("\n范围=%d-%d\n", startLine, startLine+maxInt(0, lineCount-1)) + chunk
+}
+
+func (s *Service) formatArtifactOutline(locale string, item protocol.Artifact, outline artifact.Outline) string {
+	if item.ArtifactID == "" {
+		return s.msg(locale, "artifact_none", nil)
+	}
+	lines := []string{fmt.Sprintf("artifact %s 概览：kind=%s title=%s lines=%d bytes=%d", item.ArtifactID, item.Kind, item.Title, outline.TotalLines, outline.TotalBytes)}
+	if len(outline.TopLevelKeys) > 0 {
+		lines = append(lines, "顶层字段："+strings.Join(outline.TopLevelKeys, ", "))
+	}
+	if len(outline.Arrays) > 0 {
+		lines = append(lines, "主要数组：")
+		for _, block := range outline.Arrays {
+			line := fmt.Sprintf("- %s count=%d", block.Path, block.Count)
+			if len(block.Fields) > 0 {
+				line += " fields=" + strings.Join(block.Fields, ", ")
+			}
+			lines = append(lines, line)
 		}
 	}
-	return s.msg(locale, "artifact_read_head", map[string]string{"artifact_id": item.ArtifactID}) + "\n" + chunk
+	if len(outline.SignalPaths) > 0 {
+		lines = append(lines, "高价值字段："+strings.Join(outline.SignalPaths, ", "))
+	}
+	if len(outline.SampleFields) > 0 {
+		lines = append(lines, "字段样本："+strings.Join(outline.SampleFields, ", "))
+	}
+	lines = append(lines, "建议：先用 artifact_search 查 IOC、进程名、命令行、计划任务、服务、注册表、网络线索；命中后再用 artifact_read 看上下文。")
+	return strings.Join(lines, "\n")
+}
+
+func (s *Service) renderArtifactIntro(kind string, item protocol.Artifact, outline artifact.Outline, query string) string {
+	lines := []string{
+		fmt.Sprintf("这条 %s 详情比较大，我先把原始结果保留成 artifact 方便继续调查。", kind),
+		fmt.Sprintf("artifact_id=%s kind=%s title=%s", item.ArtifactID, item.Kind, item.Title),
+	}
+	if len(outline.TopLevelKeys) > 0 {
+		lines = append(lines, "顶层字段："+strings.Join(outline.TopLevelKeys, ", "))
+	}
+	if len(outline.Arrays) > 0 {
+		parts := make([]string, 0, len(outline.Arrays))
+		for _, block := range outline.Arrays {
+			parts = append(parts, fmt.Sprintf("%s(%d)", block.Path, block.Count))
+		}
+		lines = append(lines, "主要数组："+strings.Join(parts, ", "))
+	}
+	if len(outline.SignalPaths) > 0 {
+		lines = append(lines, "高价值字段："+strings.Join(outline.SignalPaths, ", "))
+	}
+	query = strings.TrimSpace(query)
+	if query != "" {
+		lines = append(lines, fmt.Sprintf("建议下一步：先围绕“%s”做 artifact_search，命中后再 artifact_read 展开上下文。", query))
+	} else {
+		lines = append(lines, "建议下一步：先看 artifact_outline，再按 IOC、进程名、命令行、计划任务、服务、注册表、网络这些关键词做 artifact_search。")
+	}
+	return strings.Join(lines, "\n")
 }
 
 func formatDetailAgentReport(item protocol.Artifact, report detailagent.Report, mode string) string {

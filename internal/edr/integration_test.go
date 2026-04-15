@@ -498,8 +498,8 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		// 		incident_id: da091e368911485fa7e5218cb089fd76-20260210015130
 		// client_id: da091e368911485fa7e5218cb089fd76
 		result, err := client.ViewIncident(ctx, IncidentViewRequest{
-			IncidentID: "da091e368911485fa7e5218cb089fd76-20260210015130",
-			ClientID:   "da091e368911485fa7e5218cb089fd76",
+			IncidentID: "252a752b41974393b586d188696af8a3-2025111920",
+			ClientID:   "252a752b41974393b586d188696af8a3",
 		})
 		// t.Logf("incident_view result %+v", result)
 		if err != nil {

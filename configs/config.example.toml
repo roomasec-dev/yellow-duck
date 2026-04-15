@@ -85,7 +85,7 @@ max_tool_updates = 4
 [detail_agent]
 enabled = true
 model = "deepseek/deepseek-chat"
-direct_max_bytes = 12288
+direct_max_bytes = 30000
 max_input_bytes = 65536
 
 [scheduler]

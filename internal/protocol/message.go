@@ -5,7 +5,7 @@ import "time"
 type Channel string
 
 const (
-	ChannelFeishu  Channel = "feishu"
+	ChannelFeishu   Channel = "feishu"
 	ChannelDingtalk Channel = "dingtalk"
 )
 
@@ -65,8 +65,11 @@ type Artifact struct {
 }
 
 type ArtifactMatch struct {
-	Line    int
-	Snippet string
+	Line      int
+	StartLine int
+	EndLine   int
+	Path      string
+	Snippet   string
 }
 
 type ScheduledTask struct {
