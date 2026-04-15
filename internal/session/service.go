@@ -379,6 +379,14 @@ func (s *Service) handlePlannedTools(ctx context.Context, sessionKey string, tex
 	if reporter != nil && strings.TrimSpace(plan.PlanPreview) != "" {
 		reporter.Stage(ctx, plan.Phase, "调查计划："+plan.PlanPreview)
 	}
+	if plan.NeedClarification && strings.TrimSpace(plan.ClarifyingQuestion) != "" {
+		question := strings.TrimSpace(plan.ClarifyingQuestion)
+		stored, err := s.storeAssistantReply(ctx, sessionKey, question)
+		if err != nil {
+			return "", true, err
+		}
+		return stored, true, nil
+	}
 	if len(plan.ToolCalls) == 0 {
 		if plan.DirectReply == "" {
 			return "", false, nil
@@ -718,12 +726,8 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 	var allToolResults []string
 	currentCalls := plan.ToolCalls
 	finalDirectReply := ""
-	seenSignatures := make(map[string]int)
 	hasGroundedEDRTool := false
-	taskMode := plan.TaskMode
-	phase := plan.Phase
-	maxRounds := maxRoundsForTaskMode(taskMode)
-	artifactDeepDiveRounds := 0
+	controller := newTaskController(userText, plan)
 	rounds := 0
 
 	for {
@@ -731,19 +735,20 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 			return "", err
 		}
 		rounds++
-		if rounds > maxRounds {
-			s.logger.Info("tool chain stopped by task budget", "session_key", sessionKey, "task_mode", taskMode, "rounds", rounds, "max_rounds", maxRounds)
+		if controller.ShouldStopByBudget(rounds) {
+			s.logger.Info("tool chain stopped by task budget", "session_key", sessionKey, "task_mode", controller.taskMode, "rounds", rounds, "max_rounds", controller.maxRounds)
 			reporter.Stage(ctx, "answer", "我已经拿到足够线索，先收口整理结论；如果你要更深挖，我再继续。")
 			break
 		}
 		signature := toolCallsSignature(currentCalls)
-		seenSignatures[signature]++
-		if seenSignatures[signature] > 3 {
-			s.logger.Warn("tool chain stopped by repeated signature", "session_key", sessionKey, "signature", signature, "count", seenSignatures[signature])
+		count := controller.CountSignature(signature)
+		if count > 3 {
+			s.logger.Warn("tool chain stopped by repeated signature", "session_key", sessionKey, "signature", signature, "count", count)
 			reporter.Step(ctx, "我发现后续步骤开始重复了，先基于已拿到的真实结果整理结论。")
 			break
 		}
 		s.logger.Info("execute tool round", "session_key", sessionKey, "tool_count", len(currentCalls))
+		controller.ObserveRound(currentCalls)
 		stepResults, earlyReply, err := s.executeToolBatch(ctx, sessionKey, locale, currentCalls, reporter)
 		if err != nil {
 			return "", err
@@ -759,11 +764,6 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 				hasGroundedEDRTool = true
 				break
 			}
-		}
-		if allArtifactExplorationCalls(currentCalls) {
-			artifactDeepDiveRounds++
-		} else {
-			artifactDeepDiveRounds = 0
 		}
 
 		toolContext := strings.Join(allToolResults, "\n\n")
@@ -784,25 +784,25 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 			s.logger.Warn("follow-up planner failed", "error", err)
 			break
 		}
-		if strings.TrimSpace(nextPlan.TaskMode) != "" {
-			taskMode = nextPlan.TaskMode
-			maxRounds = maxRoundsForTaskMode(taskMode)
-		}
-		if strings.TrimSpace(nextPlan.Phase) != "" {
-			phase = nextPlan.Phase
-		}
-		if shouldStopAutoThreatPagination(userText, currentCalls, nextPlan.ToolCalls) {
-			s.logger.Info("stop automatic threat pagination", "session_key", sessionKey)
-			reporter.Stage(ctx, "answer", "我先按这一页给你概览，不继续自动翻页；你要更多我再往后看。")
+		controller.AdoptPlan(nextPlan)
+		if nextPlan.NeedClarification && strings.TrimSpace(nextPlan.ClarifyingQuestion) != "" {
+			finalDirectReply = strings.TrimSpace(nextPlan.ClarifyingQuestion)
+			s.logger.Info("tool chain asks clarification", "session_key", sessionKey, "question", shortResult(finalDirectReply))
 			break
 		}
-		if shouldStopArtifactOverexploration(taskMode, artifactDeepDiveRounds, currentCalls, nextPlan.ToolCalls) {
-			s.logger.Info("stop artifact overexploration", "session_key", sessionKey, "task_mode", taskMode, "artifact_rounds", artifactDeepDiveRounds)
+		if controller.ShouldStopArtifact(currentCalls, nextPlan.ToolCalls) {
+			s.logger.Info("stop artifact overexploration", "session_key", sessionKey, "task_mode", controller.taskMode, "artifact_rounds", controller.artifactRounds)
 			reporter.Stage(ctx, "answer", "这条高危事件的关键证据已经够了，我先把原因和风险点给你讲清楚。")
 			break
 		}
+		if adjustedCalls, note := controller.AdjustNextCalls(currentCalls, nextPlan); adjustedCalls != nil {
+			nextPlan.ToolCalls = adjustedCalls
+			if strings.TrimSpace(note) != "" {
+				reporter.Stage(ctx, controller.phase, note)
+			}
+		}
 		if reporter != nil && strings.TrimSpace(nextPlan.PlanPreview) != "" {
-			reporter.Stage(ctx, phase, "下一步计划："+nextPlan.PlanPreview)
+			reporter.Stage(ctx, controller.phase, "下一步计划："+nextPlan.PlanPreview)
 		}
 		if len(nextPlan.ToolCalls) == 0 {
 			finalDirectReply = nextPlan.DirectReply
@@ -848,7 +848,7 @@ func maxRoundsForTaskMode(taskMode string) int {
 	case "drill_down":
 		return 5
 	case "exhaustive":
-		return 8
+		return 10
 	case "action":
 		return 3
 	default:
@@ -868,16 +868,6 @@ func allArtifactExplorationCalls(calls []planner.ToolCall) bool {
 		}
 	}
 	return true
-}
-
-func shouldStopArtifactOverexploration(taskMode string, artifactRounds int, currentCalls []planner.ToolCall, nextCalls []planner.ToolCall) bool {
-	if taskMode == "exhaustive" || artifactRounds < 3 || len(nextCalls) == 0 {
-		return false
-	}
-	if !allArtifactExplorationCalls(currentCalls) || !allArtifactExplorationCalls(nextCalls) {
-		return false
-	}
-	return samePrimaryArtifact(currentCalls, nextCalls)
 }
 
 func samePrimaryArtifact(currentCalls []planner.ToolCall, nextCalls []planner.ToolCall) bool {
@@ -967,31 +957,6 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 	return strings.Join(parts, "||")
 }
 
-func shouldStopAutoThreatPagination(userText string, currentCalls []planner.ToolCall, nextCalls []planner.ToolCall) bool {
-	if userExplicitlyRequestsPagination(userText) || len(currentCalls) == 0 || len(nextCalls) == 0 {
-		return false
-	}
-	if !allThreatListCalls(nextCalls) {
-		return false
-	}
-	for _, next := range nextCalls {
-		matched := false
-		for _, current := range currentCalls {
-			if !sameThreatListQuery(next, current) {
-				continue
-			}
-			if positiveOr(next.Page, 1) > positiveOr(current.Page, 1) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
-	}
-	return true
-}
-
 func allThreatListCalls(calls []planner.ToolCall) bool {
 	for _, call := range calls {
 		if call.Name != "edr_incidents" && call.Name != "edr_detections" {
@@ -1014,20 +979,6 @@ func sameThreatListQuery(a planner.ToolCall, b planner.ToolCall) bool {
 		strings.TrimSpace(a.FilterOp) == strings.TrimSpace(b.FilterOp) &&
 		strings.TrimSpace(a.FilterValue) == strings.TrimSpace(b.FilterValue) &&
 		strings.TrimSpace(a.IncidentID) == strings.TrimSpace(b.IncidentID)
-}
-
-func userExplicitlyRequestsPagination(text string) bool {
-	plain := strings.TrimSpace(strings.ToLower(text))
-	if plain == "" {
-		return false
-	}
-	keywords := []string{"下一页", "下页", "翻页", "继续翻", "继续看更多", "更多", "全部", "全都", "所有", "第2页", "第二页", "第3页", "第三页", "page", "更多威胁", "更多风险", "更多事件", "更多检出"}
-	for _, keyword := range keywords {
-		if strings.Contains(plain, strings.ToLower(keyword)) {
-			return true
-		}
-	}
-	return false
 }
 
 func toolCallCacheKey(call planner.ToolCall) string {

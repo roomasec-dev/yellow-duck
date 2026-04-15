@@ -93,11 +93,15 @@ type ToolCall struct {
 }
 
 type Plan struct {
-	TaskMode    string     `json:"task_mode"`
-	Phase       string     `json:"phase"`
-	PlanPreview string     `json:"plan_preview"`
-	DirectReply string     `json:"direct_reply"`
-	ToolCalls   []ToolCall `json:"tool_calls"`
+	TaskMode           string     `json:"task_mode"`
+	Phase              string     `json:"phase"`
+	IntentSummary      string     `json:"intent_summary"`
+	DoneWhen           string     `json:"done_when"`
+	NeedClarification  bool       `json:"need_clarification"`
+	ClarifyingQuestion string     `json:"clarifying_question"`
+	PlanPreview        string     `json:"plan_preview"`
+	DirectReply        string     `json:"direct_reply"`
+	ToolCalls          []ToolCall `json:"tool_calls"`
 }
 
 type Service struct {
@@ -223,9 +227,15 @@ func (s *Service) BuildPlan(ctx context.Context, modelRef string, userText strin
 	}
 	plan.TaskMode = normalizeTaskMode(plan.TaskMode, userText)
 	plan.Phase = normalizePhase(plan.Phase, plan.ToolCalls, plan.DirectReply)
+	plan.IntentSummary = strings.TrimSpace(plan.IntentSummary)
+	plan.DoneWhen = strings.TrimSpace(plan.DoneWhen)
+	plan.ClarifyingQuestion = strings.TrimSpace(plan.ClarifyingQuestion)
+	if plan.NeedClarification && plan.ClarifyingQuestion == "" {
+		plan.NeedClarification = false
+	}
 	plan.PlanPreview = strings.TrimSpace(plan.PlanPreview)
 	plan.DirectReply = strings.TrimSpace(plan.DirectReply)
-	s.logger.Info("planner parsed", "tool_count", len(plan.ToolCalls), "task_mode", plan.TaskMode, "phase", plan.Phase, "direct_reply_preview", preview(plan.DirectReply))
+	s.logger.Info("planner parsed", "tool_count", len(plan.ToolCalls), "task_mode", plan.TaskMode, "phase", plan.Phase, "intent", preview(plan.IntentSummary), "direct_reply_preview", preview(plan.DirectReply))
 	return plan, nil
 }
 
@@ -237,7 +247,7 @@ func normalizeTaskMode(mode string, userText string) string {
 	}
 	text := strings.ToLower(strings.TrimSpace(userText))
 	switch {
-	case strings.Contains(text, "全部") || strings.Contains(text, "所有") || strings.Contains(text, "全量") || strings.Contains(text, "每一") || strings.Contains(text, "翻页"):
+	case containsAny(text, "全部", "所有", "全量", "每一", "翻页", "多看几页", "再看几页", "多翻几页", "继续往后", "往后翻", "继续看更多"):
 		return "exhaustive"
 	case strings.Contains(text, "详细") || strings.Contains(text, "原因") || strings.Contains(text, "为什么") || strings.Contains(text, "深挖"):
 		if strings.Contains(text, "有什么") || strings.Contains(text, "哪些") || strings.Contains(text, "最近") {
@@ -256,21 +266,48 @@ func normalizeTaskMode(mode string, userText string) string {
 func normalizePhase(phase string, calls []ToolCall, directReply string) string {
 	phase = strings.ToLower(strings.TrimSpace(phase))
 	switch phase {
-	case "overview", "pick_target", "drill_down", "answer":
+	case "overview", "scan_pages", "collect_candidates", "pick_target", "compare_candidates", "hypothesis_check", "drill_down", "answer":
 		return phase
 	}
 	if strings.TrimSpace(directReply) != "" && len(calls) == 0 {
 		return "answer"
 	}
+	if allThreatListToolCalls(calls) {
+		for _, call := range calls {
+			if positiveOr(call.Page, 1) > 1 {
+				return "scan_pages"
+			}
+		}
+		return "overview"
+	}
 	for _, call := range calls {
 		switch call.Name {
-		case "edr_incidents", "edr_detections", "edr_logs", "edr_event_log_alarms":
-			return "overview"
 		case "edr_incident_view", "edr_detection_view", "artifact_outline", "artifact_search", "artifact_read":
 			return "drill_down"
 		}
 	}
 	return "overview"
+}
+
+func allThreatListToolCalls(calls []ToolCall) bool {
+	if len(calls) == 0 {
+		return false
+	}
+	for _, call := range calls {
+		switch call.Name {
+		case "edr_incidents", "edr_detections", "edr_logs", "edr_event_log_alarms":
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func positiveOr(value int, fallback int) int {
+	if value > 0 {
+		return value
+	}
+	return fallback
 }
 
 func buildPlannerUserInput(userText string, toolContext string, summary string, turnText string) string {
@@ -279,6 +316,9 @@ func buildPlannerUserInput(userText string, toolContext string, summary string, 
 	summary = strings.TrimSpace(summary)
 	turnText = strings.TrimSpace(turnText)
 	parts := []string{"用户原始问题:\n" + userText}
+	if card := buildTaskFocusCard(userText, toolContext); card != "" {
+		parts = append(parts, "当前任务卡片（优先级高于历史上下文）：\n"+card)
+	}
 	if summary != "" {
 		parts = append(parts, "会话摘要:\n"+summary)
 	}
@@ -288,9 +328,113 @@ func buildPlannerUserInput(userText string, toolContext string, summary string, 
 	if toolContext != "" {
 		parts = append(parts, "已经拿到的真实工具结果:\n"+toolContext)
 	}
-	parts = append(parts, "请基于这些上下文决定是否还需要继续调用工具。如果用户说“再来一次”“再试一次”“继续”“retry”“again”，优先把它理解为对上一轮相关工具链的延续，而不是重新开始一个泛化回答。")
-	parts = append(parts, "如果已经拿到 artifact 或较大的真实结果，默认先继续做浏览、搜索、局部阅读，再决定是否可以收口。只有用户明确要快速总结，或者已经拿到足够证据时，才直接收口。")
+	parts = append(parts, "请先对齐当前任务目标，再决定是否还需要继续调用工具。如果用户说“再来一次”“再试一次”“继续”“retry”“again”，优先把它理解为对上一轮相关工具链的延续，而不是重新开始一个泛化回答。")
+	parts = append(parts, "如果当前任务目标不明确且存在会导致不同工具路线的分叉，可以返回 need_clarification=true 并问一个简短问题；如果能合理推断，就不要问，直接行动并在 intent_summary 里写明你的理解。")
+	parts = append(parts, "如果已经拿到 artifact 或较大的真实结果，默认先继续做有限的浏览、搜索、局部阅读，再决定是否可以收口。只有用户明确要快速总结，或者已经拿到足够证据时，才直接收口。")
 	return strings.Join(parts, "\n\n")
+}
+
+func buildTaskFocusCard(userText string, toolContext string) string {
+	plain := strings.ToLower(strings.TrimSpace(userText))
+	if plain == "" {
+		return ""
+	}
+	var lines []string
+	lines = append(lines, "- 当前目标："+inferGoal(userText))
+	lines = append(lines, "- 建议完成标准："+inferDoneWhen(userText))
+	if focus := inferFocus(userText); focus != "" {
+		lines = append(lines, "- 用户关注点："+focus)
+	}
+	if phase := inferPreferredPhase(userText, toolContext); phase != "" {
+		lines = append(lines, "- 建议阶段："+phase)
+	}
+	if ambiguity := inferAmbiguity(userText); ambiguity != "" {
+		lines = append(lines, "- 潜在分叉："+ambiguity)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func inferGoal(userText string) string {
+	plain := strings.ToLower(strings.TrimSpace(userText))
+	switch {
+	case containsAny(plaintoChineseFriendly(plain), "多看几页", "再看几页", "往后", "继续看", "更多"):
+		return "继续探索更多结果，先扩大候选范围，再决定是否深入某一条"
+	case containsAny(plain, "全部", "所有", "全量", "每一"):
+		return "尽量完整地排查和列出结果"
+	case containsAny(plaintoChineseFriendly(plain), "原因", "为什么", "详细", "深挖"):
+		return "围绕重点对象查清原因并给出判断"
+	case containsAny(plaintoChineseFriendly(plain), "有什么", "哪些", "概览", "最近"):
+		return "快速了解当前风险概况并挑出重点"
+	default:
+		return "理解用户当前问题并选择最直接的安全调查动作"
+	}
+}
+
+func inferDoneWhen(userText string) string {
+	plain := strings.ToLower(strings.TrimSpace(userText))
+	switch {
+	case containsAny(plaintoChineseFriendly(plain), "多看几页", "再看几页", "往后", "继续看", "更多"):
+		return "已经扫过若干页、找到有代表性的候选，或连续结果没有明显新增时收口"
+	case containsAny(plain, "全部", "所有", "全量", "每一"):
+		return "达到合理页数/时间预算后给出完整度说明和未覆盖范围"
+	case containsAny(plaintoChineseFriendly(plain), "原因", "为什么", "详细", "深挖"):
+		return "拿到主体、关键行为、风险判断和 2-3 条证据后收口"
+	case containsAny(plaintoChineseFriendly(plain), "有什么", "哪些", "概览", "最近"):
+		return "基于当前页或当前结果给出概览和最值得关注的条目"
+	default:
+		return "足以直接回答用户当前问题，且继续查不会明显改变结论"
+	}
+}
+
+func inferFocus(userText string) string {
+	plain := strings.ToLower(strings.TrimSpace(userText))
+	var items []string
+	if containsAny(plaintoChineseFriendly(plain), "其他", "别的", "不同") {
+		items = append(items, "用户想看不同于当前主线的对象或类型")
+	}
+	if containsAny(plaintoChineseFriendly(plain), "主机", "机器", "终端", "host") {
+		items = append(items, "主机/终端维度")
+	}
+	if containsAny(plaintoChineseFriendly(plain), "事件", "incident", "告警") {
+		items = append(items, "事件/告警维度")
+	}
+	if containsAny(plaintoChineseFriendly(plain), "风险", "检测", "检出", "detection") {
+		items = append(items, "风险/检测维度")
+	}
+	return strings.Join(items, "；")
+}
+
+func inferPreferredPhase(userText string, toolContext string) string {
+	plain := strings.ToLower(strings.TrimSpace(userText))
+	switch {
+	case containsAny(plaintoChineseFriendly(plain), "多看几页", "再看几页", "往后", "继续看", "更多"):
+		return "scan_pages/collect_candidates：先扩大观察范围，不要过早钻单条详情"
+	case strings.TrimSpace(toolContext) != "" && containsAny(plaintoChineseFriendly(plain), "这条", "详细", "原因", "为什么"):
+		return "drill_down：围绕已选对象查关键证据"
+	default:
+		return "按当前目标选择 overview、scan_pages、drill_down 或 answer"
+	}
+}
+
+func inferAmbiguity(userText string) string {
+	plain := strings.ToLower(strings.TrimSpace(userText))
+	if containsAny(plaintoChineseFriendly(plain), "看看", "处理一下", "弄一下") && !containsAny(plaintoChineseFriendly(plain), "事件", "风险", "日志", "主机", "详情", "原因", "全部", "更多") {
+		return "用户目标可能过宽；如果无法从历史上下文推断，需要简短确认目标"
+	}
+	return ""
+}
+
+func plaintoChineseFriendly(text string) string {
+	return strings.ToLower(strings.TrimSpace(text))
+}
+
+func containsAny(text string, keywords ...string) bool {
+	for _, keyword := range keywords {
+		if keyword != "" && strings.Contains(text, strings.ToLower(keyword)) {
+			return true
+		}
+	}
+	return false
 }
 
 func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protocol.Artifact) string {
@@ -298,8 +442,11 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"可用工具：current_time, edr_hosts, edr_incidents, edr_detections, edr_event_log_alarms, edr_logs, edr_incident_view, edr_detection_view, edr_isolate, edr_release, edr_iocs, edr_ioc_add, edr_ioc_update, edr_ioc_delete, edr_isolate_files, edr_release_isolate_files, edr_tasks, edr_task_result, edr_send_instruction, edr_plan_list, edr_plan_task, edr_virus_by_host, edr_virus_by_hash, edr_virus_hash_hosts, edr_plan_add, edr_plan_edit, edr_plan_cancel, edr_ioas, edr_ioa_audit_log, edr_ioa_networks, edr_strategies, edr_strategy_single, edr_strategy_state, edr_host_offline, edr_host_offline_save, edr_add_host_blacklist, edr_remove_host, edr_batch_deal_incident, edr_incident_r2_summary, edr_instruction_policy_list, edr_instruction_policy_update, edr_instruction_policy_save_status, edr_instruction_policy_delete, edr_instruction_policy_sort, edr_instruction_policy_add, artifact_outline, artifact_search, artifact_read, memory_upsert, memory_delete, scheduled_task_create, scheduled_task_list, scheduled_task_update, scheduled_task_delete, scheduled_task_feedback, knowledge_base_search, knowledge_base_write, knowledge_base_delete。\n" +
 		"edr_isolate / edr_release / edr_ioc_add / edr_ioc_update / edr_ioc_delete / edr_delete_isolate_files / edr_release_isolate_files / edr_send_instruction / edr_plan_add / edr_plan_edit / edr_plan_cancel / edr_ioa_add / edr_ioa_update / edr_ioa_delete / edr_ioa_network_add / edr_ioa_network_update / edr_ioa_network_delete / edr_strategy_create / edr_strategy_update / edr_strategy_delete / edr_strategy_status / edr_host_offline_save / edr_add_host_blacklist / edr_remove_host / edr_batch_deal_incident / edr_instruction_policy_update / edr_instruction_policy_save_status / edr_instruction_policy_delete / edr_instruction_policy_sort / edr_instruction_policy_add 属于 critical=true。\n" +
 		"优先原则：\n" +
-		"0. 先给本轮任务定性：task_mode 只能是 overview、overview_drilldown、drill_down、exhaustive、action、general；phase 只能是 overview、pick_target、drill_down、answer。\n" +
+		"0. 先给本轮任务定性：task_mode 只能是 overview、overview_drilldown、drill_down、exhaustive、action、general；phase 只能是 overview、scan_pages、collect_candidates、pick_target、compare_candidates、hypothesis_check、drill_down、answer。\n" +
+		"0.0 在决定工具之前，先用 intent_summary 用一句中文写出你对用户当前目标的理解，再用 done_when 写出什么情况下算完成。\n" +
+		"0.0.1 如果用户当前目标存在明显分叉，且不同理解会导致完全不同的工具路线，可以返回 need_clarification=true 和 clarifying_question；问题必须简短、只问一个点、能直接帮助对齐目标。能推断时不要问。\n" +
 		"0.1 overview=快速看整体，不默认穷尽；overview_drilldown=先概览，再只挑最危险/最相关的 1 条做有限深挖；drill_down=围绕单个目标深挖；exhaustive=用户明确要全量/所有/继续翻页时才使用；action=给处置建议或执行动作；general=其他。\n" +
+		"0.1.1 如果用户明显想扩大观察范围（如继续看更多、多看几页、看看别的/其他），优先进入 scan_pages 或 collect_candidates，不要太早跳去单条详情。\n" +
 		"0.2 你必须有完成意识：如果已经能回答用户问题，phase=answer、tool_calls=[]，直接给 direct_reply；不要因为还能搜就继续搜。\n" +
 		"0.3 对安全调查，足够回答通常意味着已经拿到主体、风险名称/类型、关键行为或证据、下一步建议；不追求完美穷尽。\n" +
 		"1. 如果用户在问当前时间、现在几点、today/now/current time，就优先规划 current_time。\n" +
@@ -321,7 +468,7 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"4. 如果用户给了 detection_id 和 client_id，要查看风险详情，就优先规划 edr_detection_view；如果有 view_type 和 process_uuid 也一起带上。\n" +
 		"4.1 incident_id / detection_id 只能使用用户明确提供或真实工具结果里已经出现过的值，绝对不要根据 host_name、incident_name、时间、样例或自然语言自行拼接猜测。\n" +
 		"4.2 如果缺少真实 incident_id / detection_id，就先继续查列表或返回 direct_reply 说明还不能安全调用详情工具。\n" +
-		"5. 如果用户在追问刚才那条超大 incident/detection 详情，优先先规划 artifact_outline 看结构，再规划 artifact_search；需要看一段连续原文时再规划 artifact_read。\n" +
+		"5. 如果用户在追问刚才那条超大 incident/detection 详情，优先先规划 artifact_outline 看结构，再规划 artifact_search；需要看一段连续原文时再规划 artifact_read。只有已经完成候选筛选后，才进入这类深挖。\n" +
 		"6. 对 artifact 调查，默认流程是 outline -> search -> read -> answer，但最多做有限探索。拿到 2-3 个能解释原因的关键证据后必须收口，不要反复换说法继续查同一件事。\n" +
 		"7. artifact_outline 需要 artifact_id；artifact_search 需要 query；artifact_read 需要 artifact_id，可选 start_line 和 line_count。artifact_read 的 start_line 尽量跟随前一轮搜索命中的 line/window。\n" +
 		"8. 如果用户提供了稳定的长期偏好、资产映射、身份信息、主机别名、工作偏好，可以规划 memory_upsert。\n" +
@@ -344,7 +491,7 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"20.1 如果用户在修改查杀设置、修改扫描策略、修改扫描配置（查杀范围、启动模式、压缩包限制、CPU避让、实时防护文件大小等），优先规划 edr_strategy_update，需要填 rid 和需要修改的字段（scan_file_scope、startup_scan_mode、archive_size_limit_enabled、archive_size_limit、realtime_mem_cache_tech_enabled、dynamic_cpu_monitor_enabled、dynamic_cpu_high_percent、stop_realtime_on_cpu_high_enabled、stop_realtime_cpu_high_percent、owl_on_realtime_enabled、realtime_scan_archive_enabled、runtime_max_file_size_mb、custom_max_file_size_mb 等）。\n" +
 		"21. 无论是否调用工具，都额外给一个面向用户的简短 plan_preview，说明你准备怎么查或为什么准备收口，限制在 18 到 40 个字，不能泄露内部术语。\n" +
 		"22. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
-		"只输出 JSON，不要 markdown。结构：{\"task_mode\":\"overview\",\"phase\":\"overview\",\"plan_preview\":\"\",\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"instruction_name\":\"\",\"path\":\"\",\"time\":0,\"pid\":0,\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"status\":0,\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"ioc_description\":\"\",\"ioc_expiration_date\":\"\",\"ioc_file_name\":\"\",\"ioc_host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false,\"type\":\"\"}]}"
+		"只输出 JSON，不要 markdown。结构：{\"task_mode\":\"overview\",\"phase\":\"overview\",\"intent_summary\":\"\",\"done_when\":\"\",\"need_clarification\":false,\"clarifying_question\":\"\",\"plan_preview\":\"\",\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"instruction_name\":\"\",\"path\":\"\",\"time\":0,\"pid\":0,\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"status\":0,\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"ioc_description\":\"\",\"ioc_expiration_date\":\"\",\"ioc_file_name\":\"\",\"ioc_host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false,\"type\":\"\"}]}"
 	if memoryText != "" {
 		base += "\n\n当前已有记忆：\n" + memoryText
 	}

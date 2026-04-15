@@ -28,6 +28,7 @@ type Reporter struct {
 	service       *Service
 	sink          Sink
 	session       protocol.SessionRef
+	startedAt     time.Time
 	sent          int
 	toolSent      int
 	lastSent      time.Time
@@ -37,6 +38,12 @@ type Reporter struct {
 	lastStageSent time.Time
 }
 
+const (
+	initialSilenceWindow = 6 * time.Second
+	minVisibleGap        = 12 * time.Second
+	heartbeatInterval    = 22 * time.Second
+)
+
 func NewService(cfg config.ProgressConfig, modelClient model.Client, promptService *prompt.Service, logger *logx.Logger) *Service {
 	return &Service{cfg: cfg, model: modelClient, prompt: promptService, logger: logger}
 }
@@ -45,11 +52,14 @@ func (s *Service) NewReporter(session protocol.SessionRef, sink Sink) *Reporter 
 	if sink == nil {
 		return nil
 	}
-	return &Reporter{service: s, sink: sink, session: session}
+	return &Reporter{service: s, sink: sink, session: session, startedAt: time.Now()}
 }
 
 func (r *Reporter) Step(ctx context.Context, detail string) {
 	if r == nil || r.service == nil || r.sink == nil || !r.service.cfg.Enabled {
+		return
+	}
+	if !r.shouldEmit(false) {
 		return
 	}
 	if r.sent >= r.service.cfg.MaxUpdates && time.Since(r.lastSent) < 15*time.Second {
@@ -74,7 +84,10 @@ func (r *Reporter) Stage(ctx context.Context, stage string, detail string) {
 		return
 	}
 	stage = normalizeStage(stage)
-	if stage != "" && stage == r.lastStage && time.Since(r.lastStageSent) < 20*time.Second {
+	if stage != "" && stage == r.lastStage && time.Since(r.lastStageSent) < heartbeatInterval {
+		return
+	}
+	if !r.shouldEmit(stage == "answer") {
 		return
 	}
 	if stage != "" {
@@ -86,25 +99,35 @@ func (r *Reporter) Stage(ctx context.Context, stage string, detail string) {
 
 func (r *Reporter) ToolStart(ctx context.Context, tool string, detail string) {
 	stage := toolStage(tool)
-	if stage != "" {
-		r.Stage(ctx, stage, detail)
+	if !r.shouldEmitHeartbeat(stage) {
 		return
 	}
-	r.Step(ctx, detail)
+	if stage != "" {
+		r.Stage(ctx, stage, heartbeatText(stage))
+		return
+	}
+	r.Step(ctx, "我还在继续处理，结果一出来我就直接告诉你。")
 }
 
 func (r *Reporter) ToolResult(ctx context.Context, tool string, result string) {
 	if r == nil || r.service == nil || r.sink == nil || !r.service.cfg.Enabled {
 		return
 	}
-	if stage := toolStage(tool); stage != "" && stage == r.lastToolStage && time.Since(r.lastSent) < 45*time.Second {
+	stage := toolStage(tool)
+	if !r.shouldEmitHeartbeat(stage) {
+		return
+	}
+	if stage != "" && stage == r.lastToolStage && time.Since(r.lastSent) < heartbeatInterval {
 		return
 	}
 	if r.toolSent >= r.service.cfg.MaxToolUpdates && time.Since(r.lastSent) < 15*time.Second {
 		return
 	}
 
-	text := r.service.renderToolResult(ctx, tool, result)
+	text := heartbeatText(stage)
+	if stage == "" {
+		text = "我还在继续查，结果对齐好后直接给你结论。"
+	}
 	if strings.TrimSpace(text) == "" || strings.TrimSpace(text) == strings.TrimSpace(r.lastText) {
 		return
 	}
@@ -115,13 +138,39 @@ func (r *Reporter) ToolResult(ctx context.Context, tool string, result string) {
 	r.toolSent++
 	r.lastSent = time.Now()
 	r.lastText = text
-	r.lastToolStage = toolStage(tool)
+	r.lastToolStage = stage
+}
+
+func (r *Reporter) shouldEmit(force bool) bool {
+	if r == nil {
+		return false
+	}
+	now := time.Now()
+	if force {
+		return r.lastSent.IsZero() || now.Sub(r.lastSent) >= minVisibleGap
+	}
+	if r.sent == 0 {
+		return now.Sub(r.startedAt) >= initialSilenceWindow
+	}
+	return now.Sub(r.lastSent) >= minVisibleGap
+}
+
+func (r *Reporter) shouldEmitHeartbeat(stage string) bool {
+	if stage == "answer" {
+		return r.shouldEmit(true)
+	}
+	if r.sent == 0 {
+		return time.Since(r.startedAt) >= heartbeatInterval
+	}
+	return time.Since(r.lastSent) >= heartbeatInterval
 }
 
 func normalizeStage(stage string) string {
 	stage = strings.ToLower(strings.TrimSpace(stage))
 	switch stage {
 	case "overview", "pick_target", "drill_down", "answer":
+		return stage
+	case "scan_pages", "collect_candidates", "compare_candidates", "hypothesis_check":
 		return stage
 	default:
 		return ""
@@ -138,6 +187,19 @@ func toolStage(tool string) string {
 		return "drill_down"
 	default:
 		return ""
+	}
+}
+
+func heartbeatText(stage string) string {
+	switch stage {
+	case "overview", "scan_pages", "collect_candidates", "compare_candidates":
+		return "我还在继续筛结果，找到真正值得看的会直接告诉你。"
+	case "pick_target", "drill_down", "hypothesis_check":
+		return "我还在看关键详情，理顺后直接给你结论。"
+	case "answer":
+		return "我已经整理得差不多了，马上给你结论。"
+	default:
+		return "我还在继续处理，结果一出来我就直接告诉你。"
 	}
 }
 
