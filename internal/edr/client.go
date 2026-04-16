@@ -94,6 +94,15 @@ type Client interface {
 	DeleteInstructionPolicy(ctx context.Context, rid string) (DeleteInstructionPolicyResponse, error)
 	SortInstructionPolicies(ctx context.Context, rids []string) error
 	AddInstructionPolicy(ctx context.Context, req AddInstructionPolicyRequest) (AddInstructionPolicyResponse, error)
+
+	// Verify Code
+	IsNeedVerifyCode(ctx context.Context, source string) (IsNeedVerifyCodeResponse, error)
+	SendVerifyCode(ctx context.Context, source string) error
+}
+
+type IsNeedVerifyCodeResponse struct {
+	IsNeedVerifyCode bool   `json:"is_need_verify_code"`
+	PhoneEmail       string `json:"phone_email"`
 }
 
 type OpenAPIClient struct {
@@ -327,10 +336,11 @@ type UpdateIOCRequest struct {
 type SendInstructionRequest struct {
 	ClientID        string       `json:"client_id"`
 	InstructionName string       `json:"instruction_name"`
-	IsOnline        int          `json:"is_online,omitempty"`    // for list_ps
-	IsBatch         int          `json:"is_batch,omitempty"`     // for get_suspicious_file
+	VerifyCode      string       `json:"verify_code,omitempty"` // 验证码，不需要校验时可传空
+	IsOnline        int          `json:"is_online,omitempty"`   // for list_ps
+	IsBatch         int          `json:"is_batch,omitempty"`    // for get_suspicious_file
 	BatchParams     []BatchParam `json:"batch_params,omitempty"` // for get_suspicious_file
-	Params          *Params      `json:"params,omitempty"`       // for quarantine_network
+	Params          *Params      `json:"params,omitempty"`      // for quarantine_network
 }
 
 type Params struct {
@@ -2082,6 +2092,7 @@ func (c *OpenAPIClient) sendInstruction(ctx context.Context, req SendInstruction
 	payload := map[string]any{
 		"client_id":        req.ClientID,
 		"instruction_name": req.InstructionName,
+		"verify_code":      req.VerifyCode,
 	}
 	if req.IsOnline != 0 {
 		payload["is_online"] = req.IsOnline
@@ -2137,6 +2148,34 @@ func (c *OpenAPIClient) sendInstruction(ctx context.Context, req SendInstruction
 		return InstructionResult{}, err
 	}
 	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) IsNeedVerifyCode(ctx context.Context, source string) (IsNeedVerifyCodeResponse, error) {
+	payload := map[string]any{
+		"source": source,
+	}
+	var envelope apiEnvelope[IsNeedVerifyCodeResponse]
+	if err := c.post(ctx, "/verify_code/is_need_verify", payload, &envelope); err != nil {
+		return IsNeedVerifyCodeResponse{}, err
+	}
+	if envelope.Error != 0 {
+		return IsNeedVerifyCodeResponse{}, fmt.Errorf("is_need_verify_code failed: error=%d %s", envelope.Error, envelope.Message)
+	}
+	return envelope.Data, nil
+}
+
+func (c *OpenAPIClient) SendVerifyCode(ctx context.Context, source string) error {
+	payload := map[string]any{
+		"source": source,
+	}
+	var envelope apiEnvelope[any]
+	if err := c.post(ctx, "/verify_code/send", payload, &envelope); err != nil {
+		return err
+	}
+	if envelope.Error != 0 {
+		return fmt.Errorf("send_verify_code failed: error=%d %s", envelope.Error, envelope.Message)
+	}
+	return nil
 }
 
 func (c *OpenAPIClient) post(ctx context.Context, path string, payload any, out any) error {

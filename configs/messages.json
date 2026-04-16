@@ -4,6 +4,7 @@
     "zh-CN": {
       "cancel_pending": "好，我先取消这次待确认操作了 🙂",
       "pending_high_risk": "这个动作风险比较高，我先不直接执行。你如果确认继续，回复“确认”就行 🙂\n\n待执行：{{summary}}",
+      "pending_verify_code": "这个 EDR 指令需要验证码才能执行。验证码已发送至：{{phone_email}}\n\n待执行：{{summary}}\n\n请回复收到的验证码",
       "write_action_hint": "我识别到你想执行 EDR 写操作，但当前默认不自动执行高危动作。你可以直接发：\n- /edr isolate <client_id>\n- /edr release <client_id>",
       "commands_help": "支持的命令：/edr hosts <hostname>、/edr isolate <client_id>、/edr release <client_id>、/edr incidents [client_id] [page] [page_size]、/edr detections [page] [page_size]、/edr logs [client_id] [page] [page_size]、/edr incident-view <incident_id> <client_id>、/edr detection-view <detection_id> <client_id> [view_type] [process_uuid]。",
       "usage_isolate": "用法：/edr isolate <client_id>",
@@ -47,6 +48,7 @@
     "en-US": {
       "cancel_pending": "Got it, I have canceled that pending action 🙂",
       "pending_high_risk": "This action is high impact, so I will not run it yet. If you want me to continue, just reply with \"confirm\" 🙂\n\nPending action: {{summary}}",
+      "pending_verify_code": "This EDR instruction requires a verification code. A code has been sent to: {{phone_email}}\n\nPending action: {{summary}}\n\nPlease reply with the verification code you received",
       "write_action_hint": "I recognized a high-risk EDR write action, but I do not auto-run it by default. You can send:\n- /edr isolate <client_id>\n- /edr release <client_id>",
       "commands_help": "Supported commands: /edr hosts <hostname>, /edr isolate <client_id>, /edr release <client_id>, /edr incidents [client_id] [page] [page_size], /edr detections [page] [page_size], /edr logs [client_id] [page] [page_size], /edr incident-view <incident_id> <client_id>, /edr detection-view <detection_id> <client_id> [view_type] [process_uuid].",
       "usage_isolate": "Usage: /edr isolate <client_id>",

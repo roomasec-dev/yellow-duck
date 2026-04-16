@@ -187,6 +187,79 @@ func (s *Service) HandleInbound(ctx context.Context, msg protocol.InboundMessage
 	return result.Text, nil
 }
 
+// classifyVerifyCodeInput 从用户输入中提取验证码
+// 如果用户输入是验证码（6位数字），返回验证码内容；否则返回空字符串
+func (s *Service) classifyVerifyCodeInput(ctx context.Context, sessionKey string, userText string, pendingAction protocol.PendingAction) (string, error) {
+	turns, _ := s.store.ListRecentTurns(ctx, sessionKey, 10)
+
+	var turnLines []string
+	for _, t := range turns {
+		role := "用户"
+		if t.Role == string(model.RoleAssistant) {
+			role = "助手"
+		}
+		turnLines = append(turnLines, fmt.Sprintf("%s: %s", role, t.Content))
+	}
+	conversationHistory := strings.Join(turnLines, "\n")
+	if conversationHistory == "" {
+		conversationHistory = "（无历史对话）"
+	}
+
+	systemPrompt := `你是一个验证码提取器。用户正在等待输入 EDR 指令的验证码（6位数字）。
+
+请从用户输入中提取验证码。验证码可能是：
+- 纯数字：如 "123456"
+- 夹杂在文字中：如 "验证码是654321" 中的 "654321"
+
+请用 JSON 格式回复：
+{"code": "提取到的验证码，如果没有则为空"}
+
+不要有任何其他内容，只返回 JSON。`
+
+	messages := []model.Message{
+		{Role: model.RoleSystem, Content: systemPrompt},
+		{Role: model.RoleUser, Content: fmt.Sprintf(`当前上下文：
+- 待执行操作：%s
+- 操作摘要：%s
+- 对话历史：
+%s
+- 用户最新输入：%s
+
+提取验证码（如果没有验证码则 code 为空）`, pendingAction.ActionType, pendingAction.Summary, conversationHistory, userText)},
+	}
+
+	result, err := s.model.Chat(ctx, model.ChatRequest{
+		SessionKey: sessionKey,
+		Messages:   messages,
+	}, nil)
+	if err != nil {
+		return "", fmt.Errorf("调用模型提取验证码失败: %w", err)
+	}
+
+	result.Text = strings.TrimSpace(result.Text)
+	var resp struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal([]byte(result.Text), &resp); err != nil {
+		return "", nil
+	}
+
+	code := strings.TrimSpace(resp.Code)
+	if len(code) == 6 && isAllDigits(code) {
+		return code, nil
+	}
+	return "", nil
+}
+
+func isAllDigits(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey string, userText string, locale string, reporter *progress.Reporter) (string, bool, error) {
 	pending, err := s.store.GetPendingAction(ctx, sessionKey)
 	if err != nil || pending.ActionType == "" {
@@ -208,7 +281,51 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 		response := s.msg(locale, "cancel_pending", nil)
 		response, err = s.storeAssistantReply(ctx, sessionKey, response)
 		return response, true, err
+	case "edr_send_instruction_verify_pending":
+		// 用户确认执行下发指令，现在发送验证码
+		reporter.Step(ctx, "用户确认执行，正在发送验证码。")
+		if err := s.edr.SendVerifyCode(ctx, "instruction"); err != nil {
+			return "", true, fmt.Errorf("发送验证码失败: %w", err)
+		}
+		// 获取验证码发送地址
+		verifyResp, _ := s.edr.IsNeedVerifyCode(ctx, "instruction")
+		// 更新 pending action 类型，现在等待用户输入验证码
+		pending.ActionType = "edr_send_instruction_verify"
+		if err := s.store.SavePendingAction(ctx, sessionKey, pending.ActionType, pending.Payload, pending.Summary); err != nil {
+			return "", true, err
+		}
+		response := s.msg(locale, "pending_verify_code", map[string]string{"summary": pending.Summary, "phone_email": verifyResp.PhoneEmail})
+		stored, err := s.storeAssistantReply(ctx, sessionKey, response)
+		return stored, true, err
 	default:
+		// 处理验证码输入
+		if pending.ActionType == "edr_send_instruction_verify" {
+			code, classifyErr := s.classifyVerifyCodeInput(ctx, sessionKey, userText, pending)
+			if classifyErr != nil {
+				s.logger.Warn("提取验证码失败，降级到简单判断", "error", classifyErr)
+				// 降级到简单判断：输入纯6位数字才当验证码
+				code = strings.TrimSpace(userText)
+				if len(code) != 6 || !isAllDigits(code) {
+					return "", false, nil // 可能是新任务
+				}
+			}
+			if code == "" {
+				// 没有提取到验证码，当新任务处理
+				return "", false, nil
+			}
+			reporter.Step(ctx, "正在执行指令，EDR 将自行验证验证码。")
+			// 将验证码注入到 call 中
+			var call planner.ToolCall
+			if err := json.Unmarshal([]byte(pending.Payload), &call); err != nil {
+				return "", true, err
+			}
+			call.VerifyCode = code
+			response, execErr := s.executeConfirmedTool(ctx, call, locale, reporter)
+			if delErr := s.store.DeletePendingAction(ctx, sessionKey); delErr != nil && execErr == nil {
+				execErr = delErr
+			}
+			return response, true, execErr
+		}
 		// 尝试补全 plan_add / plan_edit 的参数（scan_type、plan_type、scope）
 		if pending.ActionType == "edr_plan_add" || pending.ActionType == "edr_plan_edit" {
 			if val, err := strconv.Atoi(strings.TrimSpace(userText)); err == nil && val >= 1 && val <= 8 {
@@ -1169,7 +1286,40 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 				}
 			}
 
-			if err := s.store.SavePendingAction(ctx, sessionKey, call.Name, string(payload), summary); err != nil {
+			actionType := call.Name
+			// For edr_send_instruction, only specific instructions need verification code
+			if call.Name == "edr_send_instruction" {
+				// List of instructions that require verification code
+				verifyCodeRequiredInstructions := map[string]bool{
+					"quarantine_file":       true,
+					"batch_quarantine_file": true,
+					"quarantine_network":    true,
+					"recover_network":       true,
+					"process_dump":          true,
+					"quic_channel":          true,
+					"get_suspicious_file":   true,
+				}
+				if verifyCodeRequiredInstructions[call.InstructionName] {
+					verifyResp, err := s.edr.IsNeedVerifyCode(ctx, "instruction")
+					if err != nil {
+						return nil, "", fmt.Errorf("检查验证码需求失败: %w", err)
+					}
+					if verifyResp.IsNeedVerifyCode {
+						// 需要验证码，先保存 pending action，不立即发送验证码
+						// 等用户确认后再发送
+						actionType = "edr_send_instruction_verify_pending"
+						summary += " (需要验证码)"
+						if err := s.store.SavePendingAction(ctx, sessionKey, actionType, string(payload), summary); err != nil {
+							return nil, "", err
+						}
+						response := s.msg(locale, "pending_high_risk", map[string]string{"summary": summary})
+						stored, err := s.storeAssistantReply(ctx, sessionKey, response)
+						return nil, stored, err
+					}
+				}
+			}
+
+			if err := s.store.SavePendingAction(ctx, sessionKey, actionType, string(payload), summary); err != nil {
 				return nil, "", err
 			}
 			response := s.msg(locale, "pending_high_risk", map[string]string{"summary": summary})
@@ -1553,6 +1703,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 		req := edr.SendInstructionRequest{
 			ClientID:        call.ClientID,
 			InstructionName: call.InstructionName,
+			VerifyCode:      call.VerifyCode,
 		}
 		switch call.InstructionName {
 		case "list_ps":

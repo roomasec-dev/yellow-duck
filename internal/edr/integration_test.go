@@ -286,7 +286,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 	t.Run("send_instruction_list_ps", func(t *testing.T) {
 		// 先获取一台在线主机的 client_id
-		hosts, err := client.ListHosts(ctx, ListHostsRequest{Page: 1, Limit: 10})
+		hosts, err := client.ListHosts(ctx, ListHostsRequest{Page: 1, Limit: 5})
 		if err != nil {
 			t.Fatalf("list hosts failed: %v", err)
 		}
@@ -306,6 +306,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			ClientID:        clientID,
 			InstructionName: "list_ps",
 			IsOnline:        1,
+			VerifyCode:      "",
 		})
 		t.Logf("send_instruction_list_ps result %+v", result)
 		if err != nil {
@@ -344,6 +345,7 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 					Path: "C:\\cmd.exe",
 				},
 			},
+			VerifyCode: "449765",
 		})
 		t.Logf("send_instruction_get_suspicious_file result %+v", result)
 		if err != nil {
@@ -1181,6 +1183,23 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 			t.Fatalf("delete instruction policy failed: %v", err)
 		}
 		t.Logf("instruction_policy_delete done: rid=%s", createResult.RID)
+	})
+
+	t.Run("is_need_verify_code", func(t *testing.T) {
+		result, err := client.IsNeedVerifyCode(ctx, "instruction")
+		if err != nil {
+			t.Fatalf("is_need_verify_code failed: %v", err)
+		}
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("is_need_verify_code result:\n%s", string(raw))
+	})
+
+	t.Run("send_verify_code", func(t *testing.T) {
+		err := client.SendVerifyCode(ctx, "instruction")
+		if err != nil {
+			t.Fatalf("send_verify_code failed: %v", err)
+		}
+		t.Logf("send_verify_code done")
 	})
 }
 

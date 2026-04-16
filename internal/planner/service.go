@@ -90,6 +90,7 @@ type ToolCall struct {
 	RuntimeMaxFileSizeMb         int    `json:"runtime_max_file_size_mb,omitempty"`
 	CustomMaxFileSizeMb          int    `json:"custom_max_file_size_mb,omitempty"`
 	StrategyID                   string `json:"strategy_id,omitempty"`
+	VerifyCode                   string `json:"verify_code,omitempty"`
 }
 
 type Plan struct {
