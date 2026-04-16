@@ -28,6 +28,17 @@ base_url = "https://api.dingtalk.com"
 reply_mode = "reply"
 webhook_path = "/webhook/dingtalk/event"
 
+[channel.weixin]
+enabled = false
+mode = "longconn"
+bot_id = ""
+bot_secret = ""
+token = ""
+encrypt_key = ""
+base_url = "https://qyapi.weixin.qq.com"
+reply_mode = "reply"
+webhook_path = "/webhook/weixin/event"
+
 [models]
 default_provider = "deepseek"
 default_model = "deepseek-reasoner"

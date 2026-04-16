@@ -10,6 +10,7 @@ import (
 	"rm_ai_agent/internal/artifact"
 	"rm_ai_agent/internal/channel/dingtalk"
 	"rm_ai_agent/internal/channel/feishu"
+	"rm_ai_agent/internal/channel/weixin"
 	"rm_ai_agent/internal/compression"
 	"rm_ai_agent/internal/config"
 	"rm_ai_agent/internal/detailagent"
@@ -34,6 +35,7 @@ type App struct {
 	httpServer *http.Server
 	feishu     *feishu.Handler
 	dingtalk   *dingtalk.Handler
+	weixin     *weixin.Handler
 	scheduler  *scheduler.Service
 }
 
@@ -77,6 +79,9 @@ func New(cfg config.Config) (*App, error) {
 		logger.Info("dingtalk handler created", "enabled", cfg.Channel.Dingtalk.Enabled)
 	}
 
+	weixinClient := weixin.NewClient(cfg.Channel.Weixin, logger)
+	weixinHandler := weixin.NewHandler(cfg.Channel.Weixin, dataStore, sessionService, weixinClient, logger)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -104,6 +109,15 @@ func New(cfg config.Config) (*App, error) {
 			"webhook_path", cfg.Channel.Dingtalk.WebhookPath,
 		)
 	}
+	if cfg.Channel.Weixin.Enabled {
+		mux.Handle(cfg.Channel.Weixin.WebhookPath, weixinHandler)
+		logger.Info(
+			"weixin channel configured",
+			"mode", cfg.Channel.Weixin.Mode,
+			"bot_id", mask(cfg.Channel.Weixin.BotID),
+			"webhook_path", cfg.Channel.Weixin.WebhookPath,
+		)
+	}
 	if strings.TrimSpace(cfg.Server.LogFile) != "" {
 		logger.Info("local log file enabled", "path", cfg.Server.LogFile)
 	}
@@ -120,6 +134,7 @@ func New(cfg config.Config) (*App, error) {
 		httpServer: httpServer,
 		feishu:     feishuHandler,
 		dingtalk:   dingtalkHandler,
+		weixin:     weixinHandler,
 		scheduler:  schedulerService,
 	}, nil
 }
@@ -156,6 +171,13 @@ func (a *App) Run(ctx context.Context) error {
 			go func() {
 				if err := a.dingtalk.StartLongConnection(ctx); err != nil {
 					a.logger.Error("dingtalk long connection stopped", "error", err)
+				}
+			}()
+		}
+		if a.weixin != nil && a.config.Channel.Weixin.Enabled && (strings.EqualFold(a.config.Channel.Weixin.Mode, "longconn") || strings.EqualFold(a.config.Channel.Weixin.Mode, "both")) {
+			go func() {
+				if err := a.weixin.StartLongConnection(ctx); err != nil {
+					a.logger.Error("weixin long connection stopped", "error", err)
 				}
 			}()
 		}

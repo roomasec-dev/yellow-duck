@@ -98,7 +98,7 @@ curl http://localhost:8080/healthz
 - 飞书 `app_id` 为空
 - 飞书 `app_secret` 为空
 - EDR 地址未填写
-- EDR `api_key` 或 `app_key` 为空
+- EDR `app_key` 或 `app_secret` 为空
 
 ### 模型 API Key 无效
 

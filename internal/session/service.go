@@ -50,7 +50,9 @@ type Service struct {
 	logger     *logx.Logger
 	runMu      sync.Mutex
 	runs       map[string]runState
-	dedupCache *toolDedupCache
+	dedupCache        *toolDedupCache
+	dedupHitCalls     map[string]bool
+	dedupHitCallsMu   sync.Mutex
 }
 
 type runState struct {
@@ -117,7 +119,8 @@ func NewService(cfg config.Config, store store.Store, modelClient model.Client, 
 		edr:        edrClient,
 		logger:     logger,
 		runs:       make(map[string]runState),
-		dedupCache: newToolDedupCache(30 * time.Second),
+		dedupCache:      newToolDedupCache(30 * time.Second),
+		dedupHitCalls:   make(map[string]bool),
 	}
 }
 
@@ -1326,7 +1329,7 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 			stored, err := s.storeAssistantReply(ctx, sessionKey, response)
 			return nil, stored, err
 		}
-		result, err := s.executeSingleTool(ctx, sessionKey, call, locale, reporter)
+		result, isDedupHit, err := s.executeSingleTool(ctx, sessionKey, call, locale, reporter)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, "", err
@@ -1337,6 +1340,11 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 		}
 		s.logger.Info("tool call finished", "session_key", sessionKey, "tool", call.Name, "result_preview", shortResult(result))
 		reporter.ToolResult(ctx, call.Name, result)
+		// Skip adding result to context if this call was a dedup hit (already added in previous round)
+		if isDedupHit {
+			s.logger.Info("tool call skipped from context", "session_key", sessionKey, "tool", call.Name)
+			continue
+		}
 		if strings.TrimSpace(result) != "" {
 			results = append(results, result)
 		}
@@ -1344,18 +1352,23 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 	return results, "", nil
 }
 
-func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, error) {
+func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, bool, error) {
+	isDedupHit := false
 	if !call.Critical && !isCriticalTool(call.Name) {
 		key := toolCallCacheKey(call)
 		if result, err, hit := s.dedupCache.GetOrSubmit(key); hit {
 			s.logger.Info("tool call dedup hit", "session_key", sessionKey, "tool", call.Name, "key", key)
-			return result, err
+			s.dedupHitCallsMu.Lock()
+			s.dedupHitCalls[key] = true
+			s.dedupHitCallsMu.Unlock()
+			return result, true, err
 		}
 		result, err := s.executeToolImpl(ctx, sessionKey, call, locale, reporter)
 		s.dedupCache.Done(key, result, err)
-		return result, err
+		return result, false, err
 	}
-	return s.executeToolImpl(ctx, sessionKey, call, locale, reporter)
+	result, err := s.executeToolImpl(ctx, sessionKey, call, locale, reporter)
+	return result, isDedupHit, err
 }
 
 func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, error) {

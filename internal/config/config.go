@@ -36,6 +36,7 @@ type StorageConfig struct {
 type ChannelConfig struct {
 	Feishu   FeishuConfig   `toml:"feishu"`
 	Dingtalk DingtalkConfig `toml:"dingtalk"`
+	Weixin   WeixinConfig   `toml:"weixin"`
 }
 
 type FeishuConfig struct {
@@ -60,6 +61,18 @@ type DingtalkConfig struct {
 	ReplyMode         string `toml:"reply_mode"`
 	EncryptKey        string `toml:"encrypt_key"`
 	VerificationToken string `toml:"verification_token"`
+}
+
+type WeixinConfig struct {
+	Enabled           bool   `toml:"enabled"`
+	Mode              string `toml:"mode"`
+	BotID             string `toml:"bot_id"`
+	BotSecret         string `toml:"bot_secret"`
+	Token             string `toml:"token"`
+	EncryptKey        string `toml:"encrypt_key"`
+	BaseURL           string `toml:"base_url"`
+	WebhookPath       string `toml:"webhook_path"`
+	ReplyMode         string `toml:"reply_mode"`
 }
 
 type ModelsConfig struct {
@@ -234,6 +247,18 @@ func applyDefaults(cfg *Config) {
 	if cfg.Channel.Dingtalk.WebhookPath == "" {
 		cfg.Channel.Dingtalk.WebhookPath = "/webhook/dingtalk/event"
 	}
+	if cfg.Channel.Weixin.BaseURL == "" {
+		cfg.Channel.Weixin.BaseURL = "https://qyapi.weixin.qq.com"
+	}
+	if cfg.Channel.Weixin.Mode == "" {
+		cfg.Channel.Weixin.Mode = "webhook"
+	}
+	if cfg.Channel.Weixin.ReplyMode == "" {
+		cfg.Channel.Weixin.ReplyMode = "reply"
+	}
+	if cfg.Channel.Weixin.WebhookPath == "" {
+		cfg.Channel.Weixin.WebhookPath = "/webhook/weixin/event"
+	}
 	for name, provider := range cfg.Models.Providers {
 		if provider.Type == "" {
 			provider.Type = "openai_compatible"
@@ -359,6 +384,11 @@ func (c Config) Validate() error {
 		case "webhook", "longconn", "both":
 		default:
 			return fmt.Errorf("channel.dingtalk.mode must be one of webhook, longconn, both")
+		}
+	}
+	if c.Channel.Weixin.Enabled {
+		if c.Channel.Weixin.BotID == "" || c.Channel.Weixin.BotSecret == "" {
+			return fmt.Errorf("channel.weixin bot_id and bot_secret are required when enabled")
 		}
 	}
 	return nil

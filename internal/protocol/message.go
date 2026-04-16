@@ -7,6 +7,7 @@ type Channel string
 const (
 	ChannelFeishu   Channel = "feishu"
 	ChannelDingtalk Channel = "dingtalk"
+	ChannelWeixin   Channel = "weixin"
 )
 
 type InboundMessage struct {
