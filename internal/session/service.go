@@ -33,26 +33,26 @@ import (
 )
 
 type Service struct {
-	cfg        config.Config
-	store      store.Store
-	model      model.Client
-	compactor  *compression.Service
-	progress   *progress.Service
-	detailer   *detailagent.Service
-	router     *router.Service
-	planner    *planner.Service
-	memory     *memory.Service
-	artifacts  *artifact.Service
-	i18n       *i18n.Service
-	knowledge  *knowledge.Service
-	prompt     *prompt.Service
-	edr        edr.Client
-	logger     *logx.Logger
-	runMu      sync.Mutex
-	runs       map[string]runState
-	dedupCache        *toolDedupCache
-	dedupHitCalls     map[string]bool
-	dedupHitCallsMu   sync.Mutex
+	cfg             config.Config
+	store           store.Store
+	model           model.Client
+	compactor       *compression.Service
+	progress        *progress.Service
+	detailer        *detailagent.Service
+	router          *router.Service
+	planner         *planner.Service
+	memory          *memory.Service
+	artifacts       *artifact.Service
+	i18n            *i18n.Service
+	knowledge       *knowledge.Service
+	prompt          *prompt.Service
+	edr             edr.Client
+	logger          *logx.Logger
+	runMu           sync.Mutex
+	runs            map[string]runState
+	dedupCache      *toolDedupCache
+	dedupHitCalls   map[string]bool
+	dedupHitCallsMu sync.Mutex
 }
 
 type runState struct {
@@ -103,24 +103,24 @@ func (c *toolDedupCache) Done(key string, result string, err error) {
 
 func NewService(cfg config.Config, store store.Store, modelClient model.Client, compactor *compression.Service, progressService *progress.Service, detailAgentService *detailagent.Service, routerService *router.Service, plannerService *planner.Service, memoryService *memory.Service, artifactService *artifact.Service, i18nService *i18n.Service, knowledgeService *knowledge.Service, promptService *prompt.Service, edrClient edr.Client, logger *logx.Logger) *Service {
 	return &Service{
-		cfg:        cfg,
-		store:      store,
-		model:      modelClient,
-		compactor:  compactor,
-		progress:   progressService,
-		detailer:   detailAgentService,
-		router:     routerService,
-		planner:    plannerService,
-		memory:     memoryService,
-		artifacts:  artifactService,
-		i18n:       i18nService,
-		knowledge:  knowledgeService,
-		prompt:     promptService,
-		edr:        edrClient,
-		logger:     logger,
-		runs:       make(map[string]runState),
-		dedupCache:      newToolDedupCache(30 * time.Second),
-		dedupHitCalls:   make(map[string]bool),
+		cfg:           cfg,
+		store:         store,
+		model:         modelClient,
+		compactor:     compactor,
+		progress:      progressService,
+		detailer:      detailAgentService,
+		router:        routerService,
+		planner:       plannerService,
+		memory:        memoryService,
+		artifacts:     artifactService,
+		i18n:          i18nService,
+		knowledge:     knowledgeService,
+		prompt:        promptService,
+		edr:           edrClient,
+		logger:        logger,
+		runs:          make(map[string]runState),
+		dedupCache:    newToolDedupCache(30 * time.Second),
+		dedupHitCalls: make(map[string]bool),
 	}
 }
 
@@ -491,6 +491,12 @@ func (s *Service) handlePlannedTools(ctx context.Context, sessionKey string, tex
 	if s.prompt != nil {
 		skillsPrompt = s.prompt.LoadSkillsPrompt()
 	}
+
+	// 立即发送确认回复，提升用户体验
+	if reporter != nil {
+		reporter.SendImmediateReply(ctx, "收到消息，正在处理中...")
+	}
+
 	plan, err := s.planner.BuildPlan(ctx, s.cfg.Routing.Model, text, "", summary, recentTurns, memories, latestArtifact, skillsPrompt)
 	if err != nil {
 		s.logger.Warn("planner failed", "error", err)
@@ -2053,6 +2059,9 @@ func (s *Service) handleNaturalLanguageEDR(ctx context.Context, sessionKey strin
 		return "", false, nil
 	}
 
+	// 发送即时回复
+	reporter.SendImmediateReply(ctx, "收到您的请求，正在处理中...")
+
 	if decision.NeedsConfirmation {
 		response := s.msg(locale, "write_action_hint", nil)
 		response, err = s.storeAssistantReply(ctx, sessionKey, response)
@@ -2074,6 +2083,9 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 	if len(fields) < 2 {
 		return sanitizeReply(s.msg(locale, "commands_help", nil)), true, nil
 	}
+
+	// 发送即时回复
+	reporter.SendImmediateReply(ctx, "收到 EDR 操作请求，正在处理中...")
 
 	var response string
 	var err error

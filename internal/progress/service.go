@@ -25,17 +25,18 @@ type Service struct {
 }
 
 type Reporter struct {
-	service       *Service
-	sink          Sink
-	session       protocol.SessionRef
-	startedAt     time.Time
-	sent          int
-	toolSent      int
-	lastSent      time.Time
-	lastText      string
-	lastStage     string
-	lastToolStage string
-	lastStageSent time.Time
+	service             *Service
+	sink                Sink
+	session             protocol.SessionRef
+	startedAt           time.Time
+	sent                int
+	toolSent            int
+	lastSent            time.Time
+	lastText            string
+	lastStage           string
+	lastToolStage       string
+	lastStageSent       time.Time
+	immediateReplySent  bool
 }
 
 const (
@@ -55,10 +56,22 @@ func (s *Service) NewReporter(session protocol.SessionRef, sink Sink) *Reporter 
 	return &Reporter{service: s, sink: sink, session: session, startedAt: time.Now()}
 }
 
+func (r *Reporter) SendImmediateReply(ctx context.Context, text string) error {
+	if r == nil || r.sink == nil {
+		return nil
+	}
+	if r.immediateReplySent {
+		return nil
+	}
+	r.immediateReplySent = true
+	return r.sink.SendProgress(ctx, r.session, text)
+}
+
 func (r *Reporter) Step(ctx context.Context, detail string) {
 	if r == nil || r.service == nil || r.sink == nil || !r.service.cfg.Enabled {
 		return
 	}
+
 	if !r.shouldEmit(false) {
 		return
 	}

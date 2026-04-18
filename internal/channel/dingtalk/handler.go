@@ -326,6 +326,10 @@ type progressSink struct {
 	sessionWebhook string
 }
 
+func (s *progressSink) SendImmediateReply(ctx context.Context, session protocol.SessionRef, text string) error {
+	return s.client.replyText(ctx, s.sessionWebhook, text)
+}
+
 func (s *progressSink) SendProgress(ctx context.Context, session protocol.SessionRef, text string) error {
 	return s.client.replyText(ctx, s.sessionWebhook, fmt.Sprintf("[会话 %s][进度] %s", session.PublicID, strings.TrimSpace(text)))
 }

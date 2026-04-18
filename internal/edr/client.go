@@ -336,11 +336,11 @@ type UpdateIOCRequest struct {
 type SendInstructionRequest struct {
 	ClientID        string       `json:"client_id"`
 	InstructionName string       `json:"instruction_name"`
-	VerifyCode      string       `json:"verify_code,omitempty"` // 验证码，不需要校验时可传空
-	IsOnline        int          `json:"is_online,omitempty"`   // for list_ps
-	IsBatch         int          `json:"is_batch,omitempty"`    // for get_suspicious_file
+	VerifyCode      string       `json:"verify_code,omitempty"`  // 验证码，不需要校验时可传空
+	IsOnline        int          `json:"is_online,omitempty"`    // for list_ps
+	IsBatch         int          `json:"is_batch,omitempty"`     // for get_suspicious_file
 	BatchParams     []BatchParam `json:"batch_params,omitempty"` // for get_suspicious_file
-	Params          *Params      `json:"params,omitempty"`      // for quarantine_network
+	Params          *Params      `json:"params,omitempty"`       // for quarantine_network
 }
 
 type Params struct {
@@ -2265,6 +2265,7 @@ func (c *OpenAPIClient) postPlatform(ctx context.Context, path string, payload a
 }
 
 func (c *OpenAPIClient) postWithHeaders(ctx context.Context, url string, headers map[string]string, payload any, out any) error {
+	fmt.Printf("===edr request payload: %+v\n", payload)
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal edr payload: %w", err)

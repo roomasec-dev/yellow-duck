@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 
 	"rm_ai_agent/internal/config"
 	"rm_ai_agent/internal/logx"
@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	wsEndpoint    = "wss://openws.work.weixin.qq.com"
-	apiBaseURL    = "https://qyapi.weixin.qq.com"
+	wsEndpoint = "wss://openws.work.weixin.qq.com"
+	apiBaseURL = "https://qyapi.weixin.qq.com"
 )
 
 type Handler struct {
@@ -157,7 +157,7 @@ func (h *Handler) runLongConnection(ctx context.Context) error {
 				errCh <- err
 				return
 			}
-			h.logger.Info("weixin received message", "data", string(msgBytes))
+			h.logger.Debug("weixin received message", "data", string(msgBytes))
 			h.handleMessage(ctx, msgBytes, writerCh)
 		}
 	}()
@@ -227,15 +227,15 @@ func (h *Handler) handleMessage(ctx context.Context, msgBytes []byte, writer wri
 
 func (h *Handler) handleMsgCallback(ctx context.Context, body json.RawMessage, reqID string, writer writerChan) {
 	var msg struct {
-		MsgID   string `json:"msgid"`
-		BotID   string `json:"aibotid"`
-		ChatID  string `json:"chatid"`
+		MsgID    string `json:"msgid"`
+		BotID    string `json:"aibotid"`
+		ChatID   string `json:"chatid"`
 		ChatType string `json:"chattype"`
-		From struct {
+		From     struct {
 			UserID string `json:"userid"`
 		} `json:"from"`
 		MsgType string `json:"msgtype"`
-		Text struct {
+		Text    struct {
 			Content string `json:"content"`
 		} `json:"text"`
 	}
@@ -279,15 +279,15 @@ func (h *Handler) handleMsgCallback(ctx context.Context, body json.RawMessage, r
 
 func (h *Handler) handleEventCallback(ctx context.Context, body json.RawMessage, reqID string, writer writerChan) {
 	var msg struct {
-		MsgID   string `json:"msgid"`
-		BotID   string `json:"aibotid"`
-		ChatID  string `json:"chatid"`
+		MsgID    string `json:"msgid"`
+		BotID    string `json:"aibotid"`
+		ChatID   string `json:"chatid"`
 		ChatType string `json:"chattype"`
-		From struct {
+		From     struct {
 			UserID string `json:"userid"`
 		} `json:"from"`
 		MsgType string `json:"msgtype"`
-		Event struct {
+		Event   struct {
 			EventType string `json:"eventtype"`
 		} `json:"event"`
 	}
@@ -349,8 +349,8 @@ func (h *Handler) processInbound(ctx context.Context, inbound protocol.InboundMe
 		"body": map[string]any{
 			"msgtype": "stream",
 			"stream": map[string]any{
-				"id":     sessionID,
-				"finish": true,
+				"id":      sessionID,
+				"finish":  true,
 				"content": response,
 			},
 		},
@@ -367,10 +367,33 @@ func (h *Handler) processInbound(ctx context.Context, inbound protocol.InboundMe
 }
 
 type progressSink struct {
-	client     *Client
+	client    *Client
 	reqID     string
 	writer    writerChan
 	sessionID string // 用于最终消息替换的 id
+}
+
+func (s *progressSink) SendImmediateReply(ctx context.Context, session protocol.SessionRef, text string) error {
+	replyMsg := map[string]any{
+		"cmd": "aibot_respond_msg",
+		"headers": map[string]string{
+			"req_id": s.reqID,
+		},
+		"body": map[string]any{
+			"msgtype": "stream",
+			"stream": map[string]any{
+				"id":      session.PublicID,
+				"finish":  false,
+				"content": text,
+			},
+		},
+	}
+	data, _ := json.Marshal(replyMsg)
+	select {
+	case s.writer <- data:
+	default:
+	}
+	return nil
 }
 
 func (s *progressSink) SendProgress(ctx context.Context, session protocol.SessionRef, text string) error {
@@ -386,8 +409,8 @@ func (s *progressSink) SendProgress(ctx context.Context, session protocol.Sessio
 		"body": map[string]any{
 			"msgtype": "stream",
 			"stream": map[string]any{
-				"id":     session.PublicID,
-				"finish": false,
+				"id":      session.PublicID,
+				"finish":  false,
 				"content": fmt.Sprintf("[会话 %s][进度] %s", session.PublicID, strings.TrimSpace(text)),
 			},
 		},
@@ -407,9 +430,9 @@ func (s *progressSink) SendChatText(ctx context.Context, chatID string, text str
 			"req_id": uuid.New().String(),
 		},
 		"body": map[string]any{
-			"chatid":  chatID,
+			"chatid":    chatID,
 			"chat_type": 1,
-			"msgtype": "text",
+			"msgtype":   "text",
 			"text": map[string]string{
 				"content": text,
 			},
@@ -454,10 +477,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// 首先尝试解析 JSON 格式
 	var rawBody struct {
-		Encrypt string `json:"encrypt"`
-		MsgType string `json:"msgtype"`
-		Content string `json:"content"`
-		MsgId   string `json:"msgid"`
+		Encrypt      string `json:"encrypt"`
+		MsgType      string `json:"msgtype"`
+		Content      string `json:"content"`
+		MsgId        string `json:"msgid"`
 		FromUserName string `json:"fromusername"`
 	}
 
@@ -540,15 +563,15 @@ func mask(value string) string {
 
 // webhookMessage 是企业微信回调的加密消息结构
 type webhookMessage struct {
-	XMLName xml.Name `xml:"xml"`
-	MsgType     string `xml:"MsgType"`
-	Content     string `xml:"Content"`
-	MsgID       string `xml:"MsgId"`
-	FromUserName string `xml:"FromUserName"`
-	ToUserName   string `xml:"ToUserName"`
-	CreateTime   string `xml:"CreateTime"`
-	AgentID      string `xml:"AgentID"`
-	Event        string `xml:"Event"`
+	XMLName      xml.Name `xml:"xml"`
+	MsgType      string   `xml:"MsgType"`
+	Content      string   `xml:"Content"`
+	MsgID        string   `xml:"MsgId"`
+	FromUserName string   `xml:"FromUserName"`
+	ToUserName   string   `xml:"ToUserName"`
+	CreateTime   string   `xml:"CreateTime"`
+	AgentID      string   `xml:"AgentID"`
+	Event        string   `xml:"Event"`
 }
 
 // verifyWeixinSignature 验证企业微信签名
@@ -704,9 +727,13 @@ func (h *Handler) processWebhookInbound(ctx context.Context, inbound protocol.In
 }
 
 type webhookProgressSink struct {
-	client      *Client
+	client       *Client
 	fromUserName string
-	reqID      string
+	reqID        string
+}
+
+func (s *webhookProgressSink) SendImmediateReply(ctx context.Context, session protocol.SessionRef, text string) error {
+	return s.client.sendWebhookReply(ctx, s.fromUserName, text)
 }
 
 func (s *webhookProgressSink) SendProgress(ctx context.Context, session protocol.SessionRef, text string) error {
