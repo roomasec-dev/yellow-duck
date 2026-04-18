@@ -337,8 +337,12 @@ func (h *Handler) processInbound(ctx context.Context, inbound protocol.InboundMe
 
 	// 发送回复（使用 aibot_respond_msg + stream 类型 + 原始 req_id）
 	// 注意：使用 sink.sessionID 确保和 SendProgress 的 id 一致，这样 finish=true 会替换进度消息
+	// 但如果 sink.sessionID 已经被设置且不同于当前消息ID（说明是拒绝消息），则使用当前消息ID避免替换上一条结果
 	sessionID := sink.sessionID
 	if sessionID == "" {
+		sessionID = inbound.MessageID
+	} else if sessionID != inbound.MessageID {
+		// sink.sessionID 被设置但与当前消息不同，这是拒绝消息，使用当前消息ID避免替换上一条结果
 		sessionID = inbound.MessageID
 	}
 	replyMsg := map[string]any{

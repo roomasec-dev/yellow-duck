@@ -138,6 +138,18 @@ func (s *Service) HandleInbound(ctx context.Context, msg protocol.InboundMessage
 		return "", err
 	}
 	sessionKey := sessionRef.Key
+	if s.isRunning(sessionKey) {
+		turns, _ := s.store.ListRecentTurns(ctx, sessionKey, 10)
+		var lastUserMsg string
+		for i := len(turns) - 1; i >= 0; i-- {
+			if turns[i].Role == string(model.RoleUser) {
+				lastUserMsg = turns[i].Content
+				break
+			}
+		}
+		reply := fmt.Sprintf("上一条消息「%s」未处理完成，本次消息「%s」不予处理", lastUserMsg, msg.Text)
+		return reply, nil
+	}
 	ctx, finishRun := s.startRun(ctx, sessionKey)
 	defer finishRun()
 	reporter := s.progress.NewReporter(sessionRef, sink)
@@ -765,6 +777,13 @@ func (s *Service) deleteKnowledgeBase(call planner.ToolCall) string {
 		return "删除知识库失败：" + err.Error()
 	}
 	return fmt.Sprintf("知识库条目已删除：%s。", title)
+}
+
+func (s *Service) isRunning(sessionKey string) bool {
+	s.runMu.Lock()
+	defer s.runMu.Unlock()
+	_, ok := s.runs[sessionKey]
+	return ok
 }
 
 func (s *Service) startRun(parent context.Context, sessionKey string) (context.Context, func()) {
