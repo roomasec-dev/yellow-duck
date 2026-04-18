@@ -2,11 +2,18 @@ package weixin
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/sha1"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,7 +28,8 @@ import (
 )
 
 const (
-	wsEndpoint = "wss://openws.work.weixin.qq.com"
+	wsEndpoint    = "wss://openws.work.weixin.qq.com"
+	apiBaseURL    = "https://qyapi.weixin.qq.com"
 )
 
 type Handler struct {
@@ -430,6 +438,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Info("weixin webhook called", "method", r.Method, "path", r.URL.Path)
 
+	// 获取 URL 参数
+	msgSignature := r.URL.Query().Get("msg_signature")
+	timestamp := r.URL.Query().Get("timestamp")
+	nonce := r.URL.Query().Get("nonce")
+
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		h.logger.Error("weixin webhook failed to read body", "error", err)
@@ -437,18 +450,69 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var msg struct {
-		MsgType string `json:"MsgType"`
-		Content string `json:"Content"`
-		MsgId   string `json:"MsgId"`
+	h.logger.Debug("weixin webhook raw body", "body", string(body))
+
+	// 首先尝试解析 JSON 格式
+	var rawBody struct {
+		Encrypt string `json:"encrypt"`
+		MsgType string `json:"msgtype"`
+		Content string `json:"content"`
+		MsgId   string `json:"msgid"`
+		FromUserName string `json:"fromusername"`
 	}
-	if err := json.Unmarshal(body, &msg); err != nil {
+
+	if err := json.Unmarshal(body, &rawBody); err != nil {
 		h.logger.Warn("weixin webhook failed to parse json", "error", err)
 		writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
 		return
 	}
 
-	h.logger.Info("weixin webhook message", "msg_type", msg.MsgType, "content", msg.Content)
+	var msgContent []byte
+	reqID := uuid.New().String()
+
+	// 如果有 encrypt 字段，说明是加密消息
+	if rawBody.Encrypt != "" {
+		// 验证签名
+		if err := h.verifyWeixinSignature(msgSignature, timestamp, nonce, rawBody.Encrypt); err != nil {
+			h.logger.Warn("weixin signature verification failed", "error", err)
+			writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
+			return
+		}
+
+		// 解密消息
+		decrypted, err := h.decryptWeixinMessage(rawBody.Encrypt)
+		if err != nil {
+			h.logger.Warn("weixin failed to decrypt message", "error", err)
+			writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
+			return
+		}
+
+		h.logger.Debug("weixin decrypted message", "content", string(decrypted))
+		msgContent = decrypted
+	} else {
+		// 未加密的消息，直接使用原始 body
+		msgContent = body
+	}
+
+	// 解析 XML 格式的消息
+	var msg webhookMessage
+	if err := xml.Unmarshal(msgContent, &msg); err != nil {
+		h.logger.Warn("weixin failed to parse message xml", "error", err, "content", string(msgContent))
+		writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
+		return
+	}
+
+	// 处理 URL 验证事件
+	if msg.Event == "verify_url" || msg.MsgType == "" {
+		h.logger.Info("weixin url verification received")
+		writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
+		return
+	}
+
+	// 处理消息回调
+	if msg.MsgType == "text" || msg.MsgType == "image" || msg.MsgType == "voice" {
+		h.handleWebhook(r.Context(), &msg, reqID)
+	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"errcode": "0", "errmsg": ""})
 }
@@ -472,4 +536,185 @@ func mask(value string) string {
 		return value
 	}
 	return value[:4] + "..." + value[len(value)-4:]
+}
+
+// webhookMessage 是企业微信回调的加密消息结构
+type webhookMessage struct {
+	XMLName xml.Name `xml:"xml"`
+	MsgType     string `xml:"MsgType"`
+	Content     string `xml:"Content"`
+	MsgID       string `xml:"MsgId"`
+	FromUserName string `xml:"FromUserName"`
+	ToUserName   string `xml:"ToUserName"`
+	CreateTime   string `xml:"CreateTime"`
+	AgentID      string `xml:"AgentID"`
+	Event        string `xml:"Event"`
+}
+
+// verifyWeixinSignature 验证企业微信签名
+func (h *Handler) verifyWeixinSignature(msgSignature, timestamp, nonce, encryptStr string) error {
+	if h.cfg.Token == "" || msgSignature == "" {
+		return nil
+	}
+
+	// 签名计算：SHA1(token + timestamp + nonce + encryptStr)
+	arr := []string{h.cfg.Token, timestamp, nonce, encryptStr}
+	sort.Strings(arr)
+	str := strings.Join(arr, "")
+	h2 := sha1.Sum([]byte(str))
+	expectedSign := fmt.Sprintf("%x", h2)
+
+	if expectedSign != msgSignature {
+		return fmt.Errorf("signature mismatch: expected %s, got %s", expectedSign, msgSignature)
+	}
+	return nil
+}
+
+// decryptWeixinMessage 解密企业微信消息
+func (h *Handler) decryptWeixinMessage(encryptStr string) ([]byte, error) {
+	if h.cfg.EncryptKey == "" {
+		// 未配置加密密钥，直接返回
+		return []byte(encryptStr), nil
+	}
+
+	// 企业微信：AES key = base64(encryptKey + "=")
+	keyWithPadding := h.cfg.EncryptKey + "="
+	aesKey, err := base64.StdEncoding.DecodeString(keyWithPadding)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt_key base64 decode failed: %w", err)
+	}
+	if len(aesKey) != 32 {
+		return nil, fmt.Errorf("encrypt_key must be 32 bytes after decode, got %d", len(aesKey))
+	}
+
+	// 对密文进行 base64 解码
+	ciphertext, err := base64.StdEncoding.DecodeString(encryptStr)
+	if err != nil {
+		return nil, fmt.Errorf("ciphertext base64 decode failed: %w", err)
+	}
+
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return nil, fmt.Errorf("create cipher failed: %w", err)
+	}
+
+	// IV: 取 AES key 的前 16 字节
+	iv := make([]byte, 16)
+	copy(iv, aesKey)
+
+	if len(ciphertext) < aes.BlockSize {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+
+	plaintext := make([]byte, len(ciphertext))
+	mode := cipher.NewCBCDecrypter(block, iv)
+	mode.CryptBlocks(plaintext, ciphertext)
+
+	// 去除 PKCS7 padding
+	plaintext, err = unpadPKCS7(plaintext)
+	if err != nil {
+		return nil, fmt.Errorf("unpad failed: %w", err)
+	}
+
+	// 企业微信加密消息格式：
+	// 0-15: 16字节随机串
+	// 16-19: 4字节网络序的明文长度
+	// 20 到 end: 明文（XML格式）
+	if len(plaintext) < 20 {
+		return nil, fmt.Errorf("decrypted plaintext too short: %d", len(plaintext))
+	}
+
+	// 读取明文长度（网络字节序，大端）
+	length := int(binary.BigEndian.Uint32(plaintext[16:20]))
+	if len(plaintext) < 20+length {
+		return nil, fmt.Errorf("invalid plaintext length: claimed %d, have %d", length, len(plaintext)-20)
+	}
+
+	return plaintext[20 : 20+length], nil
+}
+
+// unpadPKCS7 removes PKCS7 padding
+func unpadPKCS7(data []byte) ([]byte, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("data is empty")
+	}
+	padLen := int(data[len(data)-1])
+	if padLen > len(data) || padLen == 0 {
+		return nil, fmt.Errorf("invalid padding length: %d", padLen)
+	}
+	return data[:len(data)-padLen], nil
+}
+
+// handleWebhook 处理 webhook 回调
+func (h *Handler) handleWebhook(ctx context.Context, msg *webhookMessage, reqID string) {
+	h.logger.Info("weixin webhook message", "msg_type", msg.MsgType, "msg_id", msg.MsgID, "content", msg.Content)
+
+	text := strings.TrimSpace(msg.Content)
+	if text == "" {
+		return
+	}
+
+	inbound := protocol.InboundMessage{
+		Channel:    protocol.ChannelWeixin,
+		TenantKey:  h.cfg.BotID,
+		ChatID:     msg.FromUserName, // 企业微信中 fromusername 是发送者用户ID
+		ChatType:   "single",
+		ThreadID:   "",
+		MessageID:  msg.MsgID,
+		SenderID:   msg.FromUserName,
+		Text:       text,
+		RawJSON:    "",
+		ReceivedAt: time.Now().UTC(),
+	}
+
+	created, err := h.store.RecordInboundMessage(ctx, inbound)
+	if err != nil {
+		h.logger.Error("record inbound failed", "error", err)
+		return
+	}
+	if !created {
+		h.logger.Info("ignore duplicate webhook message", "message_id", inbound.MessageID)
+		return
+	}
+
+	go h.processWebhookInbound(ctx, inbound, reqID, msg.FromUserName)
+}
+
+// processWebhookInbound 处理 webhook 收到的消息
+func (h *Handler) processWebhookInbound(ctx context.Context, inbound protocol.InboundMessage, reqID string, fromUserName string) {
+	h.logger.Info("start processing webhook inbound message", "message_id", inbound.MessageID, "from_user", fromUserName)
+
+	sink := &webhookProgressSink{client: h.client, fromUserName: fromUserName, reqID: reqID}
+	response, err := h.sessions.HandleInbound(ctx, inbound, sink)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			h.logger.Info("inbound message interrupted", "message_id", inbound.MessageID)
+			return
+		}
+		h.logger.Error("process inbound failed", "message_id", inbound.MessageID, "error", err)
+		response = "处理消息失败，请稍后重试。"
+	}
+
+	// 通过 webhook API 发送回复
+	if err := h.client.sendWebhookReply(ctx, fromUserName, response); err != nil {
+		h.logger.Error("send webhook reply failed", "message_id", inbound.MessageID, "error", err)
+		return
+	}
+	h.logger.Info("finished processing webhook inbound message", "message_id", inbound.MessageID)
+}
+
+type webhookProgressSink struct {
+	client      *Client
+	fromUserName string
+	reqID      string
+}
+
+func (s *webhookProgressSink) SendProgress(ctx context.Context, session protocol.SessionRef, text string) error {
+	content := fmt.Sprintf("[会话 %s][进度] %s", session.PublicID, strings.TrimSpace(text))
+	return s.client.sendWebhookReply(ctx, s.fromUserName, content)
+}
+
+func (s *webhookProgressSink) SendChatText(ctx context.Context, chatID string, text string) error {
+	// webhook 模式下使用 fromUserName 作为聊天对象
+	return s.client.sendWebhookReply(ctx, s.fromUserName, text)
 }

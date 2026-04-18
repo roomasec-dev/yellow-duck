@@ -109,8 +109,10 @@ func New(cfg config.Config) (*App, error) {
 			"webhook_path", cfg.Channel.Dingtalk.WebhookPath,
 		)
 	}
-	if cfg.Channel.Weixin.Enabled {
+	if cfg.Channel.Weixin.Enabled && (strings.EqualFold(cfg.Channel.Weixin.Mode, "webhook") || strings.EqualFold(cfg.Channel.Weixin.Mode, "both")) {
 		mux.Handle(cfg.Channel.Weixin.WebhookPath, weixinHandler)
+	}
+	if cfg.Channel.Weixin.Enabled {
 		logger.Info(
 			"weixin channel configured",
 			"mode", cfg.Channel.Weixin.Mode,
