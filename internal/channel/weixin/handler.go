@@ -107,16 +107,21 @@ func (h *Handler) runLongConnection(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	writerCh := make(chan []byte, 10)
 
+	// Set sender for proactive messages (e.g., scheduler notifications)
+	h.client.SetSender(&longConnSender{writer: writerCh, logger: h.logger})
+
 	// 启动 writer goroutine
 	go func() {
 		for {
 			select {
 			case msg := <-writerCh:
+				h.logger.Debug("weixin writer got message", "data", string(msg))
 				if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
 					h.logger.Error("weixin write message error", "error", err)
 					errCh <- err
 					return
 				}
+				h.logger.Info("weixin writer sent message successfully")
 			case <-ctx.Done():
 				return
 			}
@@ -196,6 +201,39 @@ func (h *Handler) sendSubscribe(conn *websocket.Conn) error {
 
 type writerChan chan []byte
 
+// longConnSender implements messageSender for long connection mode
+type longConnSender struct {
+	writer writerChan
+	logger *logx.Logger
+}
+
+func (s *longConnSender) sendText(ctx context.Context, chatID string, text string) error {
+	msg := map[string]any{
+		"cmd": "aibot_send_msg",
+		"headers": map[string]string{
+			"req_id": uuid.New().String(),
+		},
+		"body": map[string]any{
+			"chatid":    chatID,
+			"chat_type": 1,
+			"msgtype":   "text",
+			"text": map[string]string{
+				"content": text,
+			},
+		},
+	}
+	data, _ := json.Marshal(msg)
+	s.logger.Info("weixin longconn sender sending", "chat_id", chatID, "msg", string(data))
+	select {
+	case s.writer <- data:
+		s.logger.Info("weixin longconn sender sent message", "chat_id", chatID)
+		return nil
+	default:
+		s.logger.Warn("weixin longconn sender channel full")
+		return fmt.Errorf("writer channel full")
+	}
+}
+
 func (h *Handler) handleMessage(ctx context.Context, msgBytes []byte, writer writerChan) {
 	var msg struct {
 		Cmd     string `json:"cmd"`
@@ -251,10 +289,15 @@ func (h *Handler) handleMsgCallback(ctx context.Context, body json.RawMessage, r
 		return
 	}
 
+	// For single chat, use from.userid as chatid since chatid is not provided
+	chatID := msg.ChatID
+	if chatID == "" && msg.ChatType == "single" {
+		chatID = msg.From.UserID
+	}
 	inbound := protocol.InboundMessage{
 		Channel:    protocol.ChannelWeixin,
 		TenantKey:  h.cfg.BotID,
-		ChatID:     msg.ChatID,
+		ChatID:     chatID,
 		ChatType:   msg.ChatType,
 		ThreadID:   "",
 		MessageID:  msg.MsgID,

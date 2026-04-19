@@ -22,6 +22,7 @@ import (
 	"rm_ai_agent/internal/model"
 	"rm_ai_agent/internal/planner"
 	"rm_ai_agent/internal/progress"
+	"rm_ai_agent/internal/protocol"
 	"rm_ai_agent/internal/prompt"
 	"rm_ai_agent/internal/router"
 	"rm_ai_agent/internal/scheduler"
@@ -66,20 +67,33 @@ func New(cfg config.Config) (*App, error) {
 	sessionService := session.NewService(cfg, dataStore, modelClient, compactor, progressService, detailAgentService, routerService, plannerService, memoryService, artifactService, i18nService, knowledgeService, promptService, edrClient, logger)
 
 	feishuClient := feishu.NewClient(cfg.Channel.Feishu, logger)
-	schedulerService := scheduler.NewService(cfg.Scheduler, dataStore, sessionService, feishuClient, logger)
+	weixinClient := weixin.NewClient(cfg.Channel.Weixin, logger)
+	dingtalkClient := dingtalk.NewClient(cfg.Channel.Dingtalk, logger)
+
+	// Build notifiers map for scheduler
+	schedulerNotifiers := make(map[protocol.Channel]scheduler.Notifier)
+	if cfg.Channel.Feishu.Enabled {
+		schedulerNotifiers[protocol.ChannelFeishu] = feishuClient
+	}
+	if cfg.Channel.Weixin.Enabled {
+		schedulerNotifiers[protocol.ChannelWeixin] = weixinClient
+	}
+	if cfg.Channel.Dingtalk.Enabled {
+		schedulerNotifiers[protocol.ChannelDingtalk] = dingtalkClient
+	}
+	schedulerService := scheduler.NewService(cfg.Scheduler, dataStore, sessionService, schedulerNotifiers, logger)
+
 	feishuHandler, err := feishu.NewHandler(cfg.Channel.Feishu, dataStore, sessionService, feishuClient, logger)
 	if err != nil {
 		_ = logger.Close()
 		return nil, fmt.Errorf("create feishu handler: %w", err)
 	}
 
-	dingtalkClient := dingtalk.NewClient(cfg.Channel.Dingtalk, logger)
 	dingtalkHandler := dingtalk.NewHandler(cfg.Channel.Dingtalk, dataStore, sessionService, dingtalkClient, logger)
 	if dingtalkHandler != nil {
 		logger.Info("dingtalk handler created", "enabled", cfg.Channel.Dingtalk.Enabled)
 	}
 
-	weixinClient := weixin.NewClient(cfg.Channel.Weixin, logger)
 	weixinHandler := weixin.NewHandler(cfg.Channel.Weixin, dataStore, sessionService, weixinClient, logger)
 
 	mux := http.NewServeMux()

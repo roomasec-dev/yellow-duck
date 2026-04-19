@@ -58,6 +58,7 @@ type DingtalkConfig struct {
 	ClientSecret      string `toml:"client_secret"`
 	BaseURL           string `toml:"base_url"`
 	WebhookPath       string `toml:"webhook_path"`
+	RobotWebhookURL   string `toml:"robot_webhook_url"`
 	ReplyMode         string `toml:"reply_mode"`
 	EncryptKey        string `toml:"encrypt_key"`
 	VerificationToken string `toml:"verification_token"`
@@ -66,6 +67,8 @@ type DingtalkConfig struct {
 type WeixinConfig struct {
 	Enabled           bool   `toml:"enabled"`
 	Mode              string `toml:"mode"`
+	CorpID            string `toml:"corpid"`
+	CorpSecret        string `toml:"corpsecret"`
 	BotID             string `toml:"bot_id"`
 	BotSecret         string `toml:"bot_secret"`
 	Token             string `toml:"token"`
@@ -146,7 +149,6 @@ type SchedulerConfig struct {
 	PollSeconds      int    `toml:"poll_seconds"`
 	Model            string `toml:"model"`
 	DefaultIntervalM int    `toml:"default_interval_minutes"`
-	ScopeKey         string `toml:"scope_key"`
 }
 
 type KnowledgeBaseConfig struct {

@@ -335,7 +335,7 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 				return "", true, err
 			}
 			call.VerifyCode = code
-			response, execErr := s.executeConfirmedTool(ctx, call, locale, reporter)
+			response, execErr := s.executeConfirmedTool(ctx, sessionKey, call, locale, reporter)
 			if delErr := s.store.DeletePendingAction(ctx, sessionKey); delErr != nil && execErr == nil {
 				execErr = delErr
 			}
@@ -359,7 +359,7 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 					// 所有字段都已填充，直接执行
 				}
 				reporter.Step(ctx, "我收到参数了，正在执行计划操作。")
-				response, execErr := s.executeConfirmedTool(ctx, call, locale, reporter)
+				response, execErr := s.executeConfirmedTool(ctx, sessionKey, call, locale, reporter)
 				if delErr := s.store.DeletePendingAction(ctx, sessionKey); delErr != nil && execErr == nil {
 					execErr = delErr
 				}
@@ -603,12 +603,17 @@ func (s *Service) createScheduledTask(ctx context.Context, sessionKey string, ca
 	if title == "" {
 		title = taskTitleFromPrompt(call.TaskPrompt)
 	}
+	// Use explicitly specified chat_id for notifications, otherwise fall back to session's chat_id
+	notifyChatID := strings.TrimSpace(call.TaskChatID)
+	if notifyChatID == "" {
+		notifyChatID = chatID
+	}
 	task := protocol.ScheduledTask{
 		ScopeKey:        scopeKey,
 		SessionKey:      sessionKey,
 		Channel:         protocol.Channel(channel),
 		TenantKey:       tenantKey,
-		ChatID:          chatID,
+		ChatID:          notifyChatID,
 		ThreadID:        threadID,
 		Title:           title,
 		Prompt:          strings.TrimSpace(call.TaskPrompt),
@@ -619,11 +624,11 @@ func (s *Service) createScheduledTask(ctx context.Context, sessionKey string, ca
 	if err != nil {
 		return "创建定时任务失败：" + err.Error()
 	}
-	return fmt.Sprintf("已创建定时任务 %s，每 %d 分钟执行一次。任务内容：%s。下次执行时间：%s。", stored.TaskID, stored.IntervalSeconds/60, stored.Prompt, stored.NextRunAt.Local().Format("2006-01-02 15:04:05"))
+	return fmt.Sprintf("已创建定时任务 %s，每 %d 分钟执行一次。任务内容：%s。下次执行时间：%s。如果任务执行结果重复，不会重复汇报。", stored.TaskID, stored.IntervalSeconds/60, stored.Prompt, stored.NextRunAt.Local().Format("2006-01-02 15:04:05"))
 }
 
 func (s *Service) listScheduledTasks(ctx context.Context, sessionKey string) string {
-	items, err := s.store.ListScheduledTasks(ctx, scopeKeyFromSessionKey(sessionKey), 50)
+	items, err := s.store.ListScheduledTasks(ctx, 50)
 	if err != nil {
 		return "查看定时任务失败：" + err.Error()
 	}
@@ -632,7 +637,7 @@ func (s *Service) listScheduledTasks(ctx context.Context, sessionKey string) str
 	}
 	lines := []string{"当前定时任务如下："}
 	for _, item := range items {
-		lines = append(lines, fmt.Sprintf("- %s | status=%s | 每 %d 分钟 | 下次=%s | 内容=%s", item.TaskID, item.Status, maxInt(item.IntervalSeconds/60, 1), item.NextRunAt.Local().Format("2006-01-02 15:04:05"), item.Prompt))
+		lines = append(lines, fmt.Sprintf("- %s | channel=%s | status=%s | 每 %d 分钟 | 下次=%s | 内容=%s", item.TaskID, item.Channel, item.Status, maxInt(item.IntervalSeconds/60, 1), item.NextRunAt.Local().Format("2006-01-02 15:04:05"), item.Prompt))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -665,7 +670,7 @@ func (s *Service) deleteScheduledTask(ctx context.Context, sessionKey string, ca
 	if strings.TrimSpace(call.TaskID) == "" {
 		return "要删除定时任务的话，先告诉我任务 id。"
 	}
-	if err := s.store.DeleteScheduledTask(ctx, scopeKeyFromSessionKey(sessionKey), call.TaskID); err != nil {
+	if err := s.store.DeleteScheduledTask(ctx, call.TaskID); err != nil {
 		return "删除定时任务失败：" + err.Error()
 	}
 	return fmt.Sprintf("已删除定时任务 %s。", call.TaskID)
@@ -1660,14 +1665,14 @@ func (s *Service) executePendingAction(ctx context.Context, sessionKey string, p
 	if err := json.Unmarshal([]byte(pending.Payload), &call); err != nil {
 		return "", err
 	}
-	result, err := s.executeConfirmedTool(ctx, call, locale, reporter)
+	result, err := s.executeConfirmedTool(ctx, sessionKey, call, locale, reporter)
 	if err != nil {
 		return "", err
 	}
 	return s.storeAssistantReply(ctx, sessionKey, result)
 }
 
-func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, error) {
+func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, error) {
 	switch call.Name {
 	case "edr_isolate":
 		reporter.Step(ctx, "我在下发隔离动作，并等待任务回执。")
@@ -2051,6 +2056,15 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 			return "", err
 		}
 		return fmt.Sprintf("批量处置完成：%d 个事件已处理", result.TotalIncident), nil
+	case "scheduled_task_delete":
+		reporter.Step(ctx, "我正在删除定时任务。")
+		return s.deleteScheduledTask(ctx, sessionKey, call), nil
+	case "scheduled_task_create":
+		reporter.Step(ctx, "我正在创建定时任务。")
+		return s.createScheduledTask(ctx, sessionKey, call), nil
+	case "scheduled_task_update":
+		reporter.Step(ctx, "我正在更新定时任务。")
+		return s.updateScheduledTask(ctx, sessionKey, call), nil
 	default:
 		return "", fmt.Errorf("unsupported confirmed action: %s", call.Name)
 	}
@@ -2058,7 +2072,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, call planner.ToolCal
 
 func isCriticalTool(name string) bool {
 	switch name {
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_ioa_add", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_add", "edr_ioa_network_update", "edr_ioa_network_delete", "edr_strategy_create", "edr_strategy_update", "edr_strategy_delete", "edr_strategy_status", "edr_host_offline_save", "edr_add_host_blacklist", "edr_remove_host", "edr_update_detection_status", "edr_batch_deal_incident":
+	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_ioa_add", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_add", "edr_ioa_network_update", "edr_ioa_network_delete", "edr_strategy_create", "edr_strategy_update", "edr_strategy_delete", "edr_strategy_status", "edr_host_offline_save", "edr_add_host_blacklist", "edr_remove_host", "edr_update_detection_status", "edr_batch_deal_incident", "scheduled_task_delete":
 		return true
 	default:
 		return false

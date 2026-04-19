@@ -666,12 +666,12 @@ func (s *SQLiteStore) CreateScheduledTask(ctx context.Context, task protocol.Sch
 	return task, nil
 }
 
-func (s *SQLiteStore) ListScheduledTasks(ctx context.Context, scopeKey string, limit int) ([]protocol.ScheduledTask, error) {
+func (s *SQLiteStore) ListScheduledTasks(ctx context.Context, limit int) ([]protocol.ScheduledTask, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT task_id, scope_key, session_key, channel, tenant_key, chat_id, thread_id, creator_id, title, prompt, interval_seconds, status, last_summary, next_run_at, last_run_at, created_at, updated_at
-		FROM scheduled_tasks WHERE scope_key = ? AND status != 'deleted' ORDER BY updated_at DESC LIMIT ?`, scopeKey, limit)
+		FROM scheduled_tasks WHERE status != 'deleted' ORDER BY updated_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list scheduled tasks: %w", err)
 	}
@@ -734,20 +734,24 @@ func (s *SQLiteStore) UpdateScheduledTask(ctx context.Context, scopeKey string, 
 	return item, nil
 }
 
-func (s *SQLiteStore) DeleteScheduledTask(ctx context.Context, scopeKey string, taskID string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE scheduled_tasks SET status='deleted', updated_at=? WHERE scope_key=? AND task_id=?`, time.Now().UTC(), scopeKey, taskID)
+func (s *SQLiteStore) DeleteScheduledTask(ctx context.Context, taskID string) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE scheduled_tasks SET status='deleted', updated_at=? WHERE task_id=?`, time.Now().UTC(), taskID)
 	if err != nil {
 		return fmt.Errorf("delete scheduled task: %w", err)
+	}
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("scheduled task %s not found", taskID)
 	}
 	return nil
 }
 
-func (s *SQLiteStore) ListDueScheduledTasks(ctx context.Context, scopeKey string, now time.Time, limit int) ([]protocol.ScheduledTask, error) {
+func (s *SQLiteStore) ListDueScheduledTasks(ctx context.Context, now time.Time, limit int) ([]protocol.ScheduledTask, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT task_id, scope_key, session_key, channel, tenant_key, chat_id, thread_id, creator_id, title, prompt, interval_seconds, status, last_summary, next_run_at, last_run_at, created_at, updated_at
-		FROM scheduled_tasks WHERE status='active' AND next_run_at <= ? AND (scope_key=? OR ''=?) ORDER BY next_run_at ASC LIMIT ?`, now, scopeKey, scopeKey, limit)
+		FROM scheduled_tasks WHERE status='active' AND next_run_at <= ? ORDER BY next_run_at ASC LIMIT ?`, now, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list due scheduled tasks: %w", err)
 	}

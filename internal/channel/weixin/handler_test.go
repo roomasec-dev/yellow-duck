@@ -143,7 +143,7 @@ func (m *mockStore) CreateScheduledTask(ctx context.Context, task protocol.Sched
 	return protocol.ScheduledTask{}, nil
 }
 
-func (m *mockStore) ListScheduledTasks(ctx context.Context, scopeKey string, limit int) ([]protocol.ScheduledTask, error) {
+func (m *mockStore) ListScheduledTasks(ctx context.Context, limit int) ([]protocol.ScheduledTask, error) {
 	return nil, nil
 }
 
@@ -159,11 +159,11 @@ func (m *mockStore) UpdateScheduledTask(ctx context.Context, scopeKey string, ta
 	return protocol.ScheduledTask{}, nil
 }
 
-func (m *mockStore) DeleteScheduledTask(ctx context.Context, scopeKey string, taskID string) error {
+func (m *mockStore) DeleteScheduledTask(ctx context.Context, taskID string) error {
 	return nil
 }
 
-func (m *mockStore) ListDueScheduledTasks(ctx context.Context, scopeKey string, now time.Time, limit int) ([]protocol.ScheduledTask, error) {
+func (m *mockStore) ListDueScheduledTasks(ctx context.Context, now time.Time, limit int) ([]protocol.ScheduledTask, error) {
 	return nil, nil
 }
 

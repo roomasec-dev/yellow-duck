@@ -43,6 +43,7 @@ type ToolCall struct {
 	TaskStatus                   string `json:"task_status,omitempty"`
 	TaskFeedback                 string `json:"task_feedback,omitempty"`
 	TaskIntervalMinutes          int    `json:"task_interval_minutes,omitempty"`
+	TaskChatID                   string `json:"task_chat_id,omitempty"`
 	InstructionName              string `json:"instruction_name,omitempty"`
 	Path                         string `json:"path,omitempty"`
 	KBTitle                      string `json:"kb_title,omitempty"`

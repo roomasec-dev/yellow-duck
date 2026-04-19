@@ -17,19 +17,19 @@ type Notifier interface {
 }
 
 type Service struct {
-	cfg      config.SchedulerConfig
-	store    store.Store
-	sessions *session.Service
-	notify   Notifier
-	logger   *logx.Logger
+	cfg       config.SchedulerConfig
+	store     store.Store
+	sessions  *session.Service
+	notifiers map[protocol.Channel]Notifier
+	logger    *logx.Logger
 }
 
-func NewService(cfg config.SchedulerConfig, dataStore store.Store, sessions *session.Service, notify Notifier, logger *logx.Logger) *Service {
-	return &Service{cfg: cfg, store: dataStore, sessions: sessions, notify: notify, logger: logger}
+func NewService(cfg config.SchedulerConfig, dataStore store.Store, sessions *session.Service, notifiers map[protocol.Channel]Notifier, logger *logx.Logger) *Service {
+	return &Service{cfg: cfg, store: dataStore, sessions: sessions, notifiers: notifiers, logger: logger}
 }
 
 func (s *Service) Start(ctx context.Context) {
-	if s == nil || !s.cfg.Enabled || s.store == nil || s.sessions == nil || s.notify == nil {
+	if s == nil || !s.cfg.Enabled || s.store == nil || s.sessions == nil || len(s.notifiers) == 0 {
 		return
 	}
 	ticker := time.NewTicker(time.Duration(s.cfg.PollSeconds) * time.Second)
@@ -47,12 +47,17 @@ func (s *Service) Start(ctx context.Context) {
 
 func (s *Service) runOnce(ctx context.Context) {
 	now := time.Now().UTC()
-	tasks, err := s.store.ListDueScheduledTasks(ctx, s.cfg.ScopeKey, now, 10)
+	tasks, err := s.store.ListDueScheduledTasks(ctx, now, 10)
 	if err != nil {
 		s.logger.Warn("list due scheduled tasks failed", "error", err)
 		return
 	}
 	for _, task := range tasks {
+		notifier, ok := s.notifiers[task.Channel]
+		if !ok {
+			s.logger.Info("skipping scheduled task: channel not enabled", "task_id", task.TaskID, "channel", task.Channel)
+			continue
+		}
 		nextRunAt := now.Add(time.Duration(task.IntervalSeconds) * time.Second)
 		if err := s.store.MarkScheduledTaskRunning(ctx, task.TaskID, now, nextRunAt); err != nil {
 			s.logger.Warn("mark scheduled task running failed", "task_id", task.TaskID, "error", err)
@@ -80,10 +85,10 @@ func (s *Service) runOnce(ctx context.Context) {
 			s.logger.Info("scheduled task finished without notification", "task_id", task.TaskID, "summary", exec.Summary)
 			continue
 		}
-		if err := s.notify.SendChatText(ctx, task.ChatID, exec.Message); err != nil {
-			s.logger.Warn("send scheduled task notification failed", "task_id", task.TaskID, "chat_id", task.ChatID, "error", err)
+		if err := notifier.SendChatText(ctx, task.ChatID, exec.Message); err != nil {
+			s.logger.Warn("send scheduled task notification failed", "task_id", task.TaskID, "chat_id", task.ChatID, "channel", task.Channel, "error", err)
 			continue
 		}
-		s.logger.Info("scheduled task notification sent", "task_id", task.TaskID, "chat_id", task.ChatID)
+		s.logger.Info("scheduled task notification sent", "task_id", task.TaskID, "chat_id", task.ChatID, "channel", task.Channel)
 	}
 }

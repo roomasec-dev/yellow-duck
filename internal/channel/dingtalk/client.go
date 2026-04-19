@@ -65,12 +65,11 @@ func (c *Client) SendChatText(ctx context.Context, chatID string, text string) e
 		c.logger.Info("skip dingtalk proactive send because channel is disabled", "chat_id", chatID)
 		return nil
 	}
-	c.logger.Info("sending dingtalk proactive text", "chat_id", chatID, "text_preview", preview(text))
-
-	token, err := c.accessToken(ctx)
-	if err != nil {
-		return err
+	if c.cfg.RobotWebhookURL == "" {
+		c.logger.Info("skip dingtalk proactive send because robot_webhook_url is not configured")
+		return nil
 	}
+	c.logger.Info("sending dingtalk proactive text", "chat_id", chatID, "text_preview", preview(text))
 
 	body := map[string]any{
 		"msgtype": "text",
@@ -79,8 +78,7 @@ func (c *Client) SendChatText(ctx context.Context, chatID string, text string) e
 		},
 	}
 
-	url := strings.TrimRight(c.cfg.BaseURL, "/") + "/robot/send"
-	if err := c.post(ctx, url, token, body); err != nil {
+	if err := c.postWithoutAuth(ctx, c.cfg.RobotWebhookURL, body); err != nil {
 		return err
 	}
 	c.logger.Info("sent dingtalk proactive text", "chat_id", chatID)
@@ -125,6 +123,10 @@ func (c *Client) accessToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("get dingtalk token failed: %s", result.ErrMsg)
 	}
 
+	if result.Token == "" {
+		return "", fmt.Errorf("dingtalk token is empty, check appkey/appsecret")
+	}
+
 	c.tokenValue = result.Token
 	c.expiresAt = time.Now().Add(time.Duration(result.Expire) * time.Second)
 	c.logger.Info("refreshed dingtalk access token", "expire_seconds", result.Expire)
@@ -142,6 +144,42 @@ func (c *Client) post(ctx context.Context, url string, token string, payload any
 		return fmt.Errorf("create dingtalk request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("send dingtalk request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= http.StatusBadRequest {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("dingtalk http %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+
+	var result struct {
+		ErrCode int    `json:"errcode"`
+		ErrMsg  string `json:"errmsg"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("decode dingtalk response: %w", err)
+	}
+	if result.ErrCode != 0 {
+		return fmt.Errorf("dingtalk api error: %s", result.ErrMsg)
+	}
+	return nil
+}
+
+func (c *Client) postWithoutAuth(ctx context.Context, url string, payload any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal dingtalk payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create dingtalk request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http.Do(req)

@@ -21,6 +21,11 @@ type Client struct {
 	accessToken string
 	tokenMu     sync.RWMutex
 	tokenExpire time.Time
+	sender     messageSender
+}
+
+type messageSender interface {
+	sendText(ctx context.Context, chatID string, text string) error
 }
 
 func NewClient(cfg config.WeixinConfig, logger *logx.Logger) *Client {
@@ -40,8 +45,57 @@ func (c *Client) ReplyText(ctx context.Context, messageID string, text string) e
 }
 
 func (c *Client) SendChatText(ctx context.Context, chatID string, text string) error {
-	c.logger.Debug("weixin SendChatText not used in longconn mode")
+	if !c.cfg.Enabled {
+		c.logger.Info("skip weixin proactive send because channel is disabled", "chat_id", chatID)
+		return nil
+	}
+
+	// Use robot/send API for proactive sending
+	token, err := c.getAccessToken(ctx)
+	if err != nil {
+		return fmt.Errorf("get access token: %w", err)
+	}
+
+	apiURL := fmt.Sprintf("%s/cgi-bin/robot/send?access_token=%s", c.cfg.BaseURL, token)
+	body := map[string]any{
+		"chatid":  chatID,
+		"msgtype": "text",
+		"text": map[string]string{
+			"content": text,
+		},
+	}
+	bodyBytes, _ := json.Marshal(body)
+	c.logger.Info("weixin sending proactive text", "chat_id", chatID, "text_preview", preview(text), "url", apiURL)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	var result struct {
+		ErrCode int    `json:"errcode"`
+		ErrMsg  string `json:"errmsg"`
+	}
+	json.Unmarshal(respBody, &result)
+	if result.ErrCode != 0 {
+		c.logger.Error("weixin robot send failed", "errcode", result.ErrCode, "errmsg", result.ErrMsg)
+		return fmt.Errorf("weixin robot send error: %d %s", result.ErrCode, result.ErrMsg)
+	}
+
+	c.logger.Info("weixin proactive text sent successfully", "chat_id", chatID)
 	return nil
+}
+
+func (c *Client) SetSender(sender messageSender) {
+	c.sender = sender
 }
 
 // sendWebhookReply 通过 webhook 模式发送回复消息
@@ -131,7 +185,7 @@ func (c *Client) getAccessToken(ctx context.Context) (string, error) {
 		return c.accessToken, nil
 	}
 
-	apiURL := fmt.Sprintf("%s/cgi-bin/gettoken?corpid=%s&corpsecret=%s", c.cfg.BaseURL, c.cfg.BotID, c.cfg.BotSecret)
+	apiURL := fmt.Sprintf("%s/cgi-bin/gettoken?corpid=%s&corpsecret=%s", c.cfg.BaseURL, c.cfg.CorpID, c.cfg.CorpSecret)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
@@ -156,6 +210,7 @@ func (c *Client) getAccessToken(ctx context.Context) (string, error) {
 		ExpiresIn   int    `json:"expires_in"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
+		c.logger.Error("weixin gettoken failed", "status_code", resp.StatusCode, "response", string(respBody), "error", err)
 		return "", fmt.Errorf("parse token response: %w", err)
 	}
 	if result.ErrCode != 0 {

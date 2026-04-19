@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -16,6 +18,8 @@ type scheduledReport struct {
 	Summary  string                         `json:"summary"`
 	Entities []protocol.ScheduledTaskEntity `json:"entities"`
 }
+
+const noNewEntitiesSummary = "本轮没有发现需要新汇报的对象。"
 
 func (s *Service) RunScheduledTask(ctx context.Context, task protocol.ScheduledTask) (protocol.ScheduledTaskExecution, error) {
 	locale := "zh-CN"
@@ -45,12 +49,46 @@ func (s *Service) RunScheduledTask(ctx context.Context, task protocol.ScheduledT
 			return protocol.ScheduledTaskExecution{}, err
 		}
 	}
+
+	// Check if tool results changed by comparing hash
+	toolResultsHash := ""
+	if len(toolResults) > 0 {
+		h := sha256.Sum256([]byte(strings.Join(toolResults, "||")))
+		toolResultsHash = hex.EncodeToString(h[:])
+	}
+	var prevToolHash string
+	if taskMemory != "" {
+		var mem map[string]any
+		if err := json.Unmarshal([]byte(taskMemory), &mem); err == nil {
+			if v, ok := mem["tool_hash"].(string); ok {
+				prevToolHash = v
+			}
+		}
+	}
+	// If tool results same as last run, skip report and notification
+	if toolResultsHash != "" && toolResultsHash == prevToolHash {
+		s.logger.Info("skipping scheduled task notification: tool results unchanged", "task_id", task.TaskID, "hash", toolResultsHash)
+		// Still update state with new timestamp and hash
+		state := map[string]any{"tool_hash": toolResultsHash, "last_run_at": time.Now().UTC().Format(time.RFC3339)}
+		body, _ := json.Marshal(state)
+		_ = s.store.UpsertScheduledTaskState(ctx, task.TaskID, string(body))
+		return protocol.ScheduledTaskExecution{Summary: "", Message: "", Run: protocol.ScheduledTaskRun{TaskID: task.TaskID}, Entities: nil}, nil
+	}
+
 	report, err := s.buildScheduledReport(ctx, task, taskMemory, knownEntities, strings.Join(toolResults, "\n\n"), finalReply)
 	if err != nil {
 		report = scheduledReport{Summary: strings.TrimSpace(finalReply)}
 	}
-	notifyEntities, allEntities, stateJSON, summaryText := s.mergeScheduledEntities(task, report, knownEntities)
+	notifyEntities, allEntities, stateJSON, summaryText := s.mergeScheduledEntities(task, report, knownEntities, taskMemory)
 	if stateJSON != "" {
+		// Add tool_hash to state before saving
+		var state map[string]any
+		if err := json.Unmarshal([]byte(stateJSON), &state); err == nil {
+			state["tool_hash"] = toolResultsHash
+			if newBody, err := json.Marshal(state); err == nil {
+				stateJSON = string(newBody)
+			}
+		}
 		_ = s.store.UpsertScheduledTaskState(ctx, task.TaskID, stateJSON)
 	}
 	run := protocol.ScheduledTaskRun{
@@ -77,6 +115,10 @@ func (s *Service) RunScheduledTask(ctx context.Context, task protocol.ScheduledT
 	message := ""
 	if len(notifyEntities) > 0 {
 		message = s.buildScheduledTaskMessage(task, report.Summary, notifyEntities)
+		_, _ = s.storeAssistantReply(ctx, task.SessionKey, message)
+	} else if summaryText != "" && summaryText != noNewEntitiesSummary {
+		// Has meaningful summary (not the default "no new entities" message)
+		message = fmt.Sprintf("[定时任务 %s] %s", task.TaskID, summaryText)
 		_, _ = s.storeAssistantReply(ctx, task.SessionKey, message)
 	}
 	return protocol.ScheduledTaskExecution{Summary: summaryText, Message: message, Run: run, Entities: notifyEntities}, nil
@@ -170,7 +212,7 @@ func (s *Service) buildScheduledReport(ctx context.Context, task protocol.Schedu
 	return report, nil
 }
 
-func (s *Service) mergeScheduledEntities(task protocol.ScheduledTask, report scheduledReport, existing []protocol.ScheduledTaskEntity) ([]protocol.ScheduledTaskEntity, []protocol.ScheduledTaskEntity, string, string) {
+func (s *Service) mergeScheduledEntities(task protocol.ScheduledTask, report scheduledReport, existing []protocol.ScheduledTaskEntity, taskMemory string) ([]protocol.ScheduledTaskEntity, []protocol.ScheduledTaskEntity, string, string) {
 	now := time.Now().UTC()
 	existingMap := make(map[string]protocol.ScheduledTaskEntity, len(existing))
 	for _, item := range existing {
@@ -219,12 +261,12 @@ func (s *Service) mergeScheduledEntities(task protocol.ScheduledTask, report sch
 			notify = append(notify, item)
 		}
 	}
-	state := map[string]any{"last_summary": report.Summary, "last_run_at": now.Format(time.RFC3339), "reported_entities": len(notify)}
+	state := map[string]any{"last_summary": report.Summary, "last_run_at": now.Format(time.RFC3339), "reported_entities": len(notify), "tool_hash": ""}
 	body, _ := json.Marshal(state)
 	summary := report.Summary
 	if summary == "" {
 		if len(notify) == 0 {
-			summary = "本轮没有发现需要新汇报的对象。"
+			summary = noNewEntitiesSummary
 		} else {
 			summary = fmt.Sprintf("本轮发现 %d 个需要汇报的对象。", len(notify))
 		}
