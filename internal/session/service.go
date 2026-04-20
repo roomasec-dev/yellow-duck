@@ -3043,24 +3043,161 @@ func (s *Service) formatLogs(ctx context.Context, result edr.ListLogsResponse, p
 	hostMap := s.resolveHostnamesForLogs(ctx, result.Logs)
 	lines := []string{head}
 	for _, item := range result.Logs {
-		operation := stringifyLogValue(item["operation"])
-		processName := firstNonEmptyStringify(item["process_name"], item["process"], item["command_line"])
-		newProcess := firstNonEmptyStringify(item["new_process_name"], item["newprocess"], item["newcommandline"])
-		clientID := stringifyLogValue(item["client_id"])
-		hostName := firstNonEmptyStringify(item["host_name"], item["hostname"], hostMap[clientID])
-		osType := stringifyLogValue(item["os_type"])
-		timestamp := firstNonEmptyStringify(item["timestamp"], item["time"])
-		line := fmt.Sprintf("- os=%s operation=%s process=%s", blankToDash(osType), blankToDash(operation), blankToDash(processName))
-		if strings.TrimSpace(newProcess) != "" {
-			line += fmt.Sprintf(" -> %s", newProcess)
+		// EDR日志字段实际在 _source 里
+		source, _ := item["_source"].(map[string]any)
+		if source == nil {
+			source = item
 		}
-		if strings.TrimSpace(hostName) != "" {
-			line += fmt.Sprintf(" host=%s client_id=%s", hostName, blankToDash(clientID))
-		} else {
-			line += fmt.Sprintf(" host=- client_id=%s", blankToDash(clientID))
+
+		// 核心字段提取
+		timestamp := stringifyLogValue(source["@timestamp"])
+		operation := stringifyLogValue(source["operation"])
+		processName := stringifyLogValue(source["process_name"])
+		processPath := stringifyLogValue(source["process"])
+		commandLine := stringifyLogValue(source["command_line"])
+		processID := stringifyLogValue(source["process_id"])
+		parentProcessName := stringifyLogValue(source["parent_process_name"])
+		parentProcessPath := stringifyLogValue(source["parent_process"])
+		parentProcessID := stringifyLogValue(source["parent_processid"])
+		clientID := stringifyLogValue(source["client_id"])
+		clientIP := stringifyLogValue(source["client_ip"])
+		hostName := firstNonEmptyStringify(source["host_name"], source["hostname"], hostMap[clientID])
+		riskLevel := stringifyLogValue(source["risk_level"])
+		processLevel := stringifyLogValue(source["processlevel"])
+		processMD5 := stringifyLogValue(source["processmd5"])
+		processSHA1 := stringifyLogValue(source["processsha1"])
+		processSigned := stringifyLogValue(source["processsigned"])
+		processIntegrity := stringifyLogValue(source["processintegrity"])
+		attackTactic := stringifyLogValue(source["attack.tactic"])
+		attackTechnique := stringifyLogValue(source["attack.technique"])
+		attackSubTechnique := stringifyLogValue(source["attack.sub-technique"])
+		filterName := stringifyLogValue(source["fltrname"])
+		dataSource := stringifyLogValue(source["datasource"])
+
+		// 构建简洁的日志描述
+		var parts []string
+
+		// 时间
+		if ts := extractTimestamp(timestamp); ts != "" {
+			parts = append(parts, fmt.Sprintf("[%s]", ts))
 		}
-		line += fmt.Sprintf(" time=%s", blankToDash(timestamp))
-		lines = append(lines, line)
+
+		// 操作类型和风险等级
+		if operation != "" {
+			if riskLevel != "" {
+				parts = append(parts, fmt.Sprintf("%s(%s)", operation, riskLevel))
+			} else {
+				parts = append(parts, operation)
+			}
+		}
+
+		// 攻击战术技术
+		if attackTactic != "" || attackTechnique != "" {
+			var attackParts []string
+			if attackTactic != "" {
+				attackParts = append(attackParts, attackTactic)
+			}
+			if attackTechnique != "" {
+				attackParts = append(attackParts, attackTechnique)
+			}
+			if attackSubTechnique != "" {
+				attackParts = append(attackParts, attackSubTechnique)
+			}
+			parts = append(parts, fmt.Sprintf("├ ATT&CK: %s", strings.Join(attackParts, "/")))
+		}
+
+		// 过滤器/规则信息
+		if filterName != "" {
+			parts = append(parts, fmt.Sprintf("├ 规则: %s", filterName))
+		}
+		if dataSource != "" {
+			parts = append(parts, fmt.Sprintf("├ 数据源: %s", dataSource))
+		}
+
+		// 进程信息
+		if processName != "" || processPath != "" {
+			procInfo := processName
+			if processPath != "" && processPath != processName {
+				procInfo = processPath
+			}
+			if processID != "" {
+				procInfo = fmt.Sprintf("%s(pid=%s)", procInfo, processID)
+			}
+			if processMD5 != "" {
+				procInfo = fmt.Sprintf("%s md5=%s", procInfo, processMD5[:16])
+			} else if processSHA1 != "" {
+				procInfo = fmt.Sprintf("%s sha1=%s", procInfo, processSHA1[:16])
+			}
+			if processLevel != "" {
+				procInfo = fmt.Sprintf("%s level=%s", procInfo, processLevel)
+			}
+			if processSigned != "" {
+				signed := "否"
+				if processSigned == "1" {
+					signed = "是"
+				}
+				procInfo = fmt.Sprintf("%s signed=%s", procInfo, signed)
+			}
+			if processIntegrity != "" {
+				procInfo = fmt.Sprintf("%s integrity=%s", procInfo, processIntegrity)
+			}
+			parts = append(parts, fmt.Sprintf("├ 进程: %s", procInfo))
+		}
+
+		// 父进程信息
+		if parentProcessName != "" || parentProcessPath != "" {
+			parentInfo := parentProcessName
+			if parentProcessPath != "" && parentProcessPath != parentProcessName {
+				parentInfo = parentProcessPath
+			}
+			if parentProcessID != "" {
+				parentInfo = fmt.Sprintf("%s(pid=%s)", parentInfo, parentProcessID)
+			}
+			parts = append(parts, fmt.Sprintf("├ 父进程: %s", parentInfo))
+		}
+
+		// 命令行
+		if commandLine != "" && commandLine != processPath {
+			if len(commandLine) > 100 {
+				commandLine = commandLine[:100] + "..."
+			}
+			parts = append(parts, fmt.Sprintf("├ 命令行: %s", commandLine))
+		}
+
+		// 目标信息（注册表、文件等）
+		if keyName := stringifyLogValue(source["keyname"]); keyName != "" {
+			parts = append(parts, fmt.Sprintf("├ 目标: %s", keyName))
+			if valueName := stringifyLogValue(source["valuename"]); valueName != "" {
+				parts = append(parts, fmt.Sprintf("  ├ 值名: %s", valueName))
+			}
+			if valueContent := stringifyLogValue(source["valuecontent"]); valueContent != "" {
+				if len(valueContent) > 80 {
+					valueContent = valueContent[:80] + "..."
+				}
+				parts = append(parts, fmt.Sprintf("  └ 数据: %s", valueContent))
+			}
+		}
+
+		// 主机信息
+		var hostParts []string
+		if hostName != "" {
+			hostParts = append(hostParts, hostName)
+		}
+		if clientIP != "" {
+			hostParts = append(hostParts, clientIP)
+		}
+		if len(hostParts) > 0 {
+			parts = append(parts, fmt.Sprintf("└ 主机: %s", strings.Join(hostParts, "/")))
+		}
+
+		// client_id
+		if clientID != "" {
+			parts = append(parts, fmt.Sprintf("client_id=%s", clientID))
+		}
+
+		if len(parts) > 0 {
+			lines = append(lines, "- "+strings.Join(parts, "\n"))
+		}
 	}
 	if totalPages > 1 {
 		clientPrefix := formatOptionalClientPrefix(call.ClientID)
@@ -3135,6 +3272,25 @@ func describeLogFilters(call planner.ToolCall) string {
 		parts = append(parts, fmt.Sprintf("%s %s %s", call.FilterField, op, call.FilterValue))
 	}
 	return strings.Join(parts, "; ")
+}
+
+func extractTimestamp(ts string) string {
+	if ts == "" {
+		return ""
+	}
+	// @timestamp 格式: "2026-04-20T06:10:34.4751281Z"
+	if len(ts) >= 19 {
+		return ts[11:19] // 返回 HH:MM:SS 部分
+	}
+	return ts
+}
+
+func getMapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func stringifyLogValue(value any) string {

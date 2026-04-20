@@ -1286,7 +1286,7 @@ type ListLogsRequest struct {
 
 type ListLogsResponse struct {
 	Total int              `json:"total"`
-	Logs  []map[string]any `json:"data"`
+	Logs  []map[string]any `json:"list"`
 }
 
 type IncidentViewRequest struct {

@@ -109,7 +109,8 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 
 	t.Run("logs_list", func(t *testing.T) {
 		result, err := client.ListLogs(ctx, ListLogsRequest{Limit: 10})
-		t.Logf("logs_list result: %+v", result)
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("logs_list raw json:\n%s", string(raw))
 		if err != nil {
 			t.Fatalf("list logs failed: %v", err)
 		}
