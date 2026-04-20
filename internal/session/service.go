@@ -283,6 +283,21 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 	trimmed := strings.TrimSpace(strings.ToLower(userText))
 	switch trimmed {
 	case "确认", "确认执行", "确认继续", "confirm", "yes", "proceed":
+		// 如果是下发指令待验证类型，需要先发送验证码
+		if pending.ActionType == "edr_send_instruction_verify_pending" {
+			reporter.Step(ctx, "用户确认执行，正在发送验证码。")
+			if err := s.edr.SendVerifyCode(ctx, "instruction"); err != nil {
+				return "", true, fmt.Errorf("发送验证码失败: %w", err)
+			}
+			verifyResp, _ := s.edr.IsNeedVerifyCode(ctx, "instruction")
+			pending.ActionType = "edr_send_instruction_verify"
+			if err := s.store.SavePendingAction(ctx, sessionKey, pending.ActionType, pending.Payload, pending.Summary); err != nil {
+				return "", true, err
+			}
+			response := s.msg(locale, "pending_verify_code", map[string]string{"summary": pending.Summary, "phone_email": verifyResp.PhoneEmail})
+			stored, err := s.storeAssistantReply(ctx, sessionKey, response)
+			return stored, true, err
+		}
 		reporter.Step(ctx, "我收到确认了，正在执行刚才挂起的高危动作。")
 		response, execErr := s.executePendingAction(ctx, sessionKey, pending, locale, reporter)
 		if delErr := s.store.DeletePendingAction(ctx, sessionKey); delErr != nil && execErr == nil {
@@ -296,22 +311,6 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 		response := s.msg(locale, "cancel_pending", nil)
 		response, err = s.storeAssistantReply(ctx, sessionKey, response)
 		return response, true, err
-	case "edr_send_instruction_verify_pending":
-		// 用户确认执行下发指令，现在发送验证码
-		reporter.Step(ctx, "用户确认执行，正在发送验证码。")
-		if err := s.edr.SendVerifyCode(ctx, "instruction"); err != nil {
-			return "", true, fmt.Errorf("发送验证码失败: %w", err)
-		}
-		// 获取验证码发送地址
-		verifyResp, _ := s.edr.IsNeedVerifyCode(ctx, "instruction")
-		// 更新 pending action 类型，现在等待用户输入验证码
-		pending.ActionType = "edr_send_instruction_verify"
-		if err := s.store.SavePendingAction(ctx, sessionKey, pending.ActionType, pending.Payload, pending.Summary); err != nil {
-			return "", true, err
-		}
-		response := s.msg(locale, "pending_verify_code", map[string]string{"summary": pending.Summary, "phone_email": verifyResp.PhoneEmail})
-		stored, err := s.storeAssistantReply(ctx, sessionKey, response)
-		return stored, true, err
 	default:
 		// 处理验证码输入
 		if pending.ActionType == "edr_send_instruction_verify" {
