@@ -1282,6 +1282,13 @@ type ListLogsRequest struct {
 	FilterField    string
 	FilterOperator string
 	FilterValue    string
+
+	// 快速时间（quick_time 格式），如最近15分钟
+	// 支持：15分钟、30分钟、1小时、4小时、1天、7天、14天
+	QuickTime *QuickTimeVal
+
+	// KQL 查询语句
+	SearchSentence string
 }
 
 type ListLogsResponse struct {
@@ -1618,15 +1625,36 @@ func (c *OpenAPIClient) ListLogs(ctx context.Context, req ListLogsRequest) (List
 
 	payload := map[string]any{
 		"limit": req.Limit,
-		"quick_time": map[string]any{
-			"time_span": "last",
-			"time_num":  15,
-			"time_type": "minutes",
-		},
 		"search": map[string]any{
-			"search_sentence": "",
+			"search_sentence": req.SearchSentence,
 			"search_type":     "KQL",
 		},
+	}
+
+	// 时间参数：优先使用 time_range，其次使用 quick_time
+	// 如果 StartTime 或 EndTime 不为空，自动构建 time_range
+	if req.QuickTime != nil {
+		payload["quick_time"] = req.QuickTime
+	} else if req.StartTime != "" || req.EndTime != "" {
+		tr := &TimeRange{}
+		if req.StartTime != "" {
+			if ts, err := normalizeLogTimestamp(req.StartTime, false); err == nil {
+				tr.Start, _ = strconv.ParseInt(ts, 10, 64)
+			}
+		}
+		if req.EndTime != "" {
+			if ts, err := normalizeLogTimestamp(req.EndTime, true); err == nil {
+				tr.End, _ = strconv.ParseInt(ts, 10, 64)
+			}
+		}
+		payload["time_range"] = tr
+	} else {
+		// 默认：最近15分钟
+		payload["quick_time"] = &QuickTimeVal{
+			TimeSpan: "last",
+			TimeNum:  15,
+			TimeType: "minutes",
+		}
 	}
 	if req.ClientID != "" {
 		payload["client_id"] = req.ClientID
@@ -1655,26 +1683,6 @@ func (c *OpenAPIClient) ListLogs(ctx context.Context, req ListLogsRequest) (List
 			"value":       req.Operation,
 			"is_disabled": 0,
 		})
-	}
-	if strings.TrimSpace(req.StartTime) != "" {
-		if ts, err := normalizeLogTimestamp(req.StartTime, false); err == nil {
-			filters = append(filters, map[string]any{
-				"operator":    "gte",
-				"field":       "timestamp",
-				"value":       ts,
-				"is_disabled": 0,
-			})
-		}
-	}
-	if strings.TrimSpace(req.EndTime) != "" {
-		if ts, err := normalizeLogTimestamp(req.EndTime, true); err == nil {
-			filters = append(filters, map[string]any{
-				"operator":    "lte",
-				"field":       "timestamp",
-				"value":       ts,
-				"is_disabled": 0,
-			})
-		}
 	}
 	if strings.TrimSpace(req.FilterField) != "" && strings.TrimSpace(req.FilterValue) != "" {
 		op := strings.TrimSpace(req.FilterOperator)
