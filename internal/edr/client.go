@@ -2293,6 +2293,17 @@ func (c *OpenAPIClient) postWithHeaders(ctx context.Context, url string, headers
 
 	rawBody, _ := io.ReadAll(resp.Body)
 	fmt.Printf("===edr raw response: %s\n", string(rawBody))
+
+	// 先检查是否有 API 错误（error 字段非 0）
+	var errCheck struct {
+		Error   int    `json:"error"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rawBody, &errCheck); err == nil && errCheck.Error != 0 {
+		return fmt.Errorf("edr api error: %s", errCheck.Message)
+	}
+
+	// 再完整解码
 	if err := json.NewDecoder(bytes.NewReader(rawBody)).Decode(out); err != nil {
 		return fmt.Errorf("decode edr response: %w", err)
 	}

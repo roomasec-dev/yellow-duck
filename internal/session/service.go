@@ -2105,6 +2105,11 @@ func (s *Service) handleNaturalLanguageEDR(ctx context.Context, sessionKey strin
 		return "", false, nil
 	}
 
+	// 如果文本以 /edr 开头，跳过自然语言处理，由 handleEDRCommand 处理显式命令
+	if strings.HasPrefix(strings.TrimSpace(text), "/edr") {
+		return "", false, nil
+	}
+
 	decision, err := s.router.Analyze(ctx, text)
 	if err != nil {
 		return "", false, nil
@@ -2230,11 +2235,222 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response, err = s.prepareDetailContext(ctx, sessionKey, locale, "detection", fields[2], fields[2], result, reporter)
 		}
+	case "tasks":
+		reporter.ToolStart(ctx, "edr_tasks", "我在拉取指令任务列表。")
+		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
+		var tasksResult edr.ListTasksResponse
+		tasksResult, err = s.edr.ListTasks(ctx, edr.ListTasksRequest{Page: page, Limit: pageSize})
+		if err == nil {
+			response = s.formatTasks(tasksResult, page, pageSize)
+		}
+	case "task_result":
+		reporter.ToolStart(ctx, "edr_task_result", "我在拉取任务结果。")
+		if len(fields) < 3 {
+			response = s.msg(locale, "usage_task_result", nil)
+			break
+		}
+		var taskResult edr.TaskResult
+		taskResult, err = s.edr.GetTaskResult(ctx, fields[2])
+		if err == nil {
+			response = formatTaskResult(taskResult)
+		}
+	case "send_instruction":
+		if len(fields) < 4 {
+			response = s.msg(locale, "usage_send_instruction", nil)
+			break
+		}
+		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_send_instruction", ClientID: fields[3], InstructionName: fields[2]})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_send_instruction", string(payload), fmt.Sprintf("edr_send_instruction instruction=%s client_id=%s", fields[2], fields[3]))
+		if err == nil {
+			response = s.msg(locale, "confirm_send_instruction", map[string]string{"instruction": fields[2], "client_id": fields[3]})
+		}
+	case "plan_list":
+		reporter.ToolStart(ctx, "edr_plan_list", "我在拉取计划列表。")
+		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
+		var plansResult edr.ListPlansResponse
+		plansResult, err = s.edr.ListPlans(ctx, edr.ListPlansRequest{Page: page, Limit: pageSize, Type: "kill_plan"})
+		if err == nil {
+			response = formatPlans(plansResult, page, pageSize)
+		}
+	case "virus_scan_record":
+		reporter.ToolStart(ctx, "edr_virus_scan_record", "我在拉取病毒扫描记录。")
+		hostname, clientID, page, pageSize := parseVirusScanArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
+		var virusResult edr.ListVirusScanRecordsResponse
+		virusResult, err = s.edr.ListVirusScanRecords(ctx, edr.ListVirusScanRecordsRequest{HostName: hostname, ClientID: clientID, Page: page, Limit: pageSize})
+		if err == nil {
+			response = formatVirusScanRecords(virusResult, page, pageSize)
+		}
+	case "virus_by_host":
+		reporter.ToolStart(ctx, "edr_virus_by_host", "我在按主机查询病毒信息。")
+		hostname, clientID, page, pageSize := parseVirusScanArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
+		var virusByHostResult edr.ListVirusByHostResponse
+		virusByHostResult, err = s.edr.ListVirusByHost(ctx, edr.ListVirusByHostRequest{HostName: hostname, ClientID: clientID, Page: page, Limit: pageSize})
+		if err == nil {
+			response = formatVirusByHost(virusByHostResult, page, pageSize)
+		}
+	case "virus_by_hash":
+		reporter.ToolStart(ctx, "edr_virus_by_hash", "我在按哈希查询病毒信息。")
+		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
+		var virusByHashResult edr.ListVirusByHashResponse
+		virusByHashResult, err = s.edr.ListVirusByHash(ctx, edr.ListVirusByHashRequest{Page: page, Limit: pageSize})
+		if err == nil {
+			response = formatVirusByHash(virusByHashResult, page, pageSize)
+		}
+	case "virus_hash_hosts":
+		reporter.ToolStart(ctx, "edr_virus_hash_hosts", "我在按哈希查询关联主机。")
+		sha1 := ""
+		hostname := ""
+		args := []string{}
+		// 检查 fields[2] 是否为有效的 sha1（40字符十六进制），否则当作分页参数处理
+		if len(fields) > 2 && len(fields[2]) == 40 && isHex(fields[2]) {
+			sha1 = fields[2]
+			if len(fields) > 3 {
+				hostname = fields[3]
+			}
+			if len(fields) > 4 {
+				args = fields[4:]
+			}
+		} else {
+			// fields[2] 不是 sha1，当作分页参数
+			if len(fields) > 2 {
+				args = fields[2:]
+			}
+		}
+		page, pageSize := parsePagedArgs(args, s.cfg.EDR.DefaultPageSize)
+		var virusHashHostsResult edr.ListVirusHashHostsResponse
+		virusHashHostsResult, err = s.edr.ListVirusHashHosts(ctx, edr.ListVirusHashHostsRequest{HostName: hostname, SHA1: sha1, Page: page, Limit: pageSize})
+		if err == nil {
+			response = formatVirusHashHosts(virusHashHostsResult, page, pageSize)
+		}
+	case "plan_add":
+		if len(fields) < 6 {
+			response = s.msg(locale, "usage_plan_add", nil)
+			break
+		}
+		scanType, _ := strconv.Atoi(fields[3])
+		planType, _ := strconv.Atoi(fields[4])
+		scope, _ := strconv.Atoi(fields[5])
+		planTypeStr := "kill_plan"
+		if len(fields) > 6 {
+			planTypeStr = fields[6]
+		}
+		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_plan_add", PlanName: fields[2], ScanType: scanType, PlanType: planType, Scope: scope, Type: planTypeStr})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_plan_add", string(payload), fmt.Sprintf("edr_plan_add name=%s scan_type=%s plan_type=%s scope=%s", fields[2], fields[3], fields[4], fields[5]))
+		if err == nil {
+			response = s.msg(locale, "confirm_plan_add", map[string]string{"name": fields[2]})
+		}
+	case "plan_edit":
+		if len(fields) < 7 {
+			response = s.msg(locale, "usage_plan_edit", nil)
+			break
+		}
+		scanType, _ := strconv.Atoi(fields[3])
+		planType, _ := strconv.Atoi(fields[4])
+		scope, _ := strconv.Atoi(fields[5])
+		planTypeStr := fields[6]
+		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_plan_edit", RID: fields[2], ScanType: scanType, PlanType: planType, Scope: scope, Type: planTypeStr})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_plan_edit", string(payload), fmt.Sprintf("edr_plan_edit rid=%s scan_type=%s plan_type=%s scope=%s", fields[2], fields[3], fields[4], fields[5]))
+		if err == nil {
+			response = s.msg(locale, "confirm_plan_edit", map[string]string{"rid": fields[2]})
+		}
+	case "plan_cancel":
+		if len(fields) < 3 {
+			response = s.msg(locale, "usage_plan_cancel", nil)
+			break
+		}
+		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_plan_cancel", RID: fields[2]})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_plan_cancel", string(payload), fmt.Sprintf("edr_plan_cancel rid=%s", fields[2]))
+		if err == nil {
+			response = s.msg(locale, "confirm_plan_cancel", map[string]string{"rid": fields[2]})
+		}
+	case "isolate_files":
+		reporter.ToolStart(ctx, "edr_isolate_files", "我在拉取隔离文件列表。")
+		clientID, hostname, page, pageSize := parseIsolateFilesArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
+		var isolateFilesResult edr.ListIsolateFilesResponse
+		isolateFilesResult, err = s.edr.ListIsolateFiles(ctx, edr.ListIsolateFilesRequest{ClientID: clientID, Hostname: hostname, Page: page, Limit: pageSize})
+		if err == nil {
+			response = s.formatIsolateFiles(isolateFilesResult, page, pageSize)
+		}
+	case "iocs":
+		reporter.ToolStart(ctx, "edr_iocs", "我在拉取 IOC 列表。")
+		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
+		var iocsResult edr.ListIOCsResponse
+		iocsResult, err = s.edr.ListIOCs(ctx, edr.ListIOCsRequest{Page: page, Limit: pageSize})
+		if err == nil {
+			response = s.formatIOCs(ctx, iocsResult, page, pageSize)
+		}
+	case "ioas":
+		reporter.ToolStart(ctx, "edr_ioas", "我在拉取 IOA 列表。")
+		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
+		var ioasResult edr.ListIOAsResponse
+		ioasResult, err = s.edr.ListIOAs(ctx, edr.ListIOAsRequest{Page: page, Limit: pageSize})
+		if err == nil {
+			response = formatIOAs(ioasResult, page, pageSize)
+		}
+	case "ioa_networks":
+		reporter.ToolStart(ctx, "edr_ioa_networks", "我在拉取 IOA 网络排除列表。")
+		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
+		var ioaNetworksResult edr.ListIOANetworksResponse
+		ioaNetworksResult, err = s.edr.ListIOANetworks(ctx, edr.ListIOANetworksRequest{Page: page, Limit: pageSize})
+		if err == nil {
+			response = formatIOANetworks(ioaNetworksResult, page, pageSize)
+		}
+	case "strategies":
+		reporter.ToolStart(ctx, "edr_strategies", "我在拉取策略列表。")
+		if len(fields) < 3 {
+			response = "用法：/edr strategies <type> [page] [page_size]\n- type: file_integrity, network_defense, behavior_detection, vulnerability, asset_discovery"
+			break
+		}
+		strategyType := fields[2]
+		page, pageSize := parsePagedArgs(fields[3:], s.cfg.EDR.DefaultPageSize)
+		var strategiesResult edr.ListStrategiesResponse
+		strategiesResult, err = s.edr.ListStrategies(ctx, edr.ListStrategiesRequest{Type: strategyType, Page: page, Limit: pageSize})
+		if err == nil {
+			response = formatStrategies(strategiesResult, page, pageSize)
+		}
+	case "strategy_single":
+		reporter.ToolStart(ctx, "edr_strategy_single", "我在拉取策略详情。")
+		if len(fields) < 3 {
+			response = "用法：/edr strategy_single <strategy_type>"
+			break
+		}
+		var strategyResult edr.Strategy
+		strategyResult, err = s.edr.GetStrategySingle(ctx, fields[2])
+		if err == nil {
+			response = formatStrategySingle(strategyResult)
+		}
+	case "strategy_state":
+		reporter.ToolStart(ctx, "edr_strategy_state", "我在拉取策略状态。")
+		var strategyStateResult edr.StrategyState
+		strategyStateResult, err = s.edr.GetStrategyState(ctx)
+		if err == nil {
+			response = formatStrategyState(strategyStateResult)
+		}
+	case "event_log_alarms":
+		reporter.ToolStart(ctx, "edr_event_log_alarms", "我在拉取事件日志告警列表。")
+		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
+		var eventLogAlarmsResult edr.ListEventLogAlarmsResponse
+		eventLogAlarmsResult, err = s.edr.ListEventLogAlarms(ctx, edr.ListEventLogAlarmsRequest{Page: page, Limit: pageSize})
+		if err == nil {
+			response = formatEventLogAlarms(eventLogAlarmsResult, page, pageSize)
+		}
+	case "instruction_policies":
+		reporter.ToolStart(ctx, "edr_instruction_policies", "我在拉取自动响应策略列表。")
+		var instructionPoliciesResult edr.ListInstructionPoliciesResponse
+		instructionPoliciesResult, err = s.edr.ListInstructionPolicies(ctx, edr.ListInstructionPoliciesRequest{})
+		if err == nil {
+			response = formatInstructionPolicies(instructionPoliciesResult)
+		}
 	default:
 		response = s.msg(locale, "unknown_command", nil)
 	}
 
 	if err != nil {
+		// 如果是 EDR API 错误，返回错误信息而不是抛出异常
+		errStr := err.Error()
+		if strings.Contains(errStr, "edr") || strings.Contains(errStr, "decode edr") || strings.Contains(errStr, "failed") {
+			return fmt.Sprintf("EDR 请求失败：%s", errStr), true, nil
+		}
 		return "", true, err
 	}
 	reporter.Stage(ctx, "answer", "这一步已经处理好了，我在把结果整理成更好读的说明。")
@@ -2932,7 +3148,7 @@ func formatIOAs(result edr.ListIOAsResponse, page int, pageSize int) string {
 		lines = append(lines, fmt.Sprintf("- id=%s name=%s severity=%s file=%s cmd=%s", ioa.ExclusionID, ioa.IOAName, ioa.Severity, ioa.FileName, ioa.CommandLine))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioa_list %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioas %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -2953,7 +3169,7 @@ func formatIOAAuditLogs(result edr.ListIOAAuditLogsResponse, page int, pageSize 
 		lines = append(lines, fmt.Sprintf("- id=%s ioa=%s hostname=%s file=%s cmd=%s time=%d", log.ID, log.IOAName, log.HostName, log.FileName, log.CommandLine, log.EventTime))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioa_audit_log %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioas %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -2974,7 +3190,7 @@ func formatIOANetworks(result edr.ListIOANetworksResponse, page int, pageSize in
 		lines = append(lines, fmt.Sprintf("- id=%s name=%s ip=%s host_type=%s", net.ID, net.ExclusionName, net.IP, net.HostType))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioa_network_list %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioa_networks %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -3001,7 +3217,7 @@ func formatStrategies(result edr.ListStrategiesResponse, page int, pageSize int)
 		lines = append(lines, fmt.Sprintf("- id=%s name=%s type=%s status=%d(%s) range_type=%d", strategy.StrategyID, strategy.Name, strategy.Type, strategy.Status, statusStr, strategy.RangeType))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr strategy_list %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr strategies <type> %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -3222,7 +3438,7 @@ func (s *Service) formatLogs(ctx context.Context, result edr.ListLogsResponse, p
 	}
 	if totalPages > 1 {
 		clientPrefix := formatOptionalClientPrefix(call.ClientID)
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr logs [%s]%d %d", clientPrefix, minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr logs <client_id> %d %d", clientPrefix, minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -3392,6 +3608,18 @@ func parseIncidentListArgs(args []string, defaultPageSize int) (string, int, int
 	return clientID, page, pageSize
 }
 
+func isHex(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
 func parsePagedArgs(args []string, defaultPageSize int) (int, int) {
 	page := 1
 	pageSize := positiveOr(defaultPageSize, 10)
@@ -3406,6 +3634,74 @@ func parsePagedArgs(args []string, defaultPageSize int) (int, int) {
 		}
 	}
 	return page, pageSize
+}
+
+func parseVirusScanArgs(args []string, defaultPageSize int) (string, string, int, int) {
+	hostname := ""
+	clientID := ""
+	if len(args) == 0 {
+		return hostname, clientID, 1, positiveOr(defaultPageSize, 10)
+	}
+	// 第一个参数可能是 hostname 或 client_id
+	firstArg := strings.TrimSpace(args[0])
+	if _, err := strconv.Atoi(firstArg); err != nil {
+		// 非数字，当作 hostname
+		hostname = firstArg
+		args = args[1:]
+	} else {
+		// 数字，当作 client_id
+		clientID = firstArg
+		args = args[1:]
+	}
+	// 第二个参数可能是另一个 hostname 或 client_id
+	if len(args) > 0 {
+		secondArg := strings.TrimSpace(args[0])
+		if _, err := strconv.Atoi(secondArg); err != nil {
+			// 非数字，当作 hostname
+			hostname = secondArg
+			args = args[1:]
+		} else {
+			// 数字，当作 client_id
+			clientID = secondArg
+			args = args[1:]
+		}
+	}
+	page, pageSize := parsePagedArgs(args, defaultPageSize)
+	return hostname, clientID, page, pageSize
+}
+
+func parseIsolateFilesArgs(args []string, defaultPageSize int) (string, string, int, int) {
+	clientID := ""
+	hostname := ""
+	if len(args) == 0 {
+		return clientID, hostname, 1, positiveOr(defaultPageSize, 10)
+	}
+	// 第一个参数可能是 client_id 或 hostname
+	firstArg := strings.TrimSpace(args[0])
+	if _, err := strconv.Atoi(firstArg); err != nil {
+		// 非数字，当作 hostname
+		hostname = firstArg
+		args = args[1:]
+	} else {
+		// 数字，当作 client_id
+		clientID = firstArg
+		args = args[1:]
+	}
+	// 第二个参数可能是 client_id 或 hostname
+	if len(args) > 0 {
+		secondArg := strings.TrimSpace(args[0])
+		if _, err := strconv.Atoi(secondArg); err != nil {
+			// 非数字，当作 hostname
+			hostname = secondArg
+			args = args[1:]
+		} else {
+			// 数字，当作 client_id
+			clientID = secondArg
+			args = args[1:]
+		}
+	}
+	page, pageSize := parsePagedArgs(args, defaultPageSize)
+	return clientID, hostname, page, pageSize
 }
 
 func positiveOr(value int, fallback int) int {
