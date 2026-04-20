@@ -1047,9 +1047,6 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 			call.Operation,
 			call.StartTime,
 			call.EndTime,
-			call.FilterField,
-			call.FilterOp,
-			call.FilterValue,
 			fmt.Sprintf("p=%d", call.Page),
 			fmt.Sprintf("ps=%d", call.PageSize),
 			call.IncidentID,
@@ -1125,9 +1122,6 @@ func sameThreatListQuery(a planner.ToolCall, b planner.ToolCall) bool {
 		strings.TrimSpace(a.Operation) == strings.TrimSpace(b.Operation) &&
 		strings.TrimSpace(a.StartTime) == strings.TrimSpace(b.StartTime) &&
 		strings.TrimSpace(a.EndTime) == strings.TrimSpace(b.EndTime) &&
-		strings.TrimSpace(a.FilterField) == strings.TrimSpace(b.FilterField) &&
-		strings.TrimSpace(a.FilterOp) == strings.TrimSpace(b.FilterOp) &&
-		strings.TrimSpace(a.FilterValue) == strings.TrimSpace(b.FilterValue) &&
 		strings.TrimSpace(a.IncidentID) == strings.TrimSpace(b.IncidentID)
 }
 
@@ -1141,9 +1135,6 @@ func toolCallCacheKey(call planner.ToolCall) string {
 		call.Operation,
 		call.StartTime,
 		call.EndTime,
-		call.FilterField,
-		call.FilterOp,
-		call.FilterValue,
 		fmt.Sprintf("p=%d", call.Page),
 		fmt.Sprintf("ps=%d", call.PageSize),
 		call.IncidentID,
@@ -1215,7 +1206,7 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 		if err := ctx.Err(); err != nil {
 			return nil, "", err
 		}
-		s.logger.Info("start tool call", "session_key", sessionKey, "tool", call.Name, "client_id", call.ClientID, "os_type", call.OSType, "operation", call.Operation, "start_time", call.StartTime, "end_time", call.EndTime, "filter_field", call.FilterField, "filter_operator", call.FilterOp, "filter_value", call.FilterValue, "page", call.Page, "page_size", call.PageSize, "incident_id", call.IncidentID, "detection_id", call.DetectionID, "artifact_id", call.ArtifactID, "query", call.Query, "kb_title", call.KBTitle, "kb_query", call.KBQuery, "kb_mode", call.KBMode, "instruction_name", call.InstructionName, "path", call.Path, "status", call.Status, "allow", call.Allow, "scene", call.Scene)
+		s.logger.Info("start tool call", "session_key", sessionKey, "tool", call.Name, "client_id", call.ClientID, "os_type", call.OSType, "operation", call.Operation, "start_time", call.StartTime, "end_time", call.EndTime, "page", call.Page, "page_size", call.PageSize, "incident_id", call.IncidentID, "detection_id", call.DetectionID, "artifact_id", call.ArtifactID, "query", call.Query, "kb_title", call.KBTitle, "kb_query", call.KBQuery, "kb_mode", call.KBMode, "instruction_name", call.InstructionName, "path", call.Path, "status", call.Status, "allow", call.Allow, "scene", call.Scene)
 		if call.Critical || isCriticalTool(call.Name) {
 			payload, _ := json.Marshal(call)
 			summary := call.Name
@@ -1487,7 +1478,38 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 		return formatEventLogAlarms(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_logs":
 		reporter.ToolStart(ctx, call.Name, "我在拉取行为日志。")
-		result, err := s.edr.ListLogs(ctx, edr.ListLogsRequest{ClientID: call.ClientID, OSType: call.OSType, Operation: call.Operation, StartTime: call.StartTime, EndTime: call.EndTime, FilterField: call.FilterField, FilterOperator: call.FilterOp, FilterValue: call.FilterValue, Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		req := edr.ListLogsRequest{
+			ClientID:  call.ClientID,
+			OSType:    call.OSType,
+			Operation: call.Operation,
+			StartTime: call.StartTime,
+			EndTime:   call.EndTime,
+			Limit:     positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize),
+		}
+		// 应用狩猎预设：Filters 和 SearchSentence 从预设自动填充
+		if call.HuntingPresetID > 0 {
+			preset := edr.GetPresetByID(call.HuntingPresetID)
+			if preset != nil {
+				req.Filters = preset.Filters
+				if call.HuntingPresetID == 10 && call.CustomKQL != "" {
+					// 预设10（自定义KQL）使用用户输入的KQL
+					req.SearchSentence = call.CustomKQL
+				} else if preset.Search.SearchSentence != "" {
+					req.SearchSentence = preset.Search.SearchSentence
+				}
+			}
+		}
+		// Limit：用户输入 > 默认
+		if call.PageSize > 0 {
+			req.Limit = call.PageSize
+		} else {
+			req.Limit = s.cfg.EDR.DefaultPageSize
+		}
+		// QuickTime：用户输入 > 默认最近15分钟
+		if call.QuickTime != nil {
+			req.QuickTime = call.QuickTime
+		}
+		result, err := s.edr.ListLogs(ctx, req)
 		if err != nil {
 			return "", err
 		}
@@ -3263,13 +3285,6 @@ func describeLogFilters(call planner.ToolCall) string {
 	}
 	if strings.TrimSpace(call.EndTime) != "" {
 		parts = append(parts, "end_time="+call.EndTime)
-	}
-	if strings.TrimSpace(call.FilterField) != "" && strings.TrimSpace(call.FilterValue) != "" {
-		op := strings.TrimSpace(call.FilterOp)
-		if op == "" {
-			op = "is"
-		}
-		parts = append(parts, fmt.Sprintf("%s %s %s", call.FilterField, op, call.FilterValue))
 	}
 	return strings.Join(parts, "; ")
 }

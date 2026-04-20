@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"rm_ai_agent/internal/edr"
 	"rm_ai_agent/internal/logx"
 	"rm_ai_agent/internal/model"
 	"rm_ai_agent/internal/prompt"
@@ -21,9 +22,6 @@ type ToolCall struct {
 	Operation                    string `json:"operation,omitempty"`
 	StartTime                    string `json:"start_time,omitempty"`
 	EndTime                      string `json:"end_time,omitempty"`
-	FilterField                  string `json:"filter_field,omitempty"`
-	FilterOp                     string `json:"filter_operator,omitempty"`
-	FilterValue                  string `json:"filter_value,omitempty"`
 	Page                         int    `json:"page,omitempty"`
 	PageSize                     int    `json:"page_size,omitempty"`
 	IncidentID                   string `json:"incident_id,omitempty"`
@@ -92,6 +90,11 @@ type ToolCall struct {
 	CustomMaxFileSizeMb          int    `json:"custom_max_file_size_mb,omitempty"`
 	StrategyID                   string `json:"strategy_id,omitempty"`
 	VerifyCode                   string `json:"verify_code,omitempty"`
+	// 狩猎预设相关
+	Filters         []edr.Filter   `json:"filters,omitempty"`
+	HuntingPresetID int            `json:"hunting_preset_id,omitempty"`
+	CustomKQL       string         `json:"custom_kql,omitempty"`
+	QuickTime       *edr.QuickTimeVal `json:"quick_time,omitempty"`
 }
 
 type Plan struct {
@@ -162,9 +165,6 @@ func (s *Service) BuildPlan(ctx context.Context, modelRef string, userText strin
 		plan.ToolCalls[i].Operation = strings.TrimSpace(plan.ToolCalls[i].Operation)
 		plan.ToolCalls[i].StartTime = strings.TrimSpace(plan.ToolCalls[i].StartTime)
 		plan.ToolCalls[i].EndTime = strings.TrimSpace(plan.ToolCalls[i].EndTime)
-		plan.ToolCalls[i].FilterField = strings.TrimSpace(plan.ToolCalls[i].FilterField)
-		plan.ToolCalls[i].FilterOp = strings.TrimSpace(plan.ToolCalls[i].FilterOp)
-		plan.ToolCalls[i].FilterValue = strings.TrimSpace(plan.ToolCalls[i].FilterValue)
 		if plan.ToolCalls[i].Page < 0 {
 			plan.ToolCalls[i].Page = 0
 		}
@@ -226,6 +226,7 @@ func (s *Service) BuildPlan(ctx context.Context, modelRef string, userText strin
 		if plan.ToolCalls[i].CustomMaxFileSizeMb < 0 {
 			plan.ToolCalls[i].CustomMaxFileSizeMb = 0
 		}
+		plan.ToolCalls[i].CustomKQL = strings.TrimSpace(plan.ToolCalls[i].CustomKQL)
 	}
 	plan.TaskMode = normalizeTaskMode(plan.TaskMode, userText)
 	plan.Phase = normalizePhase(plan.Phase, plan.ToolCalls, plan.DirectReply)
@@ -462,8 +463,11 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"2.1 对 edr_detections / edr_incidents / edr_logs，如果用户明确提到第几页、page、下一页、继续翻页、每页多少条、全部列出，要把 page 和 page_size 一起填进 tool_calls。\n" +
 		"2.1.1 如果用户只是问“有什么威胁”“最近有哪些风险/事件/检出”这类概览问题，默认只查第一页并基于当前页先回答，不要因为 has_more=true 就自动翻页。概览类问题默认先总结当前页前 6 条；只有用户明确要求继续、更多、全部、下一页时才翻页。\n" +
 		"2.2 如果用户在做 hunting / 狩猎 / IOC 扩线 / 进程链排查，优先规划 edr_logs，并尽量提取 client_id、os_type、operation、start_time、end_time，以及一组最关键的 filter_field/filter_operator/filter_value。\n" +
+		"2.2.1 如果用户说'日志调查''hunting''狩猎'，但没有指定具体条件，应返回 need_clarification=true，clarifying_question 询问用户选择预设条件。预设列表如下：1-检测未知进程启动 / 2-检测可疑进程创建计划任务 / 3-检索通过 wmic 创建进程 / 4-检索可疑 PowerShell 命令 / 5-检索 cmd 命令输入 / 6-检索 lsass 内存访问 / 7-检索未知进程查询计算机名称 / 8-检索进程白利用 / 9-不使用条件查询 / 10-自定义条件查询（需要用户输入 KQL）。注意：预设只包含 Filters 和 Search，不包含时间；时间必须从用户输入中单独提取：相对时间（最近X分钟/小时/天）用 quick_time（time_num、time_span=last、time_type=minutes/hours/days），绝对时间（今天、昨天、某个时间段）用 start_time/end_time（格式 YYYY-MM-DD HH:MM:SS），用户未指定时间则默认最近15分钟。\n" +
+		"2.2.2 如果用户选择了预设 1-9，tool_calls 中 name=edr_logs，hunting_preset_id 填对应数字，时间从用户输入提取（相对时间用 quick_time，绝对时间用 start_time/end_time），planner 层会根据预设自动填充 filters、search_sentence。\n" +
+		"2.2.3 如果用户选择了预设 10（自定义 KQL），need_clarification=true，clarifying_question 询问用户输入 KQL 语句和时间范围，收到后 custom_kql 填入 search_sentence，时间从用户输入提取（相对时间用 quick_time，绝对时间用 start_time/end_time）。\n" +
 		"2.3 对 edr_logs，filter_operator 优先用 is；如果用户已经给了明确进程名、操作名、系统类型、client_id 或哈希，优先用 is。contain 只用于路径片段、命令行片段、目录片段等模糊试探。\n" +
-		"2.4 如果用户明确提到时间范围（最近1小时、今天、昨天、某个时间段），对 edr_logs 要尽量填写 start_time / end_time，格式优先用 YYYY-MM-DD HH:MM:SS。\n" +
+		"2.4 如果用户明确提到时间范围，对 edr_logs 要优先使用 quick_time（相对时间如最近1小时、最近7天，格式：time_num、time_span=last、time_type=minutes/hours/days）；绝对时间（今天、昨天、某个时间段）用 start_time/end_time（格式 YYYY-MM-DD HH:MM:SS）。\n" +
 		"2.5 如果用户明确查询'这个事件有哪些风险''该事件关联的检测/检出''风险列表'，即需要用 incident_id 查关联风险时，优先规划 edr_detections。注意：如果用户要查的是事件本身（如'查看相关事件'），应走 2.6 规划 edr_incident_r2_summary，不要走 edr_detections。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
 		"2.6 如果用户提供 incident_id 并说'查看事件''查看相关事件''查看这个事件''事件详情'，或者在查看某条风险后追问'这个风险的事件''该风险关联的事件'，优先规划 edr_incident_r2_summary 并传入 incident_id。注意：'查看相关事件'查的是事件本身，不是风险，不要调用 edr_detections。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
 		"3. 如果用户给了 incident_id 和 client_id，要查看事件详情，就优先规划 edr_incident_view。\n" +
@@ -548,4 +552,16 @@ func preview(text string) string {
 		return text
 	}
 	return text[:200] + "..."
+}
+
+// ApplyHuntingPreset 根据预设 ID 获取预设并应用自定义 KQL
+func (s *Service) ApplyHuntingPreset(presetID int, customKQL string) *edr.HuntingPreset {
+	preset := edr.GetPresetByID(presetID)
+	if preset == nil {
+		return nil
+	}
+	if presetID == 10 && customKQL != "" {
+		preset.Search.SearchSentence = customKQL
+	}
+	return preset
 }

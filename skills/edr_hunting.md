@@ -76,3 +76,18 @@
 - Windows 狩猎重点见 `edr_hunting_windows.md`
 - Linux 狩猎重点见 `edr_hunting_linux.md`
 - macOS 狩猎重点见 `edr_hunting_macos.md`
+
+## 预设狩猎条件
+
+当用户说"日志调查"、"hunting"、"狩猎"时，系统会询问用户选择预设条件：
+
+1. 检测未知进程启动 - processlevel 在 30-70 之间的未知进程
+2. 检测可疑进程创建计划任务 - schtasks.exe create
+3. 检索通过 wmic 创建进程 - wmic.exe create process
+4. 检索可疑 PowerShell 命令 - 包含 FromBase64String
+5. 检索 cmd 命令输入 - fltrid: 8000
+6. 检索 lsass 内存访问 - lsass.exe 访问
+7. 检索未知进程查询计算机名称 - QueryValueKey
+8. 检索进程白利用 - 低等级进程加载高风险 DLL
+9. 不使用条件查询 - 直接查询指定时间范围内的日志（默认最近15分钟）
+10. 自定义条件查询 - 用户输入 KQL 语句

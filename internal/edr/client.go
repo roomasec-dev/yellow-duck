@@ -1273,15 +1273,15 @@ type Incident struct {
 }
 
 type ListLogsRequest struct {
-	Limit          int
-	ClientID       string
-	OSType         string
-	Operation      string
-	StartTime      string
-	EndTime        string
-	FilterField    string
-	FilterOperator string
-	FilterValue    string
+	Limit     int
+	ClientID  string
+	OSType    string
+	Operation string
+	StartTime string
+	EndTime   string
+
+	// 多 filter 支持
+	Filters []Filter
 
 	// 快速时间（quick_time 格式），如最近15分钟
 	// 支持：15分钟、30分钟、1小时、4小时、1天、7天、14天
@@ -1660,14 +1660,6 @@ func (c *OpenAPIClient) ListLogs(ctx context.Context, req ListLogsRequest) (List
 		payload["client_id"] = req.ClientID
 	}
 	filters := make([]map[string]any, 0, 4)
-	if strings.TrimSpace(req.ClientID) != "" {
-		filters = append(filters, map[string]any{
-			"operator":    "is",
-			"field":       "client_id",
-			"value":       req.ClientID,
-			"is_disabled": 1,
-		})
-	}
 	if strings.TrimSpace(req.OSType) != "" {
 		filters = append(filters, map[string]any{
 			"operator":    "is",
@@ -1684,15 +1676,15 @@ func (c *OpenAPIClient) ListLogs(ctx context.Context, req ListLogsRequest) (List
 			"is_disabled": 0,
 		})
 	}
-	if strings.TrimSpace(req.FilterField) != "" && strings.TrimSpace(req.FilterValue) != "" {
-		op := strings.TrimSpace(req.FilterOperator)
-		if op == "" {
-			op = "is"
+	// 处理多 filter 支持
+	for _, f := range req.Filters {
+		if f.IsDisabled {
+			continue
 		}
 		filters = append(filters, map[string]any{
-			"operator":    op,
-			"field":       strings.TrimSpace(req.FilterField),
-			"value":       strings.TrimSpace(req.FilterValue),
+			"operator":    f.Operator,
+			"field":       f.Field,
+			"value":       f.Value,
 			"is_disabled": 0,
 		})
 	}

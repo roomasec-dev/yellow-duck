@@ -1,4 +1,6 @@
 configs/config.local.toml
+configs/config.local.debug.toml
+configs/config.local.release.toml
 data/
 *.log
 *.sqlite
