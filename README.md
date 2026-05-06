@@ -93,16 +93,19 @@
 
 ### 预编译文件
 
-项目根目录下的 `dist/` 会放这三个可执行文件：
+项目根目录下的 `dist/` 会放这四个可执行文件：
 
 - `dist/rm-ai-agent-darwin-amd64`
+- `dist/rm-ai-agent-darwin-arm64`
 - `dist/rm-ai-agent-linux-amd64`
 - `dist/rm-ai-agent-windows-amd64.exe`
 
 说明：
 
-- 这三个文件默认都是 `amd64` 架构
-- macOS 如果是 Apple Silicon，需要先装 Rosetta，或者后续再单独编一个 `darwin-arm64`
+- Linux 和 Windows 目前默认是 `amd64` 架构
+- macOS 同时提供 `amd64` 和 `arm64` 两个版本：
+  - Apple Silicon（M1/M2/M3）建议优先使用 `dist/rm-ai-agent-darwin-arm64`
+  - Intel Mac 使用 `dist/rm-ai-agent-darwin-amd64`
 
 ### 通用安装步骤
 
@@ -214,7 +217,14 @@ chmod +x ./dist/rm-ai-agent-linux-amd64
 ./dist/rm-ai-agent-linux-amd64 -config configs/config.local.toml
 ```
 
-macOS:
+macOS (Apple Silicon / arm64):
+
+```bash
+chmod +x ./dist/rm-ai-agent-darwin-arm64
+./dist/rm-ai-agent-darwin-arm64 -config configs/config.local.toml
+```
+
+macOS (Intel / amd64):
 
 ```bash
 chmod +x ./dist/rm-ai-agent-darwin-amd64
