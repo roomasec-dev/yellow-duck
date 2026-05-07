@@ -486,6 +486,15 @@ func (s *Service) handleInterrupt(scopeKey string, text string, locale string) (
 	}
 }
 
+func isConfirmInput(text string) bool {
+	switch strings.TrimSpace(strings.ToLower(text)) {
+	case "确认", "确认执行", "确认继续", "confirm", "yes", "proceed":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Service) handlePlannedTools(ctx context.Context, sessionKey string, text string, locale string, reporter *progress.Reporter) (string, bool, error) {
 	if s.planner == nil {
 		return "", false, nil
@@ -879,6 +888,8 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 	controller := newTaskController(userText, plan)
 	rounds := 0
 
+	fastTrackConfirmedCritical := isConfirmInput(userText)
+
 	for {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -898,7 +909,7 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 		}
 		s.logger.Info("execute tool round", "session_key", sessionKey, "tool_count", len(currentCalls))
 		controller.ObserveRound(currentCalls)
-		stepResults, earlyReply, err := s.executeToolBatch(ctx, sessionKey, locale, currentCalls, reporter)
+		stepResults, earlyReply, err := s.executeToolBatch(ctx, sessionKey, locale, currentCalls, reporter, fastTrackConfirmedCritical)
 		if err != nil {
 			return "", err
 		}
@@ -1199,7 +1210,34 @@ func callNeedsGroundedEDRAnswer(name string) bool {
 	}
 }
 
-func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, locale string, calls []planner.ToolCall, reporter *progress.Reporter) ([]string, string, error) {
+func splitCSVAndClean(raw string) []string {
+	parts := strings.Split(strings.TrimSpace(raw), ",")
+	cleaned := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			cleaned = append(cleaned, p)
+		}
+	}
+	return cleaned
+}
+
+func incidentIDsFromCall(call planner.ToolCall) []string {
+	ids := splitCSVAndClean(call.Ids)
+	if len(ids) == 0 {
+		if incidentID := strings.TrimSpace(call.IncidentID); incidentID != "" {
+			ids = []string{incidentID}
+		}
+	}
+	return ids
+}
+
+func canFastTrackCriticalConfirmation(call planner.ToolCall) bool {
+	// Keep the dedicated verification flow for edr_send_instruction.
+	return call.Name != "edr_send_instruction"
+}
+
+func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, locale string, calls []planner.ToolCall, reporter *progress.Reporter, fastTrackConfirmedCritical bool) ([]string, string, error) {
 	var results []string
 	for _, call := range calls {
 		if err := ctx.Err(); err != nil {
@@ -1207,6 +1245,25 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 		}
 		s.logger.Info("start tool call", "session_key", sessionKey, "tool", call.Name, "client_id", call.ClientID, "os_type", call.OSType, "operation", call.Operation, "start_time", call.StartTime, "end_time", call.EndTime, "page", call.Page, "page_size", call.PageSize, "incident_id", call.IncidentID, "detection_id", call.DetectionID, "artifact_id", call.ArtifactID, "query", call.Query, "kb_title", call.KBTitle, "kb_query", call.KBQuery, "kb_mode", call.KBMode, "instruction_name", call.InstructionName, "path", call.Path, "status", call.Status, "allow", call.Allow, "scene", call.Scene)
 		if call.Critical || isCriticalTool(call.Name) {
+			if fastTrackConfirmedCritical && canFastTrackCriticalConfirmation(call) {
+				reporter.Step(ctx, "我收到确认了，直接执行这次高危动作。")
+				result, err := s.executeConfirmedTool(ctx, sessionKey, call, locale, reporter)
+				if err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						return nil, "", err
+					}
+					s.logger.Warn("critical tool fast-track failed", "session_key", sessionKey, "tool", call.Name, "error", err)
+					results = append(results, s.msg(locale, "tool_error", map[string]string{"tool": call.Name, "error": err.Error()}))
+					continue
+				}
+				s.logger.Info("critical tool fast-track finished", "session_key", sessionKey, "tool", call.Name, "result_preview", shortResult(result))
+				reporter.ToolResult(ctx, call.Name, result)
+				if strings.TrimSpace(result) != "" {
+					results = append(results, result)
+				}
+				continue
+			}
+
 			payload, _ := json.Marshal(call)
 			summary := call.Name
 			if call.Ids != "" {
@@ -1441,11 +1498,19 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 		return formatIncidents(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_batch_deal_incident":
 		reporter.Step(ctx, "我正在批量处置事件。")
+		ids := incidentIDsFromCall(call)
+		if len(ids) == 0 {
+			return "", fmt.Errorf("批量处置事件需要提供 ids 或 incident_id")
+		}
+		scene := strings.TrimSpace(call.Scene)
+		if scene == "" {
+			scene = "alone"
+		}
 		result, err := s.edr.BatchDealIncident(ctx, edr.BatchDealIncidentRequest{
-			IDs:    strings.Split(strings.TrimSpace(call.IncidentID), ","),
+			IDs:    ids,
 			Allow:  call.Allow,
 			Status: call.Status,
-			Scene:  call.Scene,
+			Scene:  scene,
 		})
 		if err != nil {
 			return "", err
@@ -2067,11 +2132,19 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 		return fmt.Sprintf("检测状态已更新，共 %d 个检测", len(strings.Split(strings.TrimSpace(call.DetectionID), ","))), nil
 	case "edr_batch_deal_incident":
 		reporter.Step(ctx, "我正在批量处置事件。")
+		ids := incidentIDsFromCall(call)
+		if len(ids) == 0 {
+			return "", fmt.Errorf("批量处置事件需要提供 ids 或 incident_id")
+		}
+		scene := strings.TrimSpace(call.Scene)
+		if scene == "" {
+			scene = "alone"
+		}
 		result, err := s.edr.BatchDealIncident(ctx, edr.BatchDealIncidentRequest{
-			IDs:    strings.Split(strings.TrimSpace(call.IncidentID), ","),
+			IDs:    ids,
 			Allow:  call.Allow,
 			Status: call.Status,
-			Scene:  call.Scene,
+			Scene:  scene,
 		})
 		if err != nil {
 			return "", err
@@ -3438,7 +3511,7 @@ func (s *Service) formatLogs(ctx context.Context, result edr.ListLogsResponse, p
 	}
 	if totalPages > 1 {
 		clientPrefix := formatOptionalClientPrefix(call.ClientID)
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr logs <client_id> %d %d", clientPrefix, minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr logs %s%d %d", clientPrefix, minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
