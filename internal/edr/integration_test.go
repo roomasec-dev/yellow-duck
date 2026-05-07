@@ -788,6 +788,18 @@ func TestIntegrationEDRReadOnlyAPIs(t *testing.T) {
 		t.Logf("client_setting_save_host_offline done")
 	})
 
+	t.Run("settings_get_console_reverify", func(t *testing.T) {
+		result, err := client.GetConsoleReverify(ctx)
+		raw, _ := json.MarshalIndent(result, "", "  ")
+		t.Logf("settings_get_console_reverify raw json:\n%s", string(raw))
+		if err != nil {
+			t.Fatalf("get console reverify conf failed: %v", err)
+		}
+		if result.Type != "" && result.Type != "console_reverify" {
+			t.Fatalf("unexpected type: %s", result.Type)
+		}
+	})
+
 	// IOA Configuration tests
 	t.Run("ioa_list", func(t *testing.T) {
 		result, err := client.ListIOAs(ctx, ListIOAsRequest{Page: 1, Limit: 10})
@@ -1208,7 +1220,7 @@ func mustLoadLocalConfig(t *testing.T) config.Config {
 	t.Helper()
 	_, currentFile, _, _ := runtime.Caller(0)
 	root := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", ".."))
-	cfg, err := config.Load(filepath.Join(root, "configs", "config.local.toml"))
+	cfg, err := config.Load(filepath.Join(root, "configs", "config.local.debug.toml"))
 	if err != nil {
 		t.Fatalf("load local config: %v", err)
 	}

@@ -62,6 +62,7 @@ type Client interface {
 	// Client Setting (Host Offline)
 	GetHostOfflineConf(ctx context.Context) (HostOfflineConf, error)
 	SaveHostOfflineConf(ctx context.Context, req SaveHostOfflineConfRequest) error
+	GetConsoleReverify(ctx context.Context) (ConsoleReverifyConf, error)
 
 	// IOA Configuration
 	ListIOAs(ctx context.Context, req ListIOAsRequest) (ListIOAsResponse, error)
@@ -853,6 +854,12 @@ type HostOfflineSetting struct {
 type SaveHostOfflineConfRequest struct {
 	Status  int                `json:"status"`
 	Setting HostOfflineSetting `json:"setting"`
+}
+
+type ConsoleReverifyConf struct {
+	Type       string `json:"type"`
+	Contents   string `json:"contents"`
+	VerifyCode string `json:"verify_code"`
 }
 
 // IOA Configuration
@@ -2879,6 +2886,17 @@ func (c *OpenAPIClient) SaveHostOfflineConf(ctx context.Context, req SaveHostOff
 		return fmt.Errorf("save host offline conf failed: %s", envelope.Message)
 	}
 	return nil
+}
+
+func (c *OpenAPIClient) GetConsoleReverify(ctx context.Context) (ConsoleReverifyConf, error) {
+	var envelope apiEnvelope[ConsoleReverifyConf]
+	if err := c.get(ctx, "/settings/console_reverify", nil, &envelope); err != nil {
+		return ConsoleReverifyConf{}, err
+	}
+	if envelope.Error != 0 {
+		return ConsoleReverifyConf{}, fmt.Errorf("get console reverify conf failed: %s", envelope.Message)
+	}
+	return envelope.Data, nil
 }
 
 // IOA Configuration
