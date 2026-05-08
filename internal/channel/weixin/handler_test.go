@@ -127,6 +127,10 @@ func (m *mockStore) DeletePendingAction(ctx context.Context, sessionKey string) 
 	return nil
 }
 
+func (m *mockStore) ClearSessionCache(ctx context.Context, sessionKey string) error {
+	return nil
+}
+
 func (m *mockStore) SaveArtifact(ctx context.Context, sessionKey string, kind string, title string, content string) (protocol.Artifact, error) {
 	return protocol.Artifact{}, nil
 }

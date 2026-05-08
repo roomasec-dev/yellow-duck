@@ -101,6 +101,27 @@ func (c *toolDedupCache) Done(key string, result string, err error) {
 	}
 }
 
+func (c *toolDedupCache) Reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.items = make(map[string]*dedupEntry)
+}
+
+func (c *toolDedupCache) ResetSession(sessionKey string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if strings.TrimSpace(sessionKey) == "" {
+		c.items = make(map[string]*dedupEntry)
+		return
+	}
+	prefix := sessionKey + "|"
+	for key := range c.items {
+		if strings.HasPrefix(key, prefix) {
+			delete(c.items, key)
+		}
+	}
+}
+
 func NewService(cfg config.Config, store store.Store, modelClient model.Client, compactor *compression.Service, progressService *progress.Service, detailAgentService *detailagent.Service, routerService *router.Service, plannerService *planner.Service, memoryService *memory.Service, artifactService *artifact.Service, i18nService *i18n.Service, knowledgeService *knowledge.Service, promptService *prompt.Service, edrClient edr.Client, logger *logx.Logger) *Service {
 	return &Service{
 		cfg:           cfg,
@@ -468,6 +489,34 @@ func (s *Service) handleSessionCommand(ctx context.Context, scopeKey string, tex
 			return "", true, err
 		}
 		return s.msg(locale, "session_delete_done", map[string]string{"session_id": fields[2]}), true, nil
+	case "clear-cache", "clear_cache", "clearcache":
+		items, err := s.store.ListSessions(ctx, scopeKey, 20)
+		if err != nil {
+			return "", true, err
+		}
+		var item protocol.SessionRef
+		for _, candidate := range items {
+			if candidate.Active {
+				item = candidate
+				break
+			}
+		}
+		if item.Key == "" {
+			return s.msg(locale, "session_none", nil), true, nil
+		}
+		if err := s.store.ClearSessionCache(ctx, item.Key); err != nil {
+			return "", true, err
+		}
+		s.dedupCache.ResetSession(item.Key)
+		s.dedupHitCallsMu.Lock()
+		prefix := item.Key + "|"
+		for key := range s.dedupHitCalls {
+			if strings.HasPrefix(key, prefix) {
+				delete(s.dedupHitCalls, key)
+			}
+		}
+		s.dedupHitCallsMu.Unlock()
+		return s.msg(locale, "session_clear_cache_done", map[string]string{"session_id": item.PublicID}), true, nil
 	default:
 		return s.msg(locale, "session_help", nil), true, nil
 	}
@@ -1199,6 +1248,10 @@ func toolCallCacheKey(call planner.ToolCall) string {
 	return hex.EncodeToString(hash[:])
 }
 
+func scopedToolCallCacheKey(sessionKey string, call planner.ToolCall) string {
+	return sessionKey + "|" + toolCallCacheKey(call)
+}
+
 func callNeedsGroundedEDRAnswer(name string) bool {
 	switch name {
 	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_outline", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_plan_list", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts", "edr_virus_scan_record", "edr_instruction_policy_list":
@@ -1432,7 +1485,7 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, bool, error) {
 	isDedupHit := false
 	if !call.Critical && !isCriticalTool(call.Name) {
-		key := toolCallCacheKey(call)
+		key := scopedToolCallCacheKey(sessionKey, call)
 		if result, err, hit := s.dedupCache.GetOrSubmit(key); hit {
 			s.logger.Info("tool call dedup hit", "session_key", sessionKey, "tool", call.Name, "key", key)
 			s.dedupHitCallsMu.Lock()

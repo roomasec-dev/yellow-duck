@@ -605,6 +605,30 @@ func (s *SQLiteStore) DeletePendingAction(ctx context.Context, sessionKey string
 	return nil
 }
 
+func (s *SQLiteStore) ClearSessionCache(ctx context.Context, sessionKey string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin clear session cache tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmts := []string{
+		`DELETE FROM session_summaries WHERE session_key = ?`,
+		`DELETE FROM memories WHERE session_key = ?`,
+		`DELETE FROM pending_actions WHERE session_key = ?`,
+		`DELETE FROM artifacts WHERE session_key = ?`,
+	}
+	for _, stmt := range stmts {
+		if _, err := tx.ExecContext(ctx, stmt, sessionKey); err != nil {
+			return fmt.Errorf("clear session cache: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit clear session cache tx: %w", err)
+	}
+	return nil
+}
+
 func (s *SQLiteStore) SaveArtifact(ctx context.Context, sessionKey string, kind string, title string, content string) (protocol.Artifact, error) {
 	item := protocol.Artifact{
 		SessionKey: sessionKey,
