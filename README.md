@@ -13,7 +13,7 @@
 当前既支持显式命令（28个），也支持自然语言工具规划：
 
 **EDR 主机管理**
-- `/edr hosts <hostname>` 查询主机
+- `/edr hosts [hostname]` 查询主机
 - `/edr isolate <client_id>` 隔离主机
 - `/edr release <client_id>` 恢复主机
 

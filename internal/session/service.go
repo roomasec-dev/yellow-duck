@@ -565,7 +565,6 @@ func (s *Service) handlePlannedTools(ctx context.Context, sessionKey string, tex
 	if reporter != nil {
 		reporter.SendImmediateReply(ctx, "收到消息，正在处理中...")
 	}
-
 	plan, err := s.planner.BuildPlan(ctx, s.cfg.Routing.Model, text, "", summary, recentTurns, memories, latestArtifact, skillsPrompt)
 	if err != nil {
 		s.logger.Warn("planner failed", "error", err)
@@ -1285,6 +1284,82 @@ func incidentIDsFromCall(call planner.ToolCall) []string {
 	return ids
 }
 
+func missingCriticalParams(call planner.ToolCall) []string {
+	missing := make([]string, 0, 4)
+	add := func(ok bool, name string) {
+		if !ok {
+			missing = append(missing, name)
+		}
+	}
+
+	switch call.Name {
+	case "edr_isolate", "edr_release", "edr_add_host_blacklist", "edr_remove_host":
+		add(strings.TrimSpace(call.ClientID) != "", "client_id")
+	case "edr_send_instruction":
+		add(strings.TrimSpace(call.ClientID) != "", "client_id")
+		add(strings.TrimSpace(call.InstructionName) != "", "instruction_name")
+	case "edr_ioc_add":
+		add(strings.TrimSpace(call.IOCAction) != "", "ioc_action")
+		add(strings.TrimSpace(call.IOCHash) != "", "ioc_hash")
+	case "edr_ioc_update":
+		add(strings.TrimSpace(call.IOCID) != "", "ioc_id")
+		add(strings.TrimSpace(call.IOCHash) != "", "ioc_hash")
+	case "edr_ioc_delete", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_update", "edr_ioa_network_delete":
+		add(strings.TrimSpace(call.IOCID) != "", "ioc_id")
+	case "edr_delete_isolate_files", "edr_release_isolate_files":
+		add(strings.TrimSpace(call.IsolateFileGUIDs) != "", "isolate_file_guids")
+	case "edr_plan_add":
+		add(strings.TrimSpace(call.Type) != "", "type")
+		add(call.ScanType > 0, "scan_type")
+		add(call.PlanType > 0, "plan_type")
+		add(call.Scope > 0, "scope")
+	case "edr_plan_edit":
+		add(strings.TrimSpace(call.RID) != "", "rid")
+		add(strings.TrimSpace(call.Type) != "", "type")
+		add(call.ScanType > 0, "scan_type")
+		add(call.PlanType > 0, "plan_type")
+		add(call.Scope > 0, "scope")
+	case "edr_plan_cancel", "edr_instruction_policy_update", "edr_instruction_policy_delete", "edr_instruction_policy_save_status":
+		add(strings.TrimSpace(call.RID) != "", "rid")
+	case "edr_strategy_create":
+		add(strings.TrimSpace(call.PlanName) != "", "plan_name")
+		add(strings.TrimSpace(call.Type) != "", "type")
+		add(call.Scope > 0, "scope")
+	case "edr_strategy_update":
+		add(strings.TrimSpace(call.StrategyID) != "", "strategy_id")
+	case "edr_strategy_delete":
+		add(strings.TrimSpace(call.StrategyID) != "", "strategy_id")
+		add(strings.TrimSpace(call.Type) != "", "type")
+	case "edr_strategy_status":
+		add(strings.TrimSpace(call.StrategyID) != "", "strategy_id")
+		add(strings.TrimSpace(call.Type) != "", "type")
+		add(call.Status > 0, "status")
+	case "edr_host_offline_save":
+		add(call.Status > 0, "status")
+		add(call.Time > 0, "time")
+	case "edr_update_detection_status":
+		add(strings.TrimSpace(call.DetectionID) != "", "detection_id")
+		add(call.Status > 0, "status")
+	case "edr_batch_deal_incident":
+		add(len(incidentIDsFromCall(call)) > 0, "incident_id/ids")
+		add(call.Status >= 1 && call.Status <= 4, "status(1-4)")
+	case "scheduled_task_delete":
+		add(strings.TrimSpace(call.TaskID) != "", "task_id")
+	}
+
+	return missing
+}
+
+func validateCriticalCall(call planner.ToolCall) error {
+	if !call.Critical && !isCriticalTool(call.Name) {
+		return nil
+	}
+	if missing := missingCriticalParams(call); len(missing) > 0 {
+		return fmt.Errorf("%s 参数不完整: %s", call.Name, strings.Join(missing, ", "))
+	}
+	return nil
+}
+
 func canFastTrackCriticalConfirmation(call planner.ToolCall) bool {
 	// Keep the dedicated verification flow for edr_send_instruction.
 	return call.Name != "edr_send_instruction"
@@ -1295,6 +1370,11 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 	for _, call := range calls {
 		if err := ctx.Err(); err != nil {
 			return nil, "", err
+		}
+		if err := validateCriticalCall(call); err != nil {
+			response := fmt.Sprintf("这个动作风险比较高，但参数还不完整：%s。请补充缺失参数后我再执行。", err.Error())
+			stored, storeErr := s.storeAssistantReply(ctx, sessionKey, response)
+			return nil, stored, storeErr
 		}
 		s.logger.Info("start tool call", "session_key", sessionKey, "tool", call.Name, "client_id", call.ClientID, "os_type", call.OSType, "operation", call.Operation, "start_time", call.StartTime, "end_time", call.EndTime, "page", call.Page, "page_size", call.PageSize, "incident_id", call.IncidentID, "detection_id", call.DetectionID, "artifact_id", call.ArtifactID, "query", call.Query, "kb_title", call.KBTitle, "kb_query", call.KBQuery, "kb_mode", call.KBMode, "instruction_name", call.InstructionName, "path", call.Path, "status", call.Status, "allow", call.Allow, "scene", call.Scene)
 		if call.Critical || isCriticalTool(call.Name) {
@@ -1551,10 +1631,10 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 		return formatIncidents(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
 	case "edr_batch_deal_incident":
 		reporter.Step(ctx, "我正在批量处置事件。")
-		ids := incidentIDsFromCall(call)
-		if len(ids) == 0 {
-			return "", fmt.Errorf("批量处置事件需要提供 ids 或 incident_id")
+		if err := validateCriticalCall(call); err != nil {
+			return "", fmt.Errorf("批量处置事件参数不完整: %w", err)
 		}
+		ids := incidentIDsFromCall(call)
 		scene := strings.TrimSpace(call.Scene)
 		if scene == "" {
 			scene = "alone"
@@ -1802,6 +1882,9 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 func (s *Service) executePendingAction(ctx context.Context, sessionKey string, pending protocol.PendingAction, locale string, reporter *progress.Reporter) (string, error) {
 	var call planner.ToolCall
 	if err := json.Unmarshal([]byte(pending.Payload), &call); err != nil {
+		return "", err
+	}
+	if err := validateCriticalCall(call); err != nil {
 		return "", err
 	}
 	result, err := s.executeConfirmedTool(ctx, sessionKey, call, locale, reporter)
@@ -2185,10 +2268,10 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 		return fmt.Sprintf("检测状态已更新，共 %d 个检测", len(strings.Split(strings.TrimSpace(call.DetectionID), ","))), nil
 	case "edr_batch_deal_incident":
 		reporter.Step(ctx, "我正在批量处置事件。")
-		ids := incidentIDsFromCall(call)
-		if len(ids) == 0 {
-			return "", fmt.Errorf("批量处置事件需要提供 ids 或 incident_id")
+		if err := validateCriticalCall(call); err != nil {
+			return "", fmt.Errorf("批量处置事件参数不完整: %w", err)
 		}
+		ids := incidentIDsFromCall(call)
 		scene := strings.TrimSpace(call.Scene)
 		if scene == "" {
 			scene = "alone"
