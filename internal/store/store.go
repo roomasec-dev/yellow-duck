@@ -29,7 +29,6 @@ type Store interface {
 	SavePendingAction(ctx context.Context, sessionKey string, actionType string, payload string, summary string) error
 	GetPendingAction(ctx context.Context, sessionKey string) (protocol.PendingAction, error)
 	DeletePendingAction(ctx context.Context, sessionKey string) error
-	ClearSessionCache(ctx context.Context, sessionKey string) error
 	SaveArtifact(ctx context.Context, sessionKey string, kind string, title string, content string) (protocol.Artifact, error)
 	GetLatestArtifact(ctx context.Context, sessionKey string) (protocol.Artifact, error)
 	GetArtifact(ctx context.Context, sessionKey string, artifactID string) (protocol.Artifact, error)

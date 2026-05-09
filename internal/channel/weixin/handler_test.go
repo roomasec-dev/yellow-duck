@@ -127,10 +127,6 @@ func (m *mockStore) DeletePendingAction(ctx context.Context, sessionKey string) 
 	return nil
 }
 
-func (m *mockStore) ClearSessionCache(ctx context.Context, sessionKey string) error {
-	return nil
-}
-
 func (m *mockStore) SaveArtifact(ctx context.Context, sessionKey string, kind string, title string, content string) (protocol.Artifact, error) {
 	return protocol.Artifact{}, nil
 }
@@ -453,10 +449,10 @@ func TestVerifyWeixinSignature(t *testing.T) {
 				Token: "",
 			},
 			signature:  "any-signature",
-			timestamp: "1234567890",
-			nonce:     "nonce",
+			timestamp:  "1234567890",
+			nonce:      "nonce",
 			encryptStr: "encrypt",
-			wantErr:   false,
+			wantErr:    false,
 		},
 		{
 			name: "empty signature returns nil (skips verification)",
@@ -464,10 +460,10 @@ func TestVerifyWeixinSignature(t *testing.T) {
 				Token: "test-token",
 			},
 			signature:  "",
-			timestamp: "1234567890",
-			nonce:     "nonce",
+			timestamp:  "1234567890",
+			nonce:      "nonce",
 			encryptStr: "encrypt",
-			wantErr:   false,
+			wantErr:    false,
 		},
 		{
 			name: "valid signature passes",
@@ -475,10 +471,10 @@ func TestVerifyWeixinSignature(t *testing.T) {
 				Token: "test-token",
 			},
 			signature:  "",
-			timestamp: "1234567890",
-			nonce:     "nonce",
+			timestamp:  "1234567890",
+			nonce:      "nonce",
 			encryptStr: "encrypt",
-			wantErr:   false,
+			wantErr:    false,
 		},
 		{
 			name: "invalid signature fails",
@@ -486,10 +482,10 @@ func TestVerifyWeixinSignature(t *testing.T) {
 				Token: "test-token",
 			},
 			signature:  "definitely-wrong-signature",
-			timestamp: "1234567890",
-			nonce:     "nonce",
+			timestamp:  "1234567890",
+			nonce:      "nonce",
 			encryptStr: "encrypt",
-			wantErr:   true,
+			wantErr:    true,
 		},
 	}
 
@@ -663,7 +659,7 @@ func TestServeHTTP(t *testing.T) {
 			h := &Handler{
 				cfg: config.WeixinConfig{
 					BotID:      "test-bot-id",
-					Token:     "test-token",
+					Token:      "test-token",
 					EncryptKey: validKey,
 				},
 				store:  store,
@@ -714,9 +710,9 @@ func TestServeHTTP_EncryptedMessage(t *testing.T) {
 		EncryptKey: validKey,
 	}
 	h := &Handler{
-		cfg:     cfg,
-		store:   store,
-		logger:  logger,
+		cfg:    cfg,
+		store:  store,
+		logger: logger,
 	}
 
 	// 加密 XML 格式的消息内容

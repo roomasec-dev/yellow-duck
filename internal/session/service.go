@@ -489,34 +489,6 @@ func (s *Service) handleSessionCommand(ctx context.Context, scopeKey string, tex
 			return "", true, err
 		}
 		return s.msg(locale, "session_delete_done", map[string]string{"session_id": fields[2]}), true, nil
-	case "clear-cache", "clear_cache", "clearcache":
-		items, err := s.store.ListSessions(ctx, scopeKey, 20)
-		if err != nil {
-			return "", true, err
-		}
-		var item protocol.SessionRef
-		for _, candidate := range items {
-			if candidate.Active {
-				item = candidate
-				break
-			}
-		}
-		if item.Key == "" {
-			return s.msg(locale, "session_none", nil), true, nil
-		}
-		if err := s.store.ClearSessionCache(ctx, item.Key); err != nil {
-			return "", true, err
-		}
-		s.dedupCache.ResetSession(item.Key)
-		s.dedupHitCallsMu.Lock()
-		prefix := item.Key + "|"
-		for key := range s.dedupHitCalls {
-			if strings.HasPrefix(key, prefix) {
-				delete(s.dedupHitCalls, key)
-			}
-		}
-		s.dedupHitCallsMu.Unlock()
-		return s.msg(locale, "session_clear_cache_done", map[string]string{"session_id": item.PublicID}), true, nil
 	default:
 		return s.msg(locale, "session_help", nil), true, nil
 	}
