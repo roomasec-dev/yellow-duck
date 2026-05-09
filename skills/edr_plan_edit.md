@@ -14,7 +14,7 @@
 - scope：范围，必填，1-特定主机 2-主机组 3-全网主机
 - type：业务类型，必填，kill_plan/leak_repair/distribute_software/distribute_file
 - client_id：当 scope=1(特定主机) 时必填，指定单台主机
-- plan_name：计划名称
+- plan_name：计划名称，必填
 - contents：内容对象 (scan_path/software/file等)，格式为 JSON 字符串
 - execute_start_time：执行开始时间
 - execute_cycle：执行周期

@@ -26,7 +26,7 @@
 **EDR 计划管理**
 - `/edr plans [page] [page_size]` 查询计划列表
 - `/edr plan_add <plan_name> <scan_type> <plan_type> <scope> [type]` 创建计划
-- `/edr plan_edit <rid> <scan_type> <plan_type> <scope> <type>` 编辑计划
+- `/edr plan_edit <rid> <plan_name> <scan_type> <plan_type> <scope> <type>` 编辑计划
 - `/edr plan_cancel <rid>` 取消计划
 
 **EDR 病毒管理**

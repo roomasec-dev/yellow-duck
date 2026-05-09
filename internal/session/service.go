@@ -1315,6 +1315,7 @@ func missingCriticalParams(call planner.ToolCall) []string {
 		add(call.Scope > 0, "scope")
 	case "edr_plan_edit":
 		add(strings.TrimSpace(call.RID) != "", "rid")
+		add(strings.TrimSpace(call.PlanName) != "", "plan_name")
 		add(strings.TrimSpace(call.Type) != "", "type")
 		add(call.ScanType > 0, "scan_type")
 		add(call.PlanType > 0, "plan_type")
@@ -2549,16 +2550,16 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			response = s.msg(locale, "confirm_plan_add", map[string]string{"name": fields[2]})
 		}
 	case "plan_edit":
-		if len(fields) < 7 {
+		if len(fields) < 8 {
 			response = s.msg(locale, "usage_plan_edit", nil)
 			break
 		}
-		scanType, _ := strconv.Atoi(fields[3])
-		planType, _ := strconv.Atoi(fields[4])
-		scope, _ := strconv.Atoi(fields[5])
-		planTypeStr := fields[6]
-		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_plan_edit", RID: fields[2], ScanType: scanType, PlanType: planType, Scope: scope, Type: planTypeStr})
-		err = s.store.SavePendingAction(ctx, sessionKey, "edr_plan_edit", string(payload), fmt.Sprintf("edr_plan_edit rid=%s scan_type=%s plan_type=%s scope=%s", fields[2], fields[3], fields[4], fields[5]))
+		scanType, _ := strconv.Atoi(fields[4])
+		planType, _ := strconv.Atoi(fields[5])
+		scope, _ := strconv.Atoi(fields[6])
+		planTypeStr := fields[7]
+		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_plan_edit", RID: fields[2], PlanName: fields[3], ScanType: scanType, PlanType: planType, Scope: scope, Type: planTypeStr})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_plan_edit", string(payload), fmt.Sprintf("edr_plan_edit rid=%s name=%s scan_type=%s plan_type=%s scope=%s", fields[2], fields[3], fields[4], fields[5], fields[6]))
 		if err == nil {
 			response = s.msg(locale, "confirm_plan_edit", map[string]string{"rid": fields[2]})
 		}
@@ -2830,6 +2831,9 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 	case "plan_edit":
 		if decision.RID == "" {
 			return "", fmt.Errorf("编辑计划需要提供计划ID（rid），请使用类似「编辑计划 rid=xxx」的格式")
+		}
+		if decision.PlanName == "" {
+			return "", fmt.Errorf("编辑计划需要提供计划名称（plan_name），请使用类似「编辑计划 rid=xxx plan_name=xxx」的格式")
 		}
 		if decision.ScanType == 0 {
 			return "", fmt.Errorf("编辑计划需要提供操作类型（scan_type）：1-快速扫描 2-全盘扫描 3-自定义路径扫描 4-漏洞修复 5-安装软件 6-卸载软件 7-更新软件 8-发送文件，请使用类似「编辑计划 rid=xxx scan_type=1」的格式")
