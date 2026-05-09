@@ -305,13 +305,13 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 	switch trimmed {
 	case "确认", "确认执行", "确认继续", "confirm", "yes", "proceed":
 		// 如果是下发指令待验证类型，需要先发送验证码
-		if pending.ActionType == "edr_send_instruction_verify_pending" {
+		if pending.ActionType == "edr_task_send_instruction_verify_pending" {
 			reporter.Step(ctx, "用户确认执行，正在发送验证码。")
 			if err := s.edr.SendVerifyCode(ctx, "instruction"); err != nil {
 				return "", true, fmt.Errorf("发送验证码失败: %w", err)
 			}
 			verifyResp, _ := s.edr.IsNeedVerifyCode(ctx, "instruction")
-			pending.ActionType = "edr_send_instruction_verify"
+			pending.ActionType = "edr_task_send_instruction_verify"
 			if err := s.store.SavePendingAction(ctx, sessionKey, pending.ActionType, pending.Payload, pending.Summary); err != nil {
 				return "", true, err
 			}
@@ -334,7 +334,7 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 		return response, true, err
 	default:
 		// 处理验证码输入
-		if pending.ActionType == "edr_send_instruction_verify" {
+		if pending.ActionType == "edr_task_send_instruction_verify" {
 			code, classifyErr := s.classifyVerifyCodeInput(ctx, sessionKey, userText, pending)
 			if classifyErr != nil {
 				s.logger.Warn("提取验证码失败，降级到简单判断", "error", classifyErr)
@@ -1255,7 +1255,7 @@ func callNeedsGroundedEDRAnswer(name string) bool {
 	switch name {
 	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_outline", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_plan_list", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts", "edr_virus_scan_record", "edr_instruction_policy_list":
 		return true
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_instruction_policy_update", "edr_instruction_policy_save_status", "edr_instruction_policy_delete", "edr_instruction_policy_sort", "edr_instruction_policy_add":
+	case "edr_host_isolate", "edr_host_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_isolate_files_delete", "edr_isolate_files_release", "edr_task_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_instruction_policy_update", "edr_instruction_policy_save_status", "edr_instruction_policy_delete", "edr_instruction_policy_sort", "edr_instruction_policy_add":
 		return false
 	default:
 		return false
@@ -1293,9 +1293,9 @@ func missingCriticalParams(call planner.ToolCall) []string {
 	}
 
 	switch call.Name {
-	case "edr_isolate", "edr_release", "edr_add_host_blacklist", "edr_remove_host":
+	case "edr_host_isolate", "edr_host_release", "edr_host_blacklist_add", "edr_host_remove":
 		add(strings.TrimSpace(call.ClientID) != "", "client_id")
-	case "edr_send_instruction":
+	case "edr_task_send_instruction":
 		add(strings.TrimSpace(call.ClientID) != "", "client_id")
 		add(strings.TrimSpace(call.InstructionName) != "", "instruction_name")
 	case "edr_ioc_add":
@@ -1306,7 +1306,7 @@ func missingCriticalParams(call planner.ToolCall) []string {
 		add(strings.TrimSpace(call.IOCHash) != "", "ioc_hash")
 	case "edr_ioc_delete", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_update", "edr_ioa_network_delete":
 		add(strings.TrimSpace(call.IOCID) != "", "ioc_id")
-	case "edr_delete_isolate_files", "edr_release_isolate_files":
+	case "edr_isolate_files_delete", "edr_isolate_files_release":
 		add(strings.TrimSpace(call.IsolateFileGUIDs) != "", "isolate_file_guids")
 	case "edr_plan_add":
 		add(strings.TrimSpace(call.Type) != "", "type")
@@ -1338,10 +1338,10 @@ func missingCriticalParams(call planner.ToolCall) []string {
 	case "edr_host_offline_save":
 		add(call.Status > 0, "status")
 		add(call.Time > 0, "time")
-	case "edr_update_detection_status":
+	case "edr_detection_update_status":
 		add(strings.TrimSpace(call.DetectionID) != "", "detection_id")
 		add(call.Status > 0, "status")
-	case "edr_batch_deal_incident":
+	case "edr_incident_batch_deal":
 		add(len(incidentIDsFromCall(call)) > 0, "incident_id/ids")
 		add(call.Status >= 1 && call.Status <= 4, "status(1-4)")
 	case "scheduled_task_delete":
@@ -1362,8 +1362,8 @@ func validateCriticalCall(call planner.ToolCall) error {
 }
 
 func canFastTrackCriticalConfirmation(call planner.ToolCall) bool {
-	// Keep the dedicated verification flow for edr_send_instruction.
-	return call.Name != "edr_send_instruction"
+	// Keep the dedicated verification flow for edr_task_send_instruction.
+	return call.Name != "edr_task_send_instruction"
 }
 
 func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, locale string, calls []planner.ToolCall, reporter *progress.Reporter, fastTrackConfirmedCritical bool) ([]string, string, error) {
@@ -1501,8 +1501,8 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 			}
 
 			actionType := call.Name
-			// For edr_send_instruction, only specific instructions need verification code
-			if call.Name == "edr_send_instruction" {
+			// For edr_task_send_instruction, only specific instructions need verification code
+			if call.Name == "edr_task_send_instruction" {
 				// List of instructions that require verification code
 				verifyCodeRequiredInstructions := map[string]bool{
 					"quarantine_file":       true,
@@ -1521,7 +1521,7 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 					if verifyResp.IsNeedVerifyCode {
 						// 需要验证码，先保存 pending action，不立即发送验证码
 						// 等用户确认后再发送
-						actionType = "edr_send_instruction_verify_pending"
+						actionType = "edr_task_send_instruction_verify_pending"
 						summary += " (需要验证码)"
 						if err := s.store.SavePendingAction(ctx, sessionKey, actionType, string(payload), summary); err != nil {
 							return nil, "", err
@@ -1630,7 +1630,7 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 			return "", err
 		}
 		return formatIncidents(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
-	case "edr_batch_deal_incident":
+	case "edr_incident_batch_deal":
 		reporter.Step(ctx, "我正在批量处置事件。")
 		if err := validateCriticalCall(call); err != nil {
 			return "", fmt.Errorf("批量处置事件参数不完整: %w", err)
@@ -1651,7 +1651,7 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 			return "", err
 		}
 		return fmt.Sprintf("批量处置完成：%d 个事件已处理", result.TotalIncident), nil
-	case "edr_incident_r2_summary":
+	case "edr_incident_summary":
 		reporter.ToolStart(ctx, call.Name, "我在拉取事件 R2 摘要。")
 		result, err := s.edr.IncidentR2Summary(ctx, call.IncidentID)
 		if err != nil {
@@ -1668,7 +1668,7 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 			return "", err
 		}
 		return formatDetections(result, positiveOr(call.Page, 1), positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)), nil
-	case "edr_event_log_alarms":
+	case "edr_log_alarms":
 		reporter.ToolStart(ctx, call.Name, "我在拉取事件日志告警列表。")
 		result, err := s.edr.ListEventLogAlarms(ctx, edr.ListEventLogAlarmsRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
 		if err != nil {
@@ -1898,14 +1898,14 @@ func (s *Service) executePendingAction(ctx context.Context, sessionKey string, p
 
 func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, error) {
 	switch call.Name {
-	case "edr_isolate":
+	case "edr_host_isolate":
 		reporter.Step(ctx, "我在下发隔离动作，并等待任务回执。")
 		result, err := s.edr.IsolateHost(ctx, call.ClientID, call.Time)
 		if err != nil {
 			return "", err
 		}
 		return s.msg(locale, "confirm_isolate_done", map[string]string{"task_id": result.TaskID, "host": result.HostName, "repeat": strconv.FormatBool(result.Repeat)}), nil
-	case "edr_release":
+	case "edr_host_release":
 		reporter.Step(ctx, "我在下发恢复动作，并等待任务回执。")
 		result, err := s.edr.ReleaseHost(ctx, call.ClientID)
 		if err != nil {
@@ -1930,7 +1930,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 			return "", err
 		}
 		return fmt.Sprintf("IOC %s 已删除。", call.IOCID), nil
-	case "edr_delete_isolate_files":
+	case "edr_isolate_files_delete":
 		reporter.Step(ctx, "我在删除隔离文件记录。")
 		guids := strings.Split(strings.TrimSpace(call.IsolateFileGUIDs), ",")
 		cleaned := make([]string, 0, len(guids))
@@ -1944,7 +1944,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 			return "", err
 		}
 		return fmt.Sprintf("已删除 %d 条隔离文件记录。", len(cleaned)), nil
-	case "edr_release_isolate_files":
+	case "edr_isolate_files_release":
 		reporter.Step(ctx, "我在放行隔离文件。")
 		guids := strings.Split(strings.TrimSpace(call.IsolateFileGUIDs), ",")
 		cleaned := make([]string, 0, len(guids))
@@ -1958,8 +1958,8 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 			return "", err
 		}
 		return fmt.Sprintf("已放行 %d 个隔离文件。", len(cleaned)), nil
-	case "edr_send_instruction":
-		log.Printf("edr_send_instruction call: %+v", call)
+	case "edr_task_send_instruction":
+		log.Printf("edr_task_send_instruction call: %+v", call)
 		if call.ClientID == "" {
 			return "", fmt.Errorf("发送指令需要提供 client_id")
 		}
@@ -2231,7 +2231,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 			return "", err
 		}
 		return "主机离线配置已保存", nil
-	case "edr_add_host_blacklist":
+	case "edr_host_blacklist_add":
 		reporter.Step(ctx, "我正在将主机加入黑名单。")
 		clientIDs := strings.Split(strings.TrimSpace(call.ClientID), ",")
 		cleaned := make([]string, 0, len(clientIDs))
@@ -2245,7 +2245,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 			return "", err
 		}
 		return fmt.Sprintf("已成功将 %d 台主机加入黑名单。", len(cleaned)), nil
-	case "edr_remove_host":
+	case "edr_host_remove":
 		reporter.Step(ctx, "我正在从管控中移除主机。")
 		clientIDs := strings.Split(strings.TrimSpace(call.ClientID), ",")
 		cleaned := make([]string, 0, len(clientIDs))
@@ -2259,7 +2259,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 			return "", err
 		}
 		return fmt.Sprintf("已成功从管控中移除 %d 台主机。", len(cleaned)), nil
-	case "edr_update_detection_status":
+	case "edr_detection_update_status":
 		reporter.Step(ctx, "我正在更新检测状态。")
 		if err := s.edr.UpdateDetectionStatus(ctx, edr.UpdateDetectionStatusRequest{
 			IDs:        strings.Split(strings.TrimSpace(call.DetectionID), ","),
@@ -2268,7 +2268,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 			return "", err
 		}
 		return fmt.Sprintf("检测状态已更新，共 %d 个检测", len(strings.Split(strings.TrimSpace(call.DetectionID), ","))), nil
-	case "edr_batch_deal_incident":
+	case "edr_incident_batch_deal":
 		reporter.Step(ctx, "我正在批量处置事件。")
 		if err := validateCriticalCall(call); err != nil {
 			return "", fmt.Errorf("批量处置事件参数不完整: %w", err)
@@ -2304,7 +2304,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 
 func isCriticalTool(name string) bool {
 	switch name {
-	case "edr_isolate", "edr_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_delete_isolate_files", "edr_release_isolate_files", "edr_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_ioa_add", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_add", "edr_ioa_network_update", "edr_ioa_network_delete", "edr_strategy_create", "edr_strategy_update", "edr_strategy_delete", "edr_strategy_status", "edr_host_offline_save", "edr_add_host_blacklist", "edr_remove_host", "edr_update_detection_status", "edr_batch_deal_incident", "scheduled_task_delete":
+	case "edr_host_isolate", "edr_host_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_isolate_files_delete", "edr_isolate_files_release", "edr_task_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_ioa_add", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_add", "edr_ioa_network_update", "edr_ioa_network_delete", "edr_strategy_create", "edr_strategy_update", "edr_strategy_delete", "edr_strategy_status", "edr_host_offline_save", "edr_host_blacklist_add", "edr_host_remove", "edr_detection_update_status", "edr_incident_batch_deal", "scheduled_task_delete":
 		return true
 	default:
 		return false
@@ -2377,8 +2377,8 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			response = s.msg(locale, "usage_isolate", nil)
 			break
 		}
-		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_isolate", ClientID: fields[2], Critical: true})
-		err = s.store.SavePendingAction(ctx, sessionKey, "edr_isolate", string(payload), "edr_isolate client_id="+fields[2])
+		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_host_isolate", ClientID: fields[2], Critical: true})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_host_isolate", string(payload), "edr_host_isolate client_id="+fields[2])
 		if err == nil {
 			response = s.msg(locale, "confirm_isolate", map[string]string{"client_id": fields[2]})
 		}
@@ -2387,8 +2387,8 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			response = s.msg(locale, "usage_release", nil)
 			break
 		}
-		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_release", ClientID: fields[2], Critical: true})
-		err = s.store.SavePendingAction(ctx, sessionKey, "edr_release", string(payload), "edr_release client_id="+fields[2])
+		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_host_release", ClientID: fields[2], Critical: true})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_host_release", string(payload), "edr_host_release client_id="+fields[2])
 		if err == nil {
 			response = s.msg(locale, "confirm_release", map[string]string{"client_id": fields[2]})
 		}
@@ -2436,7 +2436,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			comment = strings.Join(fields[6:], " ")
 		}
 		payload, _ := json.Marshal(planner.ToolCall{
-			Name:     "edr_batch_deal_incident",
+			Name:     "edr_incident_batch_deal",
 			Ids:      fields[2],
 			Status:   status,
 			Scene:    scene,
@@ -2444,7 +2444,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			Comment:  comment,
 			Critical: true,
 		})
-		err = s.store.SavePendingAction(ctx, sessionKey, "edr_batch_deal_incident", string(payload), fmt.Sprintf("edr_batch_deal_incident ids=%s status=%d scene=%s allow=%t", fields[2], status, scene, allow))
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_incident_batch_deal", string(payload), fmt.Sprintf("edr_incident_batch_deal ids=%s status=%d scene=%s allow=%t", fields[2], status, scene, allow))
 		if err == nil {
 			response = s.msg(locale, "confirm_batch_deal_incident", map[string]string{"ids": fields[2], "status": strconv.Itoa(status), "scene": scene})
 		}
@@ -2518,8 +2518,8 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			response = s.msg(locale, "usage_send_instruction", nil)
 			break
 		}
-		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_send_instruction", ClientID: fields[3], InstructionName: fields[2]})
-		err = s.store.SavePendingAction(ctx, sessionKey, "edr_send_instruction", string(payload), fmt.Sprintf("edr_send_instruction instruction=%s client_id=%s", fields[2], fields[3]))
+		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_task_send_instruction", ClientID: fields[3], InstructionName: fields[2]})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_task_send_instruction", string(payload), fmt.Sprintf("edr_task_send_instruction instruction=%s client_id=%s", fields[2], fields[3]))
 		if err == nil {
 			response = s.msg(locale, "confirm_send_instruction", map[string]string{"instruction": fields[2], "client_id": fields[3]})
 		}
@@ -2686,7 +2686,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			response = formatStrategyState(strategyStateResult)
 		}
 	case "event_log_alarms":
-		reporter.ToolStart(ctx, "edr_event_log_alarms", "我在拉取事件日志告警列表。")
+		reporter.ToolStart(ctx, "edr_log_alarms", "我在拉取事件日志告警列表。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var eventLogAlarmsResult edr.ListEventLogAlarmsResponse
 		eventLogAlarmsResult, err = s.edr.ListEventLogAlarms(ctx, edr.ListEventLogAlarmsRequest{Page: page, Limit: pageSize})

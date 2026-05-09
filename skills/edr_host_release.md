@@ -1,4 +1,4 @@
-# Tool: edr_release
+# Tool: edr_host_release
 
 用途：
 - 恢复主机网络隔离，属于高危写操作。

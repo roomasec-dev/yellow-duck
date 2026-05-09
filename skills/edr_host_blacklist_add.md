@@ -1,4 +1,4 @@
-# Tool: edr_add_host_blacklist
+# Tool: edr_host_blacklist_add
 
 用途：
 - 将指定主机加入黑名单，属于高危写操作。加入黑名单后，该主机将无法接收指令和更新。

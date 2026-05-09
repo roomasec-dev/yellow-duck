@@ -1,4 +1,4 @@
-# Tool: edr_release_isolate_files
+# Tool: edr_isolate_files_release
 
 用途：
 - 放行被隔离的文件，属于高危写操作。

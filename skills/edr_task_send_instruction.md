@@ -1,4 +1,4 @@
-# Tool: edr_send_instruction
+# Tool: edr_task_send_instruction
 
 用途：
 - 向指定主机下发指令，或者叫新建人工响应，属于高危写操作。

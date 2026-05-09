@@ -1,4 +1,4 @@
-# Tool: edr_batch_deal_incident
+# Tool: edr_incident_batch_deal
 
 用途：
 - 批量处置事件（标记为已处理/误报等），属于高危写操作。

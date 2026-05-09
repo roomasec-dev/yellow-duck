@@ -25,18 +25,18 @@ type Service struct {
 }
 
 type Reporter struct {
-	service             *Service
-	sink                Sink
-	session             protocol.SessionRef
-	startedAt           time.Time
-	sent                int
-	toolSent            int
-	lastSent            time.Time
-	lastText            string
-	lastStage           string
-	lastToolStage       string
-	lastStageSent       time.Time
-	immediateReplySent  bool
+	service            *Service
+	sink               Sink
+	session            protocol.SessionRef
+	startedAt          time.Time
+	sent               int
+	toolSent           int
+	lastSent           time.Time
+	lastText           string
+	lastStage          string
+	lastToolStage      string
+	lastStageSent      time.Time
+	immediateReplySent bool
 }
 
 const (
@@ -192,7 +192,7 @@ func normalizeStage(stage string) string {
 
 func toolStage(tool string) string {
 	switch strings.TrimSpace(tool) {
-	case "edr_incidents", "edr_detections", "edr_logs", "edr_event_log_alarms", "edr_hosts":
+	case "edr_incidents", "edr_detections", "edr_logs", "edr_log_alarms", "edr_hosts":
 		return "overview"
 	case "edr_incident_view", "edr_detection_view":
 		return "pick_target"

@@ -1,4 +1,4 @@
-# Tool: edr_isolate
+# Tool: edr_host_isolate
 
 用途：
 - 隔离主机，属于高危写操作。

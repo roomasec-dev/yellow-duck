@@ -1,4 +1,4 @@
-# Tool: edr_event_log_alarms
+# Tool: edr_log_alarms
 
 用途：
 - 查询事件日志告警列表，适合回答"有哪些事件日志告警""告警的详细信息"。

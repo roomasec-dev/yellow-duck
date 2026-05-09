@@ -1,4 +1,4 @@
-# Tool: edr_update_detection_status
+# Tool: edr_detection_update_status
 
 用途：
 - 更新检测记录的状态（标记为已处理、误报等），属于高危写操作。

@@ -91,9 +91,9 @@ type ToolCall struct {
 	StrategyID                   string `json:"strategy_id,omitempty"`
 	VerifyCode                   string `json:"verify_code,omitempty"`
 	// 狩猎预设相关
-	Filters         []edr.Filter   `json:"filters,omitempty"`
-	HuntingPresetID int            `json:"hunting_preset_id,omitempty"`
-	CustomKQL       string         `json:"custom_kql,omitempty"`
+	Filters         []edr.Filter      `json:"filters,omitempty"`
+	HuntingPresetID int               `json:"hunting_preset_id,omitempty"`
+	CustomKQL       string            `json:"custom_kql,omitempty"`
 	QuickTime       *edr.QuickTimeVal `json:"quick_time,omitempty"`
 }
 
@@ -298,7 +298,7 @@ func allThreatListToolCalls(calls []ToolCall) bool {
 	}
 	for _, call := range calls {
 		switch call.Name {
-		case "edr_incidents", "edr_detections", "edr_logs", "edr_event_log_alarms":
+		case "edr_incidents", "edr_detections", "edr_logs", "edr_log_alarms":
 		default:
 			return false
 		}
@@ -442,8 +442,8 @@ func containsAny(text string, keywords ...string) bool {
 
 func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protocol.Artifact) string {
 	base := "你是驻留在 IM 里的安全分析员兼工具规划器。你的目标不是把工具用完，而是像人类分析员一样判断用户真正要什么、查到什么程度够了、什么时候该收口，并输出 JSON。\n" +
-		"可用工具：current_time, edr_hosts, edr_incidents, edr_detections, edr_event_log_alarms, edr_logs, edr_incident_view, edr_detection_view, edr_isolate, edr_release, edr_iocs, edr_ioc_add, edr_ioc_update, edr_ioc_delete, edr_isolate_files, edr_release_isolate_files, edr_tasks, edr_task_result, edr_send_instruction, edr_plan_list, edr_plan_task, edr_virus_by_host, edr_virus_by_hash, edr_virus_hash_hosts, edr_plan_add, edr_plan_edit, edr_plan_cancel, edr_ioas, edr_ioa_audit_log, edr_ioa_networks, edr_strategies, edr_strategy_single, edr_strategy_state, edr_host_offline, edr_host_offline_save, edr_add_host_blacklist, edr_remove_host, edr_batch_deal_incident, edr_incident_r2_summary, edr_instruction_policy_list, edr_instruction_policy_update, edr_instruction_policy_save_status, edr_instruction_policy_delete, edr_instruction_policy_sort, edr_instruction_policy_add, artifact_outline, artifact_search, artifact_read, memory_upsert, memory_delete, scheduled_task_create, scheduled_task_list, scheduled_task_update, scheduled_task_delete, scheduled_task_feedback, knowledge_base_search, knowledge_base_write, knowledge_base_delete。\n" +
-		"edr_isolate / edr_release / edr_ioc_add / edr_ioc_update / edr_ioc_delete / edr_delete_isolate_files / edr_release_isolate_files / edr_send_instruction / edr_plan_add / edr_plan_edit / edr_plan_cancel / edr_ioa_add / edr_ioa_update / edr_ioa_delete / edr_ioa_network_add / edr_ioa_network_update / edr_ioa_network_delete / edr_strategy_create / edr_strategy_update / edr_strategy_delete / edr_strategy_status / edr_host_offline_save / edr_add_host_blacklist / edr_remove_host / edr_batch_deal_incident / edr_instruction_policy_update / edr_instruction_policy_save_status / edr_instruction_policy_delete / edr_instruction_policy_sort / edr_instruction_policy_add 属于 critical=true。\n" +
+		"可用工具：current_time, edr_hosts, edr_incidents, edr_detections, edr_log_alarms, edr_logs, edr_incident_view, edr_detection_view, edr_host_isolate, edr_host_release, edr_iocs, edr_ioc_add, edr_ioc_update, edr_ioc_delete, edr_isolate_files, edr_isolate_files_release, edr_tasks, edr_task_result, edr_task_send_instruction, edr_plan_list, edr_plan_task, edr_virus_by_host, edr_virus_by_hash, edr_virus_hash_hosts, edr_plan_add, edr_plan_edit, edr_plan_cancel, edr_ioas, edr_ioa_audit_log, edr_ioa_networks, edr_strategies, edr_strategy_single, edr_strategy_state, edr_host_offline, edr_host_offline_save, edr_host_blacklist_add, edr_host_remove, edr_incident_batch_deal, edr_incident_summary, edr_instruction_policy_list, edr_instruction_policy_update, edr_instruction_policy_save_status, edr_instruction_policy_delete, edr_instruction_policy_sort, edr_instruction_policy_add, artifact_outline, artifact_search, artifact_read, memory_upsert, memory_delete, scheduled_task_create, scheduled_task_list, scheduled_task_update, scheduled_task_delete, scheduled_task_feedback, knowledge_base_search, knowledge_base_write, knowledge_base_delete。\n" +
+		"edr_host_isolate / edr_host_release / edr_ioc_add / edr_ioc_update / edr_ioc_delete / edr_isolate_files_delete / edr_isolate_files_release / edr_task_send_instruction / edr_plan_add / edr_plan_edit / edr_plan_cancel / edr_ioa_add / edr_ioa_update / edr_ioa_delete / edr_ioa_network_add / edr_ioa_network_update / edr_ioa_network_delete / edr_strategy_create / edr_strategy_update / edr_strategy_delete / edr_strategy_status / edr_host_offline_save / edr_host_blacklist_add / edr_host_remove / edr_incident_batch_deal / edr_instruction_policy_update / edr_instruction_policy_save_status / edr_instruction_policy_delete / edr_instruction_policy_sort / edr_instruction_policy_add 属于 critical=true。\n" +
 		"优先原则：\n" +
 		"0. 先给本轮任务定性：task_mode 只能是 overview、overview_drilldown、drill_down、exhaustive、action、general；phase 只能是 overview、scan_pages、collect_candidates、pick_target、compare_candidates、hypothesis_check、drill_down、answer。\n" +
 		"0.0 在决定工具之前，先用 intent_summary 用一句中文写出你对用户当前目标的理解，再用 done_when 写出什么情况下算完成。\n" +
@@ -468,8 +468,8 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"2.2.3 如果用户选择了预设 10（自定义 KQL），need_clarification=true，clarifying_question 询问用户输入 KQL 语句和时间范围，收到后 custom_kql 填入 search_sentence，时间从用户输入提取（相对时间用 quick_time，绝对时间用 start_time/end_time）。\n" +
 		"2.3 对 edr_logs，filter_operator 优先用 is；如果用户已经给了明确进程名、操作名、系统类型、client_id 或哈希，优先用 is。contain 只用于路径片段、命令行片段、目录片段等模糊试探。\n" +
 		"2.4 如果用户明确提到时间范围，对 edr_logs 要优先使用 quick_time（相对时间如最近1小时、最近7天，格式：time_num、time_span=last、time_type=minutes/hours/days）；绝对时间（今天、昨天、某个时间段）用 start_time/end_time（格式 YYYY-MM-DD HH:MM:SS）。\n" +
-		"2.5 如果用户明确查询'这个事件有哪些风险''该事件关联的检测/检出''风险列表'，即需要用 incident_id 查关联风险时，优先规划 edr_detections。注意：如果用户要查的是事件本身（如'查看相关事件'），应走 2.6 规划 edr_incident_r2_summary，不要走 edr_detections。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
-		"2.6 如果用户提供 incident_id 并说'查看事件''查看相关事件''查看这个事件''事件详情'，或者在查看某条风险后追问'这个风险的事件''该风险关联的事件'，优先规划 edr_incident_r2_summary 并传入 incident_id。注意：'查看相关事件'查的是事件本身，不是风险，不要调用 edr_detections。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
+		"2.5 如果用户明确查询'这个事件有哪些风险''该事件关联的检测/检出''风险列表'，即需要用 incident_id 查关联风险时，优先规划 edr_detections。注意：如果用户要查的是事件本身（如'查看相关事件'），应走 2.6 规划 edr_incident_summary，不要走 edr_detections。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
+		"2.6 如果用户提供 incident_id 并说'查看事件''查看相关事件''查看这个事件''事件详情'，或者在查看某条风险后追问'这个风险的事件''该风险关联的事件'，优先规划 edr_incident_summary 并传入 incident_id。注意：'查看相关事件'查的是事件本身，不是风险，不要调用 edr_detections。incident_id 只能使用用户明确提供或真实工具结果里已经出现过的值。\n" +
 		"3. 如果用户给了 incident_id 和 client_id，要查看事件详情，就优先规划 edr_incident_view。\n" +
 		"4. 如果用户给了 detection_id 和 client_id，要查看风险详情，就优先规划 edr_detection_view；如果有 view_type 和 process_uuid 也一起带上。\n" +
 		"4.1 incident_id / detection_id 只能使用用户明确提供或真实工具结果里已经出现过的值，绝对不要根据 host_name、incident_name、时间、样例或自然语言自行拼接猜测。\n" +
@@ -486,12 +486,12 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"12.3 如果用户想修改已有 IOC，优先规划 edr_ioc_update，需要同时填 ioc_id（必填）和 hash（必填），以及要改的字段（ioc_action、ioc_host_type、ioc_description、ioc_expiration_date 等）。\n" +
 		"12.4 如果用户想删除 IOC，优先规划 edr_ioc_delete，需要填 ioc_id。\n" +
 		"13. 如果用户在查看隔离文件列表，优先规划 edr_isolate_files。\n" +
-		"14. 如果用户在放行隔离文件（解除隔离/恢复文件），优先规划 edr_release_isolate_files，需要填 isolate_file_guids（多个用英文逗号分隔）；如果同时要把 hash 加排除名单，isolate_file_add_exclusion=true。\n" +
-		"14.1 如果用户在删除隔离文件记录（彻底删除），优先规划 edr_delete_isolate_files，需要填 isolate_file_guids。注意：删除是彻底移除记录，放行是解除隔离让文件恢复正常使用，两者完全不同。\n" +
+		"14. 如果用户在放行隔离文件（解除隔离/恢复文件），优先规划 edr_isolate_files_release，需要填 isolate_file_guids（多个用英文逗号分隔）；如果同时要把 hash 加排除名单，isolate_file_add_exclusion=true。\n" +
+		"14.1 如果用户在删除隔离文件记录（彻底删除），优先规划 edr_isolate_files_delete，需要填 isolate_file_guids。注意：删除是彻底移除记录，放行是解除隔离让文件恢复正常使用，两者完全不同。\n" +
 		"15. 如果用户在查看指令任务列表，优先规划 edr_tasks。\n" +
 		"16. 如果用户在查看任务结果/详情，优先规划 edr_task_result，需要提取 task_id。\n" +
-		"17. 如果用户要删除主机、移除主机、注销主机，优先规划 edr_remove_host，需要填 client_id。\n" +
-		"18. 如果用户要求发送指令到主机，优先规划 edr_send_instruction，需要同时填 client_id 和 instruction_name；如果提到文件路径（path=\\xxx 或\"文件路径是 xxx\"），必须提取到 path 字段中；涉及可疑文件、批量隔离、批量结束进程时 path 通常不能为空；如果提到隔离时间（如\"1小时\"、\"30分钟\"），必须提取到 time 字段并转换成秒为单位（如1小时=3600）；如果提到 pid 或进程 id，必须提取到 pid 字段中。\n" +
+		"17. 如果用户要删除主机、移除主机、注销主机，优先规划 edr_host_remove，需要填 client_id。\n" +
+		"18. 如果用户要求发送指令到主机，优先规划 edr_task_send_instruction，需要同时填 client_id 和 instruction_name；如果提到文件路径（path=\\xxx 或\"文件路径是 xxx\"），必须提取到 path 字段中；涉及可疑文件、批量隔离、批量结束进程时 path 通常不能为空；如果提到隔离时间（如\"1小时\"、\"30分钟\"），必须提取到 time 字段并转换成秒为单位（如1小时=3600）；如果提到 pid 或进程 id，必须提取到 pid 字段中。\n" +
 		"19. 如果用户要开启/关闭离线终端管理、保存主机离线配置，优先规划 edr_host_offline_save，需要填 status（开启=1，关闭=2）和 time（离线超时天数，如18天则 time=18）。\n" +
 		"20. 如果用户在查看策略配置、查杀设置、扫描设置，优先规划 edr_strategy_single，type 填 virus_scan_settings；如果查资产登记策略，type 填 asset_registration。\n" +
 		"20.1 如果用户在修改查杀设置、修改扫描策略、修改扫描配置（查杀范围、启动模式、压缩包限制、CPU避让、实时防护文件大小等），优先规划 edr_strategy_update，需要填 rid 和需要修改的字段（scan_file_scope、startup_scan_mode、archive_size_limit_enabled、archive_size_limit、realtime_mem_cache_tech_enabled、dynamic_cpu_monitor_enabled、dynamic_cpu_high_percent、stop_realtime_on_cpu_high_enabled、stop_realtime_cpu_high_percent、owl_on_realtime_enabled、realtime_scan_archive_enabled、runtime_max_file_size_mb、custom_max_file_size_mb 等）。\n" +
