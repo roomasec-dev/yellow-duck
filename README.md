@@ -19,7 +19,7 @@
 
 **EDR 事件与检出**
 - `/edr incidents [client_id] [page] [page_size]` 查询平台事件
-- `/edr detections [page] [page_size]` 查询平台行为检出
+- `/edr detections [incident_id] [page] [page_size]` 查询平台行为检出
 - `/edr incident-view <incident_id> <client_id>` 查询事件详情
 - `/edr detection-view <detection_id> <client_id> [view_type] [process_uuid]` 查询检出详情
 - `/edr batch_deal_incident <ids_csv> <status> [scene] [allow] [comment]` 批量处置事件（状态：1-未研判 2-研判中 3-真攻击 4-误报）

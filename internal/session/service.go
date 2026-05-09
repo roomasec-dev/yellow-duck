@@ -2450,9 +2450,9 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		}
 	case "detections":
 		reporter.ToolStart(ctx, "edr_detections", "我在从平台 API 拉取近期行为检出，看看最近有哪些高风险动作。")
-		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
+		incidentID, page, pageSize := parseDetectionsArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var result edr.ListDetectionsResponse
-		result, err = s.edr.ListDetections(ctx, edr.ListDetectionsRequest{Page: page, Limit: pageSize})
+		result, err = s.edr.ListDetections(ctx, edr.ListDetectionsRequest{IncidentID: incidentID, Page: page, Limit: pageSize})
 		if err == nil {
 			response = formatDetections(result, page, pageSize)
 		}
@@ -3896,6 +3896,17 @@ func parsePagedArgs(args []string, defaultPageSize int) (int, int) {
 		}
 	}
 	return page, pageSize
+}
+
+func parseDetectionsArgs(args []string, defaultPageSize int) (string, int, int) {
+	incidentID := ""
+	rest := args
+	if len(args) > 0 {
+		incidentID = strings.TrimSpace(args[0])
+		rest = args[1:]
+	}
+	page, pageSize := parsePagedArgs(rest, defaultPageSize)
+	return incidentID, page, pageSize
 }
 
 func parseVirusScanArgs(args []string, defaultPageSize int) (string, string, int, int) {
