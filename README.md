@@ -10,7 +10,7 @@
 
 ## 当前交互方式
 
-当前既支持显式命令（28个），也支持自然语言工具规划：
+当前既支持显式命令（29个），也支持自然语言工具规划：
 
 **EDR 主机管理**
 - `/edr hosts [hostname]` 查询主机
@@ -22,10 +22,15 @@
 - `/edr detections [page] [page_size]` 查询平台行为检出
 - `/edr incident-view <incident_id> <client_id>` 查询事件详情
 - `/edr detection-view <detection_id> <client_id> [view_type] [process_uuid]` 查询检出详情
+- `/edr batch_deal_incident <ids_csv> <status> [scene] [allow] [comment]` 批量处置事件（状态：1-未研判 2-研判中 3-真攻击 4-误报）
 
 **EDR 计划管理**
 - `/edr plans [page] [page_size]` 查询计划列表
 - `/edr plan_add <plan_name> <scan_type> <plan_type> <scope> [type]` 创建计划
+  - `scan_type` 可选值：`1`-快速扫描 `2`-全盘扫描 `3`-自定义路径扫描 `4`-漏洞修复 `5`-安装软件 `6`-卸载软件 `7`-更新软件 `8`-发送文件
+  - `plan_type` 可选值：`1`-立即执行 `2`-定时执行 `3`-周期执行
+  - `scope` 可选值：`1`-特定主机 `2`-主机组 `3`-全网主机
+  - `type` 可选值：`kill_plan` / `leak_repair` / `distribute_software` / `distribute_file`（可选，不填默认 `kill_plan`）
 - `/edr plan_edit <rid> <plan_name> <scan_type> <plan_type> <scope> <type>` 编辑计划
 - `/edr plan_cancel <rid>` 取消计划
 
@@ -58,7 +63,7 @@
 - `/edr logs [client_id] [page] [page_size]` 日志调查
 - `/edr event_log_alarms [page] [page_size]` 狩猎告警
 
-高危操作（隔离、恢复、发送指令、计划管理）需要回复「确认」后才能执行。
+高危操作（隔离、恢复、发送指令、计划管理、批量处置事件）需要回复「确认」后才能执行。
 
 现在也支持知识库工具：
 

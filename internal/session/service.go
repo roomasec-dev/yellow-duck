@@ -1641,10 +1641,11 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 			scene = "alone"
 		}
 		result, err := s.edr.BatchDealIncident(ctx, edr.BatchDealIncidentRequest{
-			IDs:    ids,
-			Allow:  call.Allow,
-			Status: call.Status,
-			Scene:  scene,
+			IDs:     ids,
+			Allow:   call.Allow,
+			Status:  call.Status,
+			Scene:   scene,
+			Comment: call.Comment,
 		})
 		if err != nil {
 			return "", err
@@ -2398,6 +2399,54 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		result, err = s.edr.ListIncidents(ctx, edr.ListIncidentsRequest{ClientID: clientID, Page: page, Limit: pageSize})
 		if err == nil {
 			response = formatIncidents(result, page, pageSize)
+		}
+	case "batch_deal_incident":
+		if len(fields) < 4 {
+			response = s.msg(locale, "usage_batch_deal_incident", nil)
+			break
+		}
+		status, convErr := strconv.Atoi(fields[3])
+		if convErr != nil || status < 1 || status > 4 {
+			response = s.msg(locale, "usage_batch_deal_incident", nil)
+			break
+		}
+		scene := "batch"
+		if len(fields) > 4 {
+			scene = strings.TrimSpace(fields[4])
+			if scene == "" {
+				scene = "batch"
+			}
+		}
+		allow := status == 4
+		if len(fields) > 5 {
+			switch strings.ToLower(strings.TrimSpace(fields[5])) {
+			case "1", "true", "yes", "y":
+				allow = true
+			case "0", "false", "no", "n":
+				allow = false
+			default:
+				response = s.msg(locale, "usage_batch_deal_incident", nil)
+			}
+			if response != "" {
+				break
+			}
+		}
+		comment := ""
+		if len(fields) > 6 {
+			comment = strings.Join(fields[6:], " ")
+		}
+		payload, _ := json.Marshal(planner.ToolCall{
+			Name:     "edr_batch_deal_incident",
+			Ids:      fields[2],
+			Status:   status,
+			Scene:    scene,
+			Allow:    allow,
+			Comment:  comment,
+			Critical: true,
+		})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_batch_deal_incident", string(payload), fmt.Sprintf("edr_batch_deal_incident ids=%s status=%d scene=%s allow=%t", fields[2], status, scene, allow))
+		if err == nil {
+			response = s.msg(locale, "confirm_batch_deal_incident", map[string]string{"ids": fields[2], "status": strconv.Itoa(status), "scene": scene})
 		}
 	case "detections":
 		reporter.ToolStart(ctx, "edr_detections", "我在从平台 API 拉取近期行为检出，看看最近有哪些高风险动作。")
