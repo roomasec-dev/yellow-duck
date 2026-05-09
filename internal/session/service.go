@@ -2473,7 +2473,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = s.msg(locale, "confirm_send_instruction", map[string]string{"instruction": fields[2], "client_id": fields[3]})
 		}
-	case "plan_list":
+	case "plans":
 		reporter.ToolStart(ctx, "edr_plan_list", "我在拉取计划列表。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var plansResult edr.ListPlansResponse
@@ -2757,8 +2757,8 @@ func (s *Service) executeNaturalLanguageEDR(ctx context.Context, sessionKey stri
 		if err == nil {
 			toolResult = fmt.Sprintf("指令已下发成功，任务ID: %s，主机: %s，重复: %t", result.TaskID, result.HostName, result.Repeat)
 		}
-	case "plan_list":
-		reporter.ToolStart(ctx, "edr_plan_list", "我在拉取计划列表。")
+	case "plans":
+		reporter.ToolStart(ctx, "edr_plans", "我在拉取计划列表。")
 		page := positiveOr(decision.Page, 1)
 		pageSize := positiveOr(decision.PageSize, s.cfg.EDR.DefaultPageSize)
 		result, callErr := s.edr.ListPlans(ctx, edr.ListPlansRequest{Page: page, Limit: pageSize, Type: "kill_plan"})
@@ -3142,7 +3142,7 @@ func formatPlans(result edr.ListPlansResponse, page int, pageSize int) string {
 		lines = append(lines, fmt.Sprintf("- rid=%s name=%s type=%s scan_type=%s scope=%d status=%d(%s) user=%s", plan.RID, plan.PlanName, plan.Type, scanTypeStr, plan.Scope, plan.Status, statusStr, plan.OperationUser))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr plan_list %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr plans %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }

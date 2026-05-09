@@ -24,7 +24,7 @@
 - `/edr detection-view <detection_id> <client_id> [view_type] [process_uuid]` 查询检出详情
 
 **EDR 计划管理**
-- `/edr plan_list [page] [page_size]` 查询计划列表
+- `/edr plans [page] [page_size]` 查询计划列表
 - `/edr plan_add <plan_name> <scan_type> <plan_type> <scope> [type]` 创建计划
 - `/edr plan_edit <rid> <scan_type> <plan_type> <scope> <type>` 编辑计划
 - `/edr plan_cancel <rid>` 取消计划

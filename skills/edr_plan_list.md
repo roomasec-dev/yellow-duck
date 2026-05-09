@@ -1,4 +1,4 @@
-# Tool: edr_plan_list
+# Tool: edr_plans
 
 用途：
 - 查询计划列表，适合回答"有哪些计划""计划的状态"。
