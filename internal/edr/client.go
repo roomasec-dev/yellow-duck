@@ -1191,7 +1191,7 @@ type Detection struct {
 	HostName    string `json:"host_name"`
 	HostStatus  string `json:"host_status"`
 	UserName    string `json:"user_name"`
-	DealStatus  any    `json:"deal_status"`
+	DealStatus  int    `json:"deal_status"`
 	RootName    string `json:"root_name"`
 	IncidentID  string `json:"incident_id"`
 }

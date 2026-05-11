@@ -22,7 +22,8 @@
 - `/edr detections [incident_id] [page] [page_size]` 查询平台行为检出
 - `/edr incident-view <incident_id> <client_id>` 查询事件详情
 - `/edr detection-view <detection_id> <client_id> [view_type] [process_uuid]` 查询检出详情
-- `/edr incident-batch-deal <ids_csv> <status> [scene] [allow] [comment]` 批量处置事件（状态：1-未研判 2-研判中 3-真攻击 4-误报）
+- `/edr detection-update <detection_id|ids_csv> <status>` 更新检出处置状态（状态：1-待处置 2-处置中 3-已处理 4-误报）
+- `/edr incident-update <ids_csv> <status> [scene] [allow] [comment]` 批量处置事件（状态：1-未研判 2-研判中 3-真攻击 4-误报）
 
 **EDR 计划管理**
 - `/edr plans [page] [page_size]` 查询计划列表

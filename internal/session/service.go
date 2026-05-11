@@ -2372,7 +2372,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatIncidents(result, page, pageSize)
 		}
-	case "incident-batch-deal":
+	case "incident-update":
 		if len(fields) < 4 {
 			response = s.msg(locale, "usage_batch_deal_incident", nil)
 			break
@@ -2465,6 +2465,27 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		result, err = s.edr.ViewDetection(ctx, edr.DetectionViewRequest{DetectionID: fields[2], ClientID: fields[3], ViewType: viewType, ProcessUUID: processUUID})
 		if err == nil {
 			response, err = s.prepareDetailContext(ctx, sessionKey, locale, "detection", fields[2], fields[2], result, reporter)
+		}
+	case "detection-update":
+		if len(fields) < 4 {
+			response = s.msg(locale, "usage_detection_update_status", nil)
+			break
+		}
+		detectionID := strings.TrimSpace(fields[2])
+		if detectionID == "" {
+			response = s.msg(locale, "usage_detection_update_status", nil)
+			break
+		}
+		statusInput := strings.TrimSpace(strings.Join(fields[3:], " "))
+		status, ok := parseDetectionDealStatusArg(statusInput)
+		if !ok {
+			response = s.msg(locale, "usage_detection_update_status", nil)
+			break
+		}
+		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_detection_update_status", DetectionID: detectionID, Status: status, Critical: true})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_detection_update_status", string(payload), fmt.Sprintf("edr_detection_update_status detection_id=%s status=%d", detectionID, status))
+		if err == nil {
+			response = s.msg(locale, "confirm_detection_update_status", map[string]string{"detection_id": detectionID, "status": strconv.Itoa(status)})
 		}
 	case "tasks":
 		reporter.ToolStart(ctx, "edr_tasks", "我在拉取指令任务列表。")
@@ -3879,6 +3900,39 @@ func parseDetectionsArgs(args []string, defaultPageSize int) (string, int, int) 
 	}
 	page, pageSize := parsePagedArgs(rest, defaultPageSize)
 	return incidentID, page, pageSize
+}
+
+func parseDetectionDealStatusArg(raw string) (int, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return 0, false
+	}
+	if value, err := strconv.Atoi(trimmed); err == nil {
+		if value >= 1 && value <= 4 {
+			return value, true
+		}
+		return 0, false
+	}
+
+	normalized := strings.ToLower(trimmed)
+	normalized = strings.ReplaceAll(normalized, " ", "")
+	normalized = strings.ReplaceAll(normalized, "，", "")
+	normalized = strings.ReplaceAll(normalized, ",", "")
+	normalized = strings.ReplaceAll(normalized, "、", "")
+	normalized = strings.ReplaceAll(normalized, "-", "")
+
+	switch normalized {
+	case "待处置", "pending":
+		return 1, true
+	case "处置中", "处理中", "inprogress":
+		return 2, true
+	case "已处置", "已处理", "标记为已处理", "标记已处理", "resolved":
+		return 3, true
+	case "误报", "标记为误报", "标记误报", "falsepositive":
+		return 4, true
+	default:
+		return 0, false
+	}
 }
 
 func parseVirusScanArgs(args []string, defaultPageSize int) (string, string, int, int) {
