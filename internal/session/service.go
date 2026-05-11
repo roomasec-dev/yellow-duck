@@ -2372,6 +2372,17 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatIncidents(result, page, pageSize)
 		}
+	case "incident-summary":
+		reporter.ToolStart(ctx, "edr_incident_summary", "我在拉取这条事件的摘要信息。")
+		if len(fields) < 3 {
+			response = s.msg(locale, "usage_incident_summary", nil)
+			break
+		}
+		var result edr.IncidentR2SummaryResponse
+		result, err = s.edr.IncidentR2Summary(ctx, fields[2])
+		if err == nil {
+			response = formatIncidentR2Summary(result)
+		}
 	case "incident-update":
 		if len(fields) < 4 {
 			response = s.msg(locale, "usage_batch_deal_incident", nil)
