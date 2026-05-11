@@ -2383,6 +2383,21 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = s.msg(locale, "confirm_host_black", map[string]string{"client_id": clientIDs, "reason": reason})
 		}
+	case "host-remove":
+		if len(fields) < 3 {
+			response = s.msg(locale, "usage_host_remove", nil)
+			break
+		}
+		clientIDs := strings.TrimSpace(fields[2])
+		if clientIDs == "" {
+			response = s.msg(locale, "usage_host_remove", nil)
+			break
+		}
+		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_host_remove", ClientID: clientIDs, Critical: true})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_host_remove", string(payload), fmt.Sprintf("edr_host_remove client_id=%s", clientIDs))
+		if err == nil {
+			response = s.msg(locale, "confirm_host_remove", map[string]string{"client_id": clientIDs})
+		}
 	case "incidents":
 		reporter.ToolStart(ctx, "edr_incidents", "我在从平台 API 拉取近期事件，整理威胁和主机状态。")
 		clientID, page, pageSize := parseIncidentListArgs(fields[2:], s.cfg.EDR.DefaultPageSize)

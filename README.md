@@ -10,13 +10,14 @@
 
 ## 当前交互方式
 
-当前既支持显式命令（30个），也支持自然语言工具规划：
+当前既支持显式命令（31个），也支持自然语言工具规划：
 
 **EDR 主机管理**
 - `/edr hosts [hostname]` 查询主机
 - `/edr host-isolate <client_id>` 隔离主机
 - `/edr host-release <client_id>` 恢复主机
 - `/edr host-black <client_id_csv> <reason>` 加入主机黑名单
+- `/edr host-remove <client_id_csv>` 从管控中移除主机
 
 **EDR 事件与检出**
 - `/edr incidents [client_id] [page] [page_size]` 查询平台事件
