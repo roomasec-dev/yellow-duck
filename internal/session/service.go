@@ -2875,6 +2875,130 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = s.formatIOCs(ctx, iocsResult, page, pageSize)
 		}
+	case "ioc-add":
+		if len(fields) < 4 {
+			response = s.msg(locale, "usage_ioc_add", nil)
+			break
+		}
+		iocAction := strings.TrimSpace(fields[2])
+		iocHash := strings.TrimSpace(fields[3])
+		if iocAction == "" || iocHash == "" {
+			response = s.msg(locale, "usage_ioc_add", nil)
+			break
+		}
+
+		call := planner.ToolCall{
+			Name:      "edr_ioc_add",
+			IOCAction: iocAction,
+			IOCHash:   iocHash,
+			Critical:  true,
+		}
+		if len(fields) > 4 {
+			call.IOCDescription = strings.TrimSpace(fields[4])
+		}
+		if len(fields) > 5 {
+			call.IOCExpirationDate = strings.TrimSpace(fields[5])
+		}
+		if len(fields) > 6 {
+			call.IOCFileName = strings.TrimSpace(fields[6])
+		}
+		if len(fields) > 7 {
+			call.IOCHostType = strings.TrimSpace(fields[7])
+		}
+
+		payload, _ := json.Marshal(call)
+		err = s.store.SavePendingAction(
+			ctx,
+			sessionKey,
+			"edr_ioc_add_verify_pending",
+			string(payload),
+			fmt.Sprintf("edr_ioc_add action=%s hash=%s", call.IOCAction, call.IOCHash),
+		)
+		if err == nil {
+			response = s.msg(locale, "confirm_ioc_add", map[string]string{
+				"ioc_action":          call.IOCAction,
+				"ioc_hash":            call.IOCHash,
+				"ioc_description":     call.IOCDescription,
+				"ioc_expiration_date": call.IOCExpirationDate,
+				"ioc_file_name":       call.IOCFileName,
+				"ioc_host_type":       call.IOCHostType,
+			})
+		}
+	case "ioc-update":
+		if len(fields) < 4 {
+			response = s.msg(locale, "usage_ioc_update", nil)
+			break
+		}
+		iocID := strings.TrimSpace(fields[2])
+		iocHash := strings.TrimSpace(fields[3])
+		if iocID == "" || iocHash == "" {
+			response = s.msg(locale, "usage_ioc_update", nil)
+			break
+		}
+
+		call := planner.ToolCall{
+			Name:     "edr_ioc_update",
+			IOCID:    iocID,
+			IOCHash:  iocHash,
+			Critical: true,
+		}
+		if len(fields) > 4 {
+			call.IOCAction = strings.TrimSpace(fields[4])
+		}
+		if len(fields) > 5 {
+			call.IOCDescription = strings.TrimSpace(fields[5])
+		}
+		if len(fields) > 6 {
+			call.IOCExpirationDate = strings.TrimSpace(fields[6])
+		}
+
+		payload, _ := json.Marshal(call)
+		err = s.store.SavePendingAction(
+			ctx,
+			sessionKey,
+			"edr_ioc_update_verify_pending",
+			string(payload),
+			fmt.Sprintf("edr_ioc_update ioc_id=%s hash=%s", call.IOCID, call.IOCHash),
+		)
+		if err == nil {
+			response = s.msg(locale, "confirm_ioc_update", map[string]string{
+				"ioc_id":              call.IOCID,
+				"ioc_hash":            call.IOCHash,
+				"ioc_action":          call.IOCAction,
+				"ioc_description":     call.IOCDescription,
+				"ioc_expiration_date": call.IOCExpirationDate,
+			})
+		}
+	case "ioc-delete":
+		if len(fields) < 3 {
+			response = s.msg(locale, "usage_ioc_delete", nil)
+			break
+		}
+		iocID := strings.TrimSpace(fields[2])
+		if iocID == "" {
+			response = s.msg(locale, "usage_ioc_delete", nil)
+			break
+		}
+
+		call := planner.ToolCall{
+			Name:     "edr_ioc_delete",
+			IOCID:    iocID,
+			Critical: true,
+		}
+
+		payload, _ := json.Marshal(call)
+		err = s.store.SavePendingAction(
+			ctx,
+			sessionKey,
+			"edr_ioc_delete_verify_pending",
+			string(payload),
+			fmt.Sprintf("edr_ioc_delete ioc_id=%s", call.IOCID),
+		)
+		if err == nil {
+			response = s.msg(locale, "confirm_ioc_delete", map[string]string{
+				"ioc_id": call.IOCID,
+			})
+		}
 	case "ioas":
 		reporter.ToolStart(ctx, "edr_ioas", "我在拉取 IOA 列表。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)

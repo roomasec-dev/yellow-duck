@@ -10,7 +10,7 @@
 
 ## 当前交互方式
 
-当前既支持显式命令（36个），也支持自然语言工具规划：
+当前既支持显式命令（39个），也支持自然语言工具规划：
 
 **EDR 主机管理**
 - `/edr hosts [hostname]` 查询主机
@@ -57,6 +57,15 @@
 
 **EDR IOC管理**
 - `/edr iocs [hash] [page] [page_size]` IOC列表
+- `/edr ioc-add <ioc_action> <ioc_hash> [ioc_description] [ioc_expiration_date] [ioc_file_name] [ioc_host_type]` 添加IOC
+  - `ioc_action` 为必填，动作类型（如 `block` / `watch`）
+  - `ioc_hash` 为必填，支持 MD5/SHA1/SHA256
+  - `ioc_description`、`ioc_expiration_date`（如 `2026-12-31`）、`ioc_file_name`、`ioc_host_type` 为可选
+- `/edr ioc-update <ioc_id> <ioc_hash> [ioc_action] [ioc_description] [ioc_expiration_date]` 更新IOC
+  - `ioc_id`、`ioc_hash` 为必填
+  - `ioc_action`、`ioc_description`、`ioc_expiration_date` 为可选
+- `/edr ioc-delete <ioc_id>` 删除IOC
+  - `ioc_id` 为必填
 
 **EDR IOA管理**
 - `/edr ioas [page] [page_size]` IOA列表
@@ -81,7 +90,7 @@
 - `/edr logs [client_id] [page] [page_size]` 日志调查
 - `/edr log-alarms [page] [page_size]` 狩猎告警
 
-高危操作（隔离、恢复、放行隔离文件、删除隔离文件记录、加入黑名单、移除主机、发送指令、计划管理、更新检出处置状态、批量处置事件）需要回复「确认」后才能执行。
+高危操作（隔离、恢复、放行隔离文件、删除隔离文件记录、IOC管理写操作、加入黑名单、移除主机、发送指令、计划管理、更新检出处置状态、批量处置事件）需要回复「确认」后才能执行。
 
 现在也支持知识库工具：
 
