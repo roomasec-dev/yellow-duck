@@ -10,7 +10,7 @@
 
 ## 当前交互方式
 
-当前既支持显式命令（42个），也支持自然语言工具规划：
+当前既支持显式命令（45个），也支持自然语言工具规划：
 
 **EDR 主机管理**
 - `/edr hosts [hostname]` 查询主机
@@ -76,7 +76,17 @@
   - `ioa_id` 为必填，`description` 为可选
 - `/edr ioa-delete <ioa_id>` 删除IOA
   - `ioa_id` 为必填
-- `/edr ioa-networks [page] [page_size]` IOA网络排除列表
+- `/edr ioa-ip [page] [page_size]` IOA网络排除列表
+- `/edr ioa-ip-add <exclusion_name> <ip> [host_type]` 添加IOA网络排除
+  - `exclusion_name` 为必填，排除名称
+  - `ip` 为必填，IP 地址
+  - `host_type` 为可选，主机类型
+- `/edr ioa-ip-update <ioa_id> [exclusion_name] [ip]` 更新IOA网络排除
+  - `ioa_id` 为必填，IOA 网络排除 ID
+  - `exclusion_name` 为可选，新排除名称
+  - `ip` 为可选，新 IP 地址
+- `/edr ioa-ip-delete <ioa_id>` 删除IOA网络排除
+  - `ioa_id` 为必填，IOA 网络排除 ID
 
 **EDR 策略管理**
 - `/edr strategies [type] [page] [page_size]` 策略列表

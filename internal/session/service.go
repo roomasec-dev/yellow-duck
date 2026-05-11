@@ -3112,7 +3112,112 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 				"ioa_id": call.IOCID,
 			})
 		}
-	case "ioa-networks":
+	case "ioa-ip-add":
+		if len(fields) < 4 {
+			response = s.msg(locale, "usage_ioa_networks_add", nil)
+			break
+		}
+		exclusionName := strings.TrimSpace(fields[2])
+		ip := strings.TrimSpace(fields[3])
+		if exclusionName == "" || ip == "" {
+			response = s.msg(locale, "usage_ioa_networks_add", nil)
+			break
+		}
+		hostType := ""
+		if len(fields) > 4 {
+			hostType = strings.TrimSpace(fields[4])
+		}
+		call := planner.ToolCall{
+			Name:        "edr_ioa_network_add",
+			PlanName:    exclusionName,
+			ClientIP:    ip,
+			IOCHostType: hostType,
+			Critical:    true,
+		}
+		payload, _ := json.Marshal(call)
+		err = s.store.SavePendingAction(
+			ctx,
+			sessionKey,
+			"edr_ioa_network_add_verify_pending",
+			string(payload),
+			fmt.Sprintf("edr_ioa_network_add exclusion_name=%s ip=%s", exclusionName, ip),
+		)
+		if err == nil {
+			response = s.msg(locale, "confirm_ioa_networks_add", map[string]string{
+				"exclusion_name": exclusionName,
+				"ip":             ip,
+				"host_type":      hostType,
+			})
+		}
+	case "ioa-ip-update":
+		if len(fields) < 3 {
+			response = s.msg(locale, "usage_ioa_networks_update", nil)
+			break
+		}
+		ioaID := strings.TrimSpace(fields[2])
+		if ioaID == "" {
+			response = s.msg(locale, "usage_ioa_networks_update", nil)
+			break
+		}
+		exclusionName := ""
+		ip := ""
+		if len(fields) > 3 {
+			exclusionName = strings.TrimSpace(fields[3])
+		}
+		if len(fields) > 4 {
+			ip = strings.TrimSpace(fields[4])
+		}
+		call := planner.ToolCall{
+			Name:     "edr_ioa_network_update",
+			IOCID:    ioaID,
+			PlanName: exclusionName,
+			ClientIP: ip,
+			Critical: true,
+		}
+		payload, _ := json.Marshal(call)
+		err = s.store.SavePendingAction(
+			ctx,
+			sessionKey,
+			"edr_ioa_network_update_verify_pending",
+			string(payload),
+			fmt.Sprintf("edr_ioa_network_update id=%s", ioaID),
+		)
+		if err == nil {
+			response = s.msg(locale, "confirm_ioa_networks_update", map[string]string{
+				"ioa_id":         ioaID,
+				"exclusion_name": exclusionName,
+				"ip":             ip,
+			})
+		}
+	case "ioa-ip-delete":
+		if len(fields) < 3 {
+			response = s.msg(locale, "usage_ioa_networks_delete", nil)
+			break
+		}
+		ioaID := strings.TrimSpace(fields[2])
+		if ioaID == "" {
+			response = s.msg(locale, "usage_ioa_networks_delete", nil)
+			break
+		}
+		call := planner.ToolCall{
+			Name:     "edr_ioa_network_delete",
+			IOCID:    ioaID,
+			Critical: true,
+		}
+		payload, _ := json.Marshal(call)
+		err = s.store.SavePendingAction(
+			ctx,
+			sessionKey,
+			"edr_ioa_network_delete_verify_pending",
+			string(payload),
+			fmt.Sprintf("edr_ioa_network_delete id=%s", ioaID),
+		)
+		if err == nil {
+			response = s.msg(locale, "confirm_ioa_networks_delete", map[string]string{
+				"ioa_id": ioaID,
+			})
+		}
+	case "ioa-ip":
 		reporter.ToolStart(ctx, "edr_ioa_networks", "我在拉取 IOA 网络排除列表。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var ioaNetworksResult edr.ListIOANetworksResponse
@@ -4028,7 +4133,7 @@ func formatIOANetworks(result edr.ListIOANetworksResponse, page int, pageSize in
 		lines = append(lines, fmt.Sprintf("- id=%s name=%s ip=%s host_type=%s", net.ID, net.ExclusionName, net.IP, net.HostType))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioa-networks %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioa-ip %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
