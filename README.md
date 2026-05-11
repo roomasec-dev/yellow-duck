@@ -10,7 +10,7 @@
 
 ## 当前交互方式
 
-当前既支持显式命令（39个），也支持自然语言工具规划：
+当前既支持显式命令（42个），也支持自然语言工具规划：
 
 **EDR 主机管理**
 - `/edr hosts [hostname]` 查询主机
@@ -69,6 +69,13 @@
 
 **EDR IOA管理**
 - `/edr ioas [page] [page_size]` IOA列表
+- `/edr ioa-add <severity> [command_line] [description] [file_name] [host_type]` 添加IOA
+  - `severity` 为必填，严重程度（如 `high` / `medium` / `low`）
+  - `command_line`、`description`、`file_name`、`host_type` 为可选
+- `/edr ioa-update <ioa_id> [description]` 更新IOA
+  - `ioa_id` 为必填，`description` 为可选
+- `/edr ioa-delete <ioa_id>` 删除IOA
+  - `ioa_id` 为必填
 - `/edr ioa-networks [page] [page_size]` IOA网络排除列表
 
 **EDR 策略管理**
@@ -90,7 +97,7 @@
 - `/edr logs [client_id] [page] [page_size]` 日志调查
 - `/edr log-alarms [page] [page_size]` 狩猎告警
 
-高危操作（隔离、恢复、放行隔离文件、删除隔离文件记录、IOC管理写操作、加入黑名单、移除主机、发送指令、计划管理、更新检出处置状态、批量处置事件）需要回复「确认」后才能执行。
+高危操作（隔离、恢复、放行隔离文件、删除隔离文件记录、IOC/IOA管理写操作、加入黑名单、移除主机、发送指令、计划管理、更新检出处置状态、批量处置事件）需要回复「确认」后才能执行。
 
 现在也支持知识库工具：
 

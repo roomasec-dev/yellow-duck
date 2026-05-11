@@ -3007,6 +3007,111 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatIOAs(ioasResult, page, pageSize)
 		}
+	case "ioa-add":
+		if len(fields) < 3 {
+			response = s.msg(locale, "usage_ioa_add", nil)
+			break
+		}
+		severity := strings.TrimSpace(fields[2])
+		if severity == "" {
+			response = s.msg(locale, "usage_ioa_add", nil)
+			break
+		}
+		call := planner.ToolCall{
+			Name:     "edr_ioa_add",
+			KBQuery:  severity,
+			Critical: true,
+		}
+		if len(fields) > 3 {
+			call.Operation = strings.TrimSpace(fields[3])
+		}
+		if len(fields) > 4 {
+			call.Reason = strings.TrimSpace(fields[4])
+		}
+		if len(fields) > 5 {
+			call.IOCFileName = strings.TrimSpace(fields[5])
+		}
+		if len(fields) > 6 {
+			call.IOCHostType = strings.TrimSpace(fields[6])
+		}
+
+		payload, _ := json.Marshal(call)
+		err = s.store.SavePendingAction(
+			ctx,
+			sessionKey,
+			"edr_ioa_add_verify_pending",
+			string(payload),
+			fmt.Sprintf("edr_ioa_add severity=%s command_line=%s", call.KBQuery, call.Operation),
+		)
+		if err == nil {
+			response = s.msg(locale, "confirm_ioa_add", map[string]string{
+				"severity":     call.KBQuery,
+				"command_line": call.Operation,
+				"description":  call.Reason,
+				"file_name":    call.IOCFileName,
+				"host_type":    call.IOCHostType,
+			})
+		}
+	case "ioa-update":
+		if len(fields) < 3 {
+			response = s.msg(locale, "usage_ioa_update", nil)
+			break
+		}
+		ioaID := strings.TrimSpace(fields[2])
+		if ioaID == "" {
+			response = s.msg(locale, "usage_ioa_update", nil)
+			break
+		}
+		call := planner.ToolCall{
+			Name:     "edr_ioa_update",
+			IOCID:    ioaID,
+			Critical: true,
+		}
+		if len(fields) > 3 {
+			call.Reason = strings.TrimSpace(fields[3])
+		}
+		payload, _ := json.Marshal(call)
+		err = s.store.SavePendingAction(
+			ctx,
+			sessionKey,
+			"edr_ioa_update_verify_pending",
+			string(payload),
+			fmt.Sprintf("edr_ioa_update ioa_id=%s", call.IOCID),
+		)
+		if err == nil {
+			response = s.msg(locale, "confirm_ioa_update", map[string]string{
+				"ioa_id":      call.IOCID,
+				"description": call.Reason,
+			})
+		}
+	case "ioa-delete":
+		if len(fields) < 3 {
+			response = s.msg(locale, "usage_ioa_delete", nil)
+			break
+		}
+		ioaID := strings.TrimSpace(fields[2])
+		if ioaID == "" {
+			response = s.msg(locale, "usage_ioa_delete", nil)
+			break
+		}
+		call := planner.ToolCall{
+			Name:     "edr_ioa_delete",
+			IOCID:    ioaID,
+			Critical: true,
+		}
+		payload, _ := json.Marshal(call)
+		err = s.store.SavePendingAction(
+			ctx,
+			sessionKey,
+			"edr_ioa_delete_verify_pending",
+			string(payload),
+			fmt.Sprintf("edr_ioa_delete ioa_id=%s", call.IOCID),
+		)
+		if err == nil {
+			response = s.msg(locale, "confirm_ioa_delete", map[string]string{
+				"ioa_id": call.IOCID,
+			})
+		}
 	case "ioa-networks":
 		reporter.ToolStart(ctx, "edr_ioa_networks", "我在拉取 IOA 网络排除列表。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
