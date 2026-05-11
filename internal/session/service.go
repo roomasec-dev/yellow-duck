@@ -2831,6 +2831,42 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 				"isolate_file_release_all_hash": strconv.FormatBool(releaseAllHash),
 			})
 		}
+	case "isolate-files-delete":
+		if len(fields) < 3 {
+			response = s.msg(locale, "usage_isolate_files_delete", nil)
+			break
+		}
+		guidParts := strings.Split(strings.TrimSpace(fields[2]), ",")
+		cleanedGUIDs := make([]string, 0, len(guidParts))
+		for _, guid := range guidParts {
+			guid = strings.TrimSpace(guid)
+			if guid != "" {
+				cleanedGUIDs = append(cleanedGUIDs, guid)
+			}
+		}
+		if len(cleanedGUIDs) == 0 {
+			response = s.msg(locale, "usage_isolate_files_delete", nil)
+			break
+		}
+
+		guidCSV := strings.Join(cleanedGUIDs, ",")
+		payload, _ := json.Marshal(planner.ToolCall{
+			Name:             "edr_isolate_files_delete",
+			IsolateFileGUIDs: guidCSV,
+			Critical:         true,
+		})
+		err = s.store.SavePendingAction(
+			ctx,
+			sessionKey,
+			"edr_isolate_files_delete_verify_pending",
+			string(payload),
+			fmt.Sprintf("edr_isolate_files_delete isolate_file_guids=%s", guidCSV),
+		)
+		if err == nil {
+			response = s.msg(locale, "confirm_isolate_files_delete", map[string]string{
+				"isolate_file_guids": guidCSV,
+			})
+		}
 	case "iocs":
 		reporter.ToolStart(ctx, "edr_iocs", "我在拉取 IOC 列表。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)

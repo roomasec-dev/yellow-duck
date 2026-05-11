@@ -10,7 +10,7 @@
 
 ## 当前交互方式
 
-当前既支持显式命令（34个），也支持自然语言工具规划：
+当前既支持显式命令（35个），也支持自然语言工具规划：
 
 **EDR 主机管理**
 - `/edr hosts [hostname]` 查询主机
@@ -52,6 +52,8 @@
   - `isolate_file_guids_csv` 为必填，多个 GUID 用英文逗号分隔
   - `isolate_file_add_exclusion` 可选，`true/false`，默认 `false`
   - `isolate_file_release_all_hash` 可选，`true/false`，默认 `false`
+- `/edr isolate-files-delete <isolate_file_guids_csv>` 删除隔离文件记录
+  - `isolate_file_guids_csv` 为必填，多个 GUID 用英文逗号分隔
 
 **EDR IOC管理**
 - `/edr iocs [hash] [page] [page_size]` IOC列表
@@ -75,7 +77,7 @@
 - `/edr logs [client_id] [page] [page_size]` 日志调查
 - `/edr log-alarms [page] [page_size]` 狩猎告警
 
-高危操作（隔离、恢复、放行隔离文件、加入黑名单、移除主机、发送指令、计划管理、更新检出处置状态、批量处置事件）需要回复「确认」后才能执行。
+高危操作（隔离、恢复、放行隔离文件、删除隔离文件记录、加入黑名单、移除主机、发送指令、计划管理、更新检出处置状态、批量处置事件）需要回复「确认」后才能执行。
 
 现在也支持知识库工具：
 
