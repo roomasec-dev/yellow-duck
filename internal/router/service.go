@@ -205,7 +205,7 @@ func heuristicDecision(text string) Decision {
 		decision.Action = "tasks"
 		decision.Confidence = 0.7
 	case containsAny(plain, "计划列表", "计划记录", "查看计划", "查询计划"):
-		decision.Action = "plan_list"
+		decision.Action = "plans"
 		decision.Confidence = 0.8
 	case containsAny(plain, "新建计划", "新增计划", "创建计划", "添加计划"):
 		decision.Action = "plan_add"

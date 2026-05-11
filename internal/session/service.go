@@ -1225,7 +1225,7 @@ func scopedToolCallCacheKey(sessionKey string, call planner.ToolCall) string {
 
 func callNeedsGroundedEDRAnswer(name string) bool {
 	switch name {
-	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_outline", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_plan_list", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts", "edr_virus_scan_record", "edr_instruction_policy_list":
+	case "edr_hosts", "edr_incidents", "edr_detections", "edr_logs", "edr_incident_view", "edr_detection_view", "artifact_outline", "artifact_search", "artifact_read", "edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_plans", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts", "edr_virus_scan_record", "edr_instruction_policy_list":
 		return true
 	case "edr_host_isolate", "edr_host_release", "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete", "edr_isolate_files_delete", "edr_isolate_files_release", "edr_task_send_instruction", "edr_plan_add", "edr_plan_edit", "edr_plan_cancel", "edr_instruction_policy_update", "edr_instruction_policy_save_status", "edr_instruction_policy_delete", "edr_instruction_policy_sort", "edr_instruction_policy_add":
 		return false
@@ -1757,7 +1757,7 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 			return "", err
 		}
 		return formatTaskResult(result), nil
-	case "edr_plan_list":
+	case "edr_plans":
 		reporter.ToolStart(ctx, call.Name, "我在拉取计划列表。")
 		result, err := s.edr.ListPlans(ctx, edr.ListPlansRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize), Type: call.Type})
 		if err != nil {
@@ -2344,7 +2344,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatHosts(result)
 		}
-	case "isolate":
+	case "host-isolate":
 		if len(fields) < 3 {
 			response = s.msg(locale, "usage_isolate", nil)
 			break
@@ -2354,7 +2354,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = s.msg(locale, "confirm_isolate", map[string]string{"client_id": fields[2]})
 		}
-	case "release":
+	case "host-release":
 		if len(fields) < 3 {
 			response = s.msg(locale, "usage_release", nil)
 			break
@@ -2372,7 +2372,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatIncidents(result, page, pageSize)
 		}
-	case "batch_deal_incident":
+	case "incident-batch-deal":
 		if len(fields) < 4 {
 			response = s.msg(locale, "usage_batch_deal_incident", nil)
 			break
@@ -2474,7 +2474,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = s.formatTasks(tasksResult, page, pageSize)
 		}
-	case "task_result":
+	case "task-result":
 		reporter.ToolStart(ctx, "edr_task_result", "我在拉取任务结果。")
 		if len(fields) < 3 {
 			response = s.msg(locale, "usage_task_result", nil)
@@ -2485,7 +2485,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatTaskResult(taskResult)
 		}
-	case "send_instruction":
+	case "send-instruction":
 		if len(fields) < 4 {
 			response = s.msg(locale, "usage_send_instruction", nil)
 			break
@@ -2496,14 +2496,14 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			response = s.msg(locale, "confirm_send_instruction", map[string]string{"instruction": fields[2], "client_id": fields[3]})
 		}
 	case "plans":
-		reporter.ToolStart(ctx, "edr_plan_list", "我在拉取计划列表。")
+		reporter.ToolStart(ctx, "edr_plans", "我在拉取计划列表。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var plansResult edr.ListPlansResponse
 		plansResult, err = s.edr.ListPlans(ctx, edr.ListPlansRequest{Page: page, Limit: pageSize, Type: "kill_plan"})
 		if err == nil {
 			response = formatPlans(plansResult, page, pageSize)
 		}
-	case "virus_scan_record":
+	case "virus-scan-record":
 		reporter.ToolStart(ctx, "edr_virus_scan_record", "我在拉取病毒扫描记录。")
 		hostname, clientID, page, pageSize := parseVirusScanArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var virusResult edr.ListVirusScanRecordsResponse
@@ -2511,7 +2511,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatVirusScanRecords(virusResult, page, pageSize)
 		}
-	case "virus_by_host":
+	case "virus-by-host":
 		reporter.ToolStart(ctx, "edr_virus_by_host", "我在按主机查询病毒信息。")
 		hostname, clientID, page, pageSize := parseVirusScanArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var virusByHostResult edr.ListVirusByHostResponse
@@ -2519,7 +2519,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatVirusByHost(virusByHostResult, page, pageSize)
 		}
-	case "virus_by_hash":
+	case "virus-by-hash":
 		reporter.ToolStart(ctx, "edr_virus_by_hash", "我在按哈希查询病毒信息。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var virusByHashResult edr.ListVirusByHashResponse
@@ -2527,7 +2527,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatVirusByHash(virusByHashResult, page, pageSize)
 		}
-	case "virus_hash_hosts":
+	case "virus-hash-hosts":
 		reporter.ToolStart(ctx, "edr_virus_hash_hosts", "我在按哈希查询关联主机。")
 		sha1 := ""
 		hostname := ""
@@ -2553,7 +2553,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatVirusHashHosts(virusHashHostsResult, page, pageSize)
 		}
-	case "plan_add":
+	case "plan-add":
 		if len(fields) < 6 {
 			response = s.msg(locale, "usage_plan_add", nil)
 			break
@@ -2570,7 +2570,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = s.msg(locale, "confirm_plan_add", map[string]string{"name": fields[2]})
 		}
-	case "plan_edit":
+	case "plan-edit":
 		if len(fields) < 8 {
 			response = s.msg(locale, "usage_plan_edit", nil)
 			break
@@ -2584,7 +2584,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = s.msg(locale, "confirm_plan_edit", map[string]string{"rid": fields[2]})
 		}
-	case "plan_cancel":
+	case "plan-cancel":
 		if len(fields) < 3 {
 			response = s.msg(locale, "usage_plan_cancel", nil)
 			break
@@ -2594,7 +2594,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = s.msg(locale, "confirm_plan_cancel", map[string]string{"rid": fields[2]})
 		}
-	case "isolate_files":
+	case "isolate-files":
 		reporter.ToolStart(ctx, "edr_isolate_files", "我在拉取隔离文件列表。")
 		clientID, hostname, page, pageSize := parseIsolateFilesArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var isolateFilesResult edr.ListIsolateFilesResponse
@@ -2618,7 +2618,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatIOAs(ioasResult, page, pageSize)
 		}
-	case "ioa_networks":
+	case "ioa-networks":
 		reporter.ToolStart(ctx, "edr_ioa_networks", "我在拉取 IOA 网络排除列表。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var ioaNetworksResult edr.ListIOANetworksResponse
@@ -2639,10 +2639,10 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatStrategies(strategiesResult, page, pageSize)
 		}
-	case "strategy_single":
+	case "strategy-single":
 		reporter.ToolStart(ctx, "edr_strategy_single", "我在拉取策略详情。")
 		if len(fields) < 3 {
-			response = "用法：/edr strategy_single <strategy_type>"
+			response = "用法：/edr strategy-single <strategy_type>"
 			break
 		}
 		var strategyResult edr.Strategy
@@ -2650,14 +2650,14 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatStrategySingle(strategyResult)
 		}
-	case "strategy_state":
+	case "strategy-state":
 		reporter.ToolStart(ctx, "edr_strategy_state", "我在拉取策略状态。")
 		var strategyStateResult edr.StrategyState
 		strategyStateResult, err = s.edr.GetStrategyState(ctx)
 		if err == nil {
 			response = formatStrategyState(strategyStateResult)
 		}
-	case "event_log_alarms":
+	case "log-alarms":
 		reporter.ToolStart(ctx, "edr_log_alarms", "我在拉取事件日志告警列表。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var eventLogAlarmsResult edr.ListEventLogAlarmsResponse
@@ -2665,7 +2665,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatEventLogAlarms(eventLogAlarmsResult, page, pageSize)
 		}
-	case "instruction_policies":
+	case "instruction-policies":
 		reporter.ToolStart(ctx, "edr_instruction_policies", "我在拉取自动响应策略列表。")
 		var instructionPoliciesResult edr.ListInstructionPoliciesResponse
 		instructionPoliciesResult, err = s.edr.ListInstructionPolicies(ctx, edr.ListInstructionPoliciesRequest{})
@@ -3066,7 +3066,7 @@ func formatEventLogAlarms(result edr.ListEventLogAlarmsResponse, page int, pageS
 		lines = append(lines, fmt.Sprintf("- id=%s name=%s risk=%s client_id=%s log_num=%d", alarm.ID, alarm.Name, alarm.RiskLevel, alarm.ClientID, alarm.LogNum))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr event_log_alarms %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr log-alarms %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -3116,7 +3116,7 @@ func (*Service) formatIsolateFiles(result edr.ListIsolateFilesResponse, page int
 		lines = append(lines, fmt.Sprintf("- GUID=%s 主机=%s 文件=%s MD5=%s SHA1=%s 状态=%s ClientID=%s 组织=%s", f.GUID, f.Hostname, f.FileName, f.MD5, f.SHA1, status, f.ClientID, f.OrgName))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr isolate_files %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr isolate-files %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -3250,7 +3250,7 @@ func formatVirusByHost(result edr.ListVirusByHostResponse, page int, pageSize in
 		lines = append(lines, fmt.Sprintf("- hostname=%s client_id=%s virus_file=%d virus_mem=%d status=%d(%s) last_check=%d", host.HostName, host.ClientID, host.VirusFileCount, host.VirusMemoryCount, host.Status, statusStr, host.LastCheckedTime))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus_by_host %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus-by-host %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -3271,7 +3271,7 @@ func formatVirusByHash(result edr.ListVirusByHashResponse, page int, pageSize in
 		lines = append(lines, fmt.Sprintf("- id=%s name=%s md5=%s sha1=%s host_count=%d", hash.ID, hash.Name, hash.MD5, hash.SHA1, hash.HostCount))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus_by_hash %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus-by-hash %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -3292,7 +3292,7 @@ func formatVirusHashHosts(result edr.ListVirusHashHostsResponse, page int, pageS
 		lines = append(lines, fmt.Sprintf("- hostname=%s client_id=%s sha1=%s path=%s virus_file=%d virus_mem=%d", host.HostName, host.ClientID, host.SHA1, host.Path, host.VirusFileCount, host.VirusMemoryCount))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus_hash_hosts %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr virus-hash-hosts %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -3424,7 +3424,7 @@ func formatIOANetworks(result edr.ListIOANetworksResponse, page int, pageSize in
 		lines = append(lines, fmt.Sprintf("- id=%s name=%s ip=%s host_type=%s", net.ID, net.ExclusionName, net.IP, net.HostType))
 	}
 	if totalPages > 1 {
-		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioa_networks %d %d", minInt(page+1, totalPages), pageSize))
+		lines = append(lines, fmt.Sprintf("翻页示例：/edr ioa-networks %d %d", minInt(page+1, totalPages), pageSize))
 	}
 	return strings.Join(lines, "\n")
 }
