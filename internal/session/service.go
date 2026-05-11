@@ -2398,6 +2398,13 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = s.msg(locale, "confirm_host_remove", map[string]string{"client_id": clientIDs})
 		}
+	case "host-offline-get":
+		reporter.ToolStart(ctx, "edr_host_offline", "我在拉取主机离线配置。")
+		var result edr.HostOfflineConf
+		result, err = s.edr.GetHostOfflineConf(ctx)
+		if err == nil {
+			response = formatHostOfflineConf(result)
+		}
 	case "incidents":
 		reporter.ToolStart(ctx, "edr_incidents", "我在从平台 API 拉取近期事件，整理威胁和主机状态。")
 		clientID, page, pageSize := parseIncidentListArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
