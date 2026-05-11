@@ -2771,6 +2771,66 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = s.formatIsolateFiles(isolateFilesResult, page, pageSize)
 		}
+	case "isolate-files-release":
+		if len(fields) < 3 {
+			response = s.msg(locale, "usage_isolate_files_release", nil)
+			break
+		}
+		guidParts := strings.Split(strings.TrimSpace(fields[2]), ",")
+		cleanedGUIDs := make([]string, 0, len(guidParts))
+		for _, guid := range guidParts {
+			guid = strings.TrimSpace(guid)
+			if guid != "" {
+				cleanedGUIDs = append(cleanedGUIDs, guid)
+			}
+		}
+		if len(cleanedGUIDs) == 0 {
+			response = s.msg(locale, "usage_isolate_files_release", nil)
+			break
+		}
+
+		addExclusion := false
+		if len(fields) > 3 {
+			var ok bool
+			addExclusion, ok = parseBoolArg(fields[3])
+			if !ok {
+				response = s.msg(locale, "usage_isolate_files_release", nil)
+				break
+			}
+		}
+
+		releaseAllHash := false
+		if len(fields) > 4 {
+			var ok bool
+			releaseAllHash, ok = parseBoolArg(fields[4])
+			if !ok {
+				response = s.msg(locale, "usage_isolate_files_release", nil)
+				break
+			}
+		}
+
+		guidCSV := strings.Join(cleanedGUIDs, ",")
+		payload, _ := json.Marshal(planner.ToolCall{
+			Name:                  "edr_isolate_files_release",
+			IsolateFileGUIDs:      guidCSV,
+			IsolateFileAddExcl:    addExclusion,
+			IsolateFileReleaseAll: releaseAllHash,
+			Critical:              true,
+		})
+		err = s.store.SavePendingAction(
+			ctx,
+			sessionKey,
+			"edr_isolate_files_release_verify_pending",
+			string(payload),
+			fmt.Sprintf("edr_isolate_files_release isolate_file_guids=%s add_exclusion=%t release_all_hash=%t", guidCSV, addExclusion, releaseAllHash),
+		)
+		if err == nil {
+			response = s.msg(locale, "confirm_isolate_files_release", map[string]string{
+				"isolate_file_guids":            guidCSV,
+				"isolate_file_add_exclusion":    strconv.FormatBool(addExclusion),
+				"isolate_file_release_all_hash": strconv.FormatBool(releaseAllHash),
+			})
+		}
 	case "iocs":
 		reporter.ToolStart(ctx, "edr_iocs", "我在拉取 IOC 列表。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
@@ -4080,6 +4140,18 @@ func parseDetectionDealStatusArg(raw string) (int, bool) {
 		return 4, true
 	default:
 		return 0, false
+	}
+}
+
+func parseBoolArg(raw string) (bool, bool) {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	switch value {
+	case "1", "true", "yes", "y", "on":
+		return true, true
+	case "0", "false", "no", "n", "off":
+		return false, true
+	default:
+		return false, false
 	}
 }
 
