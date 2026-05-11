@@ -1265,8 +1265,11 @@ func missingCriticalParams(call planner.ToolCall) []string {
 	}
 
 	switch call.Name {
-	case "edr_host_isolate", "edr_host_release", "edr_host_blacklist_add", "edr_host_remove":
+	case "edr_host_isolate", "edr_host_release", "edr_host_remove":
 		add(strings.TrimSpace(call.ClientID) != "", "client_id")
+	case "edr_host_blacklist_add":
+		add(strings.TrimSpace(call.ClientID) != "", "client_id")
+		add(strings.TrimSpace(call.Reason) != "", "reason")
 	case "edr_task_send_instruction":
 		add(strings.TrimSpace(call.ClientID) != "", "client_id")
 		add(strings.TrimSpace(call.InstructionName) != "", "instruction_name")
@@ -2363,6 +2366,22 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		err = s.store.SavePendingAction(ctx, sessionKey, "edr_host_release", string(payload), "edr_host_release client_id="+fields[2])
 		if err == nil {
 			response = s.msg(locale, "confirm_release", map[string]string{"client_id": fields[2]})
+		}
+	case "host-black":
+		if len(fields) < 4 {
+			response = s.msg(locale, "usage_host_black", nil)
+			break
+		}
+		clientIDs := strings.TrimSpace(fields[2])
+		reason := strings.TrimSpace(strings.Join(fields[3:], " "))
+		if clientIDs == "" || reason == "" {
+			response = s.msg(locale, "usage_host_black", nil)
+			break
+		}
+		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_host_blacklist_add", ClientID: clientIDs, Reason: reason, Critical: true})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_host_blacklist_add", string(payload), fmt.Sprintf("edr_host_blacklist_add client_id=%s reason=%s", clientIDs, reason))
+		if err == nil {
+			response = s.msg(locale, "confirm_host_black", map[string]string{"client_id": clientIDs, "reason": reason})
 		}
 	case "incidents":
 		reporter.ToolStart(ctx, "edr_incidents", "我在从平台 API 拉取近期事件，整理威胁和主机状态。")
