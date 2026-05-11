@@ -2405,6 +2405,25 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatHostOfflineConf(result)
 		}
+	case "host-offline-set":
+		if len(fields) < 4 {
+			response = s.msg(locale, "usage_host_offline_set", nil)
+			break
+		}
+		status, errStatus := strconv.Atoi(fields[2])
+		timeVal, errTime := strconv.Atoi(fields[3])
+		if errStatus != nil || status <= 0 || errTime != nil || timeVal <= 0 {
+			response = s.msg(locale, "usage_host_offline_set", nil)
+			break
+		}
+		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_host_offline_save", Status: status, Time: timeVal, Critical: true})
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_host_offline_save", string(payload), fmt.Sprintf("edr_host_offline_save status=%d time=%d", status, timeVal))
+		if err == nil {
+			response = s.msg(locale, "confirm_host_offline_set", map[string]string{
+				"status": fields[2],
+				"time":   fields[3],
+			})
+		}
 	case "incidents":
 		reporter.ToolStart(ctx, "edr_incidents", "我在从平台 API 拉取近期事件，整理威胁和主机状态。")
 		clientID, page, pageSize := parseIncidentListArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
