@@ -2922,6 +2922,116 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		if err == nil {
 			response = formatStrategyState(strategyStateResult)
 		}
+	case "strategy-update":
+		if len(fields) < 4 {
+			response = s.msg(locale, "usage_strategy_update", nil)
+			break
+		}
+		strategyType := strings.TrimSpace(fields[2])
+		strategyID := strings.TrimSpace(fields[3])
+		if strategyType == "" || strategyID == "" {
+			response = s.msg(locale, "usage_strategy_update", nil)
+			break
+		}
+		// 仅允许的类型
+		if strategyType != "virus_scan_settings" && strategyType != "asset_registration" {
+			response = s.msg(locale, "usage_strategy_update", nil)
+			break
+		}
+
+		call := planner.ToolCall{
+			Name:       "edr_strategy_update",
+			StrategyID: strategyID,
+			Type:       strategyType,
+			Critical:   true,
+		}
+
+		// 解析 key=value 格式的可选参数
+		for i := 4; i < len(fields); i++ {
+			fieldStr := strings.TrimSpace(fields[i])
+			if !strings.Contains(fieldStr, "=") {
+				continue
+			}
+			parts := strings.SplitN(fieldStr, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			if key == "" || value == "" {
+				continue
+			}
+
+			switch key {
+			case "scan_file_scope":
+				if value == "all" || value == "recommended" {
+					call.ScanFileScope = value
+				}
+			case "startup_scan_mode":
+				if value == "known_dangerous" || value == "all_unknown" {
+					call.StartupScanMode = value
+				}
+			case "archive_size_limit_enabled":
+				if boolVal, ok := parseBoolArg(value); ok {
+					call.ArchiveSizeLimitEnabled = &boolVal
+				}
+			case "archive_size_limit":
+				if archiveLimit, err := strconv.Atoi(value); err == nil && archiveLimit > 0 {
+					call.ArchiveSizeLimit = archiveLimit
+				}
+			case "realtime_mem_cache_tech_enabled":
+				if boolVal, ok := parseBoolArg(value); ok {
+					call.RealtimeMemCacheTechEnabled = &boolVal
+				}
+			case "dynamic_cpu_monitor_enabled":
+				if boolVal, ok := parseBoolArg(value); ok {
+					call.DynamicCpuMonitorEnabled = &boolVal
+				}
+			case "dynamic_cpu_high_percent":
+				if cpuPercent, err := strconv.Atoi(value); err == nil && cpuPercent > 0 && cpuPercent <= 100 {
+					call.DynamicCpuHighPercent = cpuPercent
+				}
+			case "stop_realtime_on_cpu_high_enabled":
+				if boolVal, ok := parseBoolArg(value); ok {
+					call.StopRealtimeOnCpuHighEnabled = &boolVal
+				}
+			case "stop_realtime_cpu_high_percent":
+				if cpuPercent, err := strconv.Atoi(value); err == nil && cpuPercent > 0 && cpuPercent <= 100 {
+					call.StopRealtimeCpuHighPercent = cpuPercent
+				}
+			case "owl_on_realtime_enabled":
+				if boolVal, ok := parseBoolArg(value); ok {
+					call.OwlOnRealtimeEnabled = &boolVal
+				}
+			case "realtime_scan_archive_enabled":
+				if boolVal, ok := parseBoolArg(value); ok {
+					call.RealtimeScanArchiveEnabled = &boolVal
+				}
+			case "runtime_max_file_size_mb":
+				if fileSize, err := strconv.Atoi(value); err == nil && fileSize > 0 {
+					call.RuntimeMaxFileSizeMb = fileSize
+				}
+			case "custom_max_file_size_mb":
+				if fileSize, err := strconv.Atoi(value); err == nil && fileSize > 0 {
+					call.CustomMaxFileSizeMb = fileSize
+				}
+			}
+		}
+
+		payload, _ := json.Marshal(call)
+		err = s.store.SavePendingAction(
+			ctx,
+			sessionKey,
+			"edr_strategy_update_verify_pending",
+			string(payload),
+			fmt.Sprintf("edr_strategy_update strategy_id=%s type=%s", strategyID, strategyType),
+		)
+		if err == nil {
+			response = s.msg(locale, "confirm_strategy_update", map[string]string{
+				"strategy_id":   strategyID,
+				"strategy_type": strategyType,
+			})
+		}
 	case "log-alarms":
 		reporter.ToolStart(ctx, "edr_log_alarms", "我在拉取事件日志告警列表。")
 		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)

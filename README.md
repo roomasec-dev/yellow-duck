@@ -10,7 +10,7 @@
 
 ## 当前交互方式
 
-当前既支持显式命令（35个），也支持自然语言工具规划：
+当前既支持显式命令（36个），也支持自然语言工具规划：
 
 **EDR 主机管理**
 - `/edr hosts [hostname]` 查询主机
@@ -66,6 +66,10 @@
 - `/edr strategies [type] [page] [page_size]` 策略列表
 - `/edr strategy-single <strategy_type>` 策略详情
 - `/edr strategy-state` 策略状态
+- `/edr strategy-update <strategy_type> <strategy_id> [key=value ...]` 更新策略
+  - `strategy_type` 为必填，`virus_scan_settings`（病毒查杀设置）或 `asset_registration`（资产登记）
+  - `strategy_id` 为必填，策略 ID
+  - 可选参数支持 key=value 格式，包括：`scan_file_scope`、`startup_scan_mode`、`archive_size_limit_enabled`、`archive_size_limit`、`realtime_mem_cache_tech_enabled`、`dynamic_cpu_monitor_enabled`、`dynamic_cpu_high_percent`、`stop_realtime_on_cpu_high_enabled`、`stop_realtime_cpu_high_percent`、`owl_on_realtime_enabled`、`realtime_scan_archive_enabled`、`runtime_max_file_size_mb`、`custom_max_file_size_mb`
 
 **EDR 响应**
 - `/edr send-instruction <instruction_name> <client_id> [path]` 发送指令到主机（人工响应）
