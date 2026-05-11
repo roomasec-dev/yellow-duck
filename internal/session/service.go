@@ -319,6 +319,36 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 			stored, err := s.storeAssistantReply(ctx, sessionKey, response)
 			return stored, true, err
 		}
+		// 隔离主机待验证：需要先发送验证码
+		if pending.ActionType == "edr_host_isolate_verify_pending" {
+			reporter.Step(ctx, "用户确认执行，正在发送验证码。")
+			if err := s.edr.SendVerifyCode(ctx, "instruction"); err != nil {
+				return "", true, fmt.Errorf("发送验证码失败: %w", err)
+			}
+			verifyResp, _ := s.edr.IsNeedVerifyCode(ctx, "instruction")
+			pending.ActionType = "edr_host_isolate_verify"
+			if err := s.store.SavePendingAction(ctx, sessionKey, pending.ActionType, pending.Payload, pending.Summary); err != nil {
+				return "", true, err
+			}
+			response := s.msg(locale, "pending_verify_code", map[string]string{"summary": pending.Summary, "phone_email": verifyResp.PhoneEmail})
+			stored, err := s.storeAssistantReply(ctx, sessionKey, response)
+			return stored, true, err
+		}
+		// 恢复主机待验证：需要先发送验证码
+		if pending.ActionType == "edr_host_release_verify_pending" {
+			reporter.Step(ctx, "用户确认执行，正在发送验证码。")
+			if err := s.edr.SendVerifyCode(ctx, "instruction"); err != nil {
+				return "", true, fmt.Errorf("发送验证码失败: %w", err)
+			}
+			verifyResp, _ := s.edr.IsNeedVerifyCode(ctx, "instruction")
+			pending.ActionType = "edr_host_release_verify"
+			if err := s.store.SavePendingAction(ctx, sessionKey, pending.ActionType, pending.Payload, pending.Summary); err != nil {
+				return "", true, err
+			}
+			response := s.msg(locale, "pending_verify_code", map[string]string{"summary": pending.Summary, "phone_email": verifyResp.PhoneEmail})
+			stored, err := s.storeAssistantReply(ctx, sessionKey, response)
+			return stored, true, err
+		}
 		reporter.Step(ctx, "我收到确认了，正在执行刚才挂起的高危动作。")
 		response, execErr := s.executePendingAction(ctx, sessionKey, pending, locale, reporter)
 		if delErr := s.store.DeletePendingAction(ctx, sessionKey); delErr != nil && execErr == nil {
@@ -334,7 +364,7 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 		return response, true, err
 	default:
 		// 处理验证码输入
-		if pending.ActionType == "edr_task_send_instruction_verify" {
+		if pending.ActionType == "edr_task_send_instruction_verify" || pending.ActionType == "edr_host_isolate_verify" || pending.ActionType == "edr_host_release_verify" {
 			code, classifyErr := s.classifyVerifyCodeInput(ctx, sessionKey, userText, pending)
 			if classifyErr != nil {
 				s.logger.Warn("提取验证码失败，降级到简单判断", "error", classifyErr)
@@ -1337,8 +1367,8 @@ func validateCriticalCall(call planner.ToolCall) error {
 }
 
 func canFastTrackCriticalConfirmation(call planner.ToolCall) bool {
-	// Keep the dedicated verification flow for edr_task_send_instruction.
-	return call.Name != "edr_task_send_instruction"
+	// Keep the dedicated verification flow for tools requiring a verify code.
+	return call.Name != "edr_task_send_instruction" && call.Name != "edr_host_isolate" && call.Name != "edr_host_release"
 }
 
 func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, locale string, calls []planner.ToolCall, reporter *progress.Reporter, fastTrackConfirmedCritical bool) ([]string, string, error) {
@@ -1505,6 +1535,40 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 						stored, err := s.storeAssistantReply(ctx, sessionKey, response)
 						return nil, stored, err
 					}
+				}
+			}
+			// edr_host_isolate 始终需要验证码
+			if call.Name == "edr_host_isolate" {
+				verifyResp, err := s.edr.IsNeedVerifyCode(ctx, "instruction")
+				if err != nil {
+					return nil, "", fmt.Errorf("检查验证码需求失败: %w", err)
+				}
+				if verifyResp.IsNeedVerifyCode {
+					actionType = "edr_host_isolate_verify_pending"
+					summary += " (需要验证码)"
+					if err := s.store.SavePendingAction(ctx, sessionKey, actionType, string(payload), summary); err != nil {
+						return nil, "", err
+					}
+					response := s.msg(locale, "pending_high_risk", map[string]string{"summary": summary})
+					stored, err := s.storeAssistantReply(ctx, sessionKey, response)
+					return nil, stored, err
+				}
+			}
+			// edr_host_release 始终需要验证码
+			if call.Name == "edr_host_release" {
+				verifyResp, err := s.edr.IsNeedVerifyCode(ctx, "instruction")
+				if err != nil {
+					return nil, "", fmt.Errorf("检查验证码需求失败: %w", err)
+				}
+				if verifyResp.IsNeedVerifyCode {
+					actionType = "edr_host_release_verify_pending"
+					summary += " (需要验证码)"
+					if err := s.store.SavePendingAction(ctx, sessionKey, actionType, string(payload), summary); err != nil {
+						return nil, "", err
+					}
+					response := s.msg(locale, "pending_high_risk", map[string]string{"summary": summary})
+					stored, err := s.storeAssistantReply(ctx, sessionKey, response)
+					return nil, stored, err
 				}
 			}
 
@@ -1875,14 +1939,27 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 	switch call.Name {
 	case "edr_host_isolate":
 		reporter.Step(ctx, "我在下发隔离动作，并等待任务回执。")
-		result, err := s.edr.IsolateHost(ctx, call.ClientID, call.Time)
+		isolateReq := edr.SendInstructionRequest{
+			ClientID:        call.ClientID,
+			InstructionName: "quarantine_network",
+			VerifyCode:      call.VerifyCode,
+		}
+		if call.Time > 0 {
+			isolateReq.Params = &edr.Params{Time: call.Time}
+		}
+		result, err := s.edr.SendInstruction(ctx, isolateReq)
 		if err != nil {
 			return "", err
 		}
 		return s.msg(locale, "confirm_isolate_done", map[string]string{"task_id": result.TaskID, "host": result.HostName, "repeat": strconv.FormatBool(result.Repeat)}), nil
 	case "edr_host_release":
 		reporter.Step(ctx, "我在下发恢复动作，并等待任务回执。")
-		result, err := s.edr.ReleaseHost(ctx, call.ClientID)
+		releaseReq := edr.SendInstructionRequest{
+			ClientID:        call.ClientID,
+			InstructionName: "recover_network",
+			VerifyCode:      call.VerifyCode,
+		}
+		result, err := s.edr.SendInstruction(ctx, releaseReq)
 		if err != nil {
 			return "", err
 		}
@@ -2353,7 +2430,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			break
 		}
 		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_host_isolate", ClientID: fields[2], Critical: true})
-		err = s.store.SavePendingAction(ctx, sessionKey, "edr_host_isolate", string(payload), "edr_host_isolate client_id="+fields[2])
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_host_isolate_verify_pending", string(payload), "edr_host_isolate client_id="+fields[2])
 		if err == nil {
 			response = s.msg(locale, "confirm_isolate", map[string]string{"client_id": fields[2]})
 		}
@@ -2363,7 +2440,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			break
 		}
 		payload, _ := json.Marshal(planner.ToolCall{Name: "edr_host_release", ClientID: fields[2], Critical: true})
-		err = s.store.SavePendingAction(ctx, sessionKey, "edr_host_release", string(payload), "edr_host_release client_id="+fields[2])
+		err = s.store.SavePendingAction(ctx, sessionKey, "edr_host_release_verify_pending", string(payload), "edr_host_release client_id="+fields[2])
 		if err == nil {
 			response = s.msg(locale, "confirm_release", map[string]string{"client_id": fields[2]})
 		}
