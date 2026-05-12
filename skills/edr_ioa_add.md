@@ -10,7 +10,7 @@
 输入说明：
 - kb_query：严重程度，必填，如"high"、"medium"、"low"。
 - file_name：文件名，可选。
-- operation：命令行，可选。
+- command_line：命令行，可选。
 - reason：描述，可选。
 - host_type：主机类型，可选。
 

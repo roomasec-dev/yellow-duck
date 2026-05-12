@@ -8,7 +8,9 @@
 - 执行前要确认 IOA ID 明确无歧义。
 
 输入说明：
-- ioc_id：IOA ID，必填，用于指定要更新的 IOA。
+- ioa_id：IOA ID，必填，用于指定要更新的 IOA。
+- file_name：文件名，可选。
+- command_line：命令行，可选。
 - reason：新的描述，可选。
 
 输出建议：

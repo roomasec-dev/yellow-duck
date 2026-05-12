@@ -72,8 +72,8 @@
 - `/edr ioa-add <severity> [file_name] [command_line] [description] [host_type]` 添加IOA
   - `severity` 为必填，严重程度（如 `high` / `medium` / `low`）
   - `command_line`、`description`、`file_name`、`host_type` 为可选
-- `/edr ioa-update <ioa_id> [description]` 更新IOA
-  - `ioa_id` 为必填，`description` 为可选
+- `/edr ioa-update <ioa_id> [file_name] [command_line] [description]` 更新IOA
+  - `ioa_id` 为必填，`file_name`、`command_line`、`description` 为可选
 - `/edr ioa-delete <ioa_id>` 删除IOA
   - `ioa_id` 为必填
 - `/edr ioa-ip [page] [page_size]` IOA网络排除列表

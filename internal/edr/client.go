@@ -3139,6 +3139,8 @@ func (c *OpenAPIClient) AddIOANetwork(ctx context.Context, req AddIOANetworkRequ
 	}
 	if req.HostType != "" {
 		payload["host_type"] = req.HostType
+	} else {
+		payload["host_type"] = "ALL"
 	}
 	if req.IP != "" {
 		payload["ip"] = req.IP

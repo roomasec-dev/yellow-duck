@@ -2179,8 +2179,12 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 		return "自动响应策略排序已保存", nil
 	case "edr_ioa_add":
 		reporter.Step(ctx, "我正在添加 IOA。")
+		commandLine := strings.TrimSpace(call.CommandLine)
+		if commandLine == "" {
+			commandLine = strings.TrimSpace(call.Operation)
+		}
 		if err := s.edr.AddIOA(ctx, edr.AddIOARequest{
-			CommandLine: call.Operation,
+			CommandLine: commandLine,
 			Description: call.Reason,
 			FileName:    call.FileName,
 			HostType:    call.HostType,
@@ -2191,9 +2195,15 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 		return "IOA 添加成功", nil
 	case "edr_ioa_update":
 		reporter.Step(ctx, "我正在更新 IOA。")
+		commandLine := strings.TrimSpace(call.CommandLine)
+		if commandLine == "" {
+			commandLine = strings.TrimSpace(call.Operation)
+		}
 		if err := s.edr.UpdateIOA(ctx, edr.UpdateIOARequest{
 			ID:          call.IOCID,
+			CommandLine: commandLine,
 			Description: call.Reason,
+			FileName:    call.FileName,
 		}); err != nil {
 			return "", err
 		}
@@ -3064,7 +3074,8 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			call.FileName = strings.TrimSpace(fields[3])
 		}
 		if len(fields) > 4 {
-			call.Operation = strings.TrimSpace(fields[4])
+			call.CommandLine = strings.TrimSpace(fields[4])
+			call.Operation = call.CommandLine
 		}
 		if len(fields) > 5 {
 			call.Reason = strings.TrimSpace(fields[5])
@@ -3079,12 +3090,12 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			sessionKey,
 			"edr_ioa_add_verify_pending",
 			string(payload),
-			fmt.Sprintf("edr_ioa_add severity=%s command_line=%s", call.KBQuery, call.Operation),
+			fmt.Sprintf("edr_ioa_add severity=%s command_line=%s", call.KBQuery, call.CommandLine),
 		)
 		if err == nil {
 			response = s.msg(locale, "confirm_ioa_add", map[string]string{
 				"severity":     call.KBQuery,
-				"command_line": call.Operation,
+				"command_line": call.CommandLine,
 				"description":  call.Reason,
 				"file_name":    call.FileName,
 				"host_type":    call.HostType,
@@ -3106,7 +3117,14 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			Critical: true,
 		}
 		if len(fields) > 3 {
-			call.Reason = strings.TrimSpace(fields[3])
+			call.FileName = strings.TrimSpace(fields[3])
+		}
+		if len(fields) > 4 {
+			call.CommandLine = strings.TrimSpace(fields[4])
+			call.Operation = call.CommandLine
+		}
+		if len(fields) > 5 {
+			call.Reason = strings.TrimSpace(fields[5])
 		}
 		payload, _ := json.Marshal(call)
 		err = s.store.SavePendingAction(
@@ -3114,12 +3132,14 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			sessionKey,
 			"edr_ioa_update_verify_pending",
 			string(payload),
-			fmt.Sprintf("edr_ioa_update ioa_id=%s", call.IOCID),
+			fmt.Sprintf("edr_ioa_update ioa_id=%s file_name=%s command_line=%s", call.IOCID, call.FileName, call.CommandLine),
 		)
 		if err == nil {
 			response = s.msg(locale, "confirm_ioa_update", map[string]string{
-				"ioa_id":      call.IOCID,
-				"description": call.Reason,
+				"ioa_id":       call.IOCID,
+				"file_name":    call.FileName,
+				"command_line": call.CommandLine,
+				"description":  call.Reason,
 			})
 		}
 	case "ioa-delete":

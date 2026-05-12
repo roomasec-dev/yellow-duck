@@ -20,6 +20,7 @@ type ToolCall struct {
 	ClientIP            string `json:"client_ip,omitempty"`
 	OSType              string `json:"os_type,omitempty"`
 	Operation           string `json:"operation,omitempty"`
+	CommandLine         string `json:"command_line,omitempty"`
 	StartTime           string `json:"start_time,omitempty"`
 	EndTime             string `json:"end_time,omitempty"`
 	Page                int    `json:"page,omitempty"`
@@ -170,6 +171,13 @@ func (s *Service) BuildPlan(ctx context.Context, modelRef string, userText strin
 		plan.ToolCalls[i].ClientIP = strings.TrimSpace(plan.ToolCalls[i].ClientIP)
 		plan.ToolCalls[i].OSType = strings.TrimSpace(plan.ToolCalls[i].OSType)
 		plan.ToolCalls[i].Operation = strings.TrimSpace(plan.ToolCalls[i].Operation)
+		plan.ToolCalls[i].CommandLine = strings.TrimSpace(plan.ToolCalls[i].CommandLine)
+		if plan.ToolCalls[i].CommandLine == "" {
+			plan.ToolCalls[i].CommandLine = plan.ToolCalls[i].Operation
+		}
+		if plan.ToolCalls[i].Operation == "" {
+			plan.ToolCalls[i].Operation = plan.ToolCalls[i].CommandLine
+		}
 		plan.ToolCalls[i].StartTime = strings.TrimSpace(plan.ToolCalls[i].StartTime)
 		plan.ToolCalls[i].EndTime = strings.TrimSpace(plan.ToolCalls[i].EndTime)
 		if plan.ToolCalls[i].Page < 0 {
@@ -532,7 +540,7 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"20.1 如果用户在修改查杀设置、修改扫描策略、修改扫描配置（查杀范围、启动模式、压缩包限制、CPU避让、实时防护文件大小等），优先规划 edr_strategy_update，需要填 rid 和需要修改的字段（scan_file_scope、startup_scan_mode、archive_size_limit_enabled、archive_size_limit、realtime_mem_cache_tech_enabled、dynamic_cpu_monitor_enabled、dynamic_cpu_high_percent、stop_realtime_on_cpu_high_enabled、stop_realtime_cpu_high_percent、owl_on_realtime_enabled、realtime_scan_archive_enabled、runtime_max_file_size_mb、custom_max_file_size_mb 等）。\n" +
 		"21. 无论是否调用工具，都额外给一个面向用户的简短 plan_preview，说明你准备怎么查或为什么准备收口，限制在 18 到 40 个字，不能泄露内部术语。\n" +
 		"22. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
-		"只输出 JSON，不要 markdown。结构：{\"task_mode\":\"overview\",\"phase\":\"overview\",\"intent_summary\":\"\",\"done_when\":\"\",\"need_clarification\":false,\"clarifying_question\":\"\",\"plan_preview\":\"\",\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"instruction_name\":\"\",\"path\":\"\",\"time\":0,\"pid\":0,\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"status\":0,\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"description\":\"\",\"expiration_date\":\"\",\"file_name\":\"\",\"host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false,\"type\":\"\"}]}"
+		"只输出 JSON，不要 markdown。结构：{\"task_mode\":\"overview\",\"phase\":\"overview\",\"intent_summary\":\"\",\"done_when\":\"\",\"need_clarification\":false,\"clarifying_question\":\"\",\"plan_preview\":\"\",\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"command_line\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"filter_field\":\"\",\"filter_operator\":\"\",\"filter_value\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"instruction_name\":\"\",\"path\":\"\",\"time\":0,\"pid\":0,\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"status\":0,\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"description\":\"\",\"expiration_date\":\"\",\"file_name\":\"\",\"host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false,\"type\":\"\"}]}"
 	if memoryText != "" {
 		base += "\n\n当前已有记忆：\n" + memoryText
 	}
