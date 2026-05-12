@@ -296,6 +296,196 @@ func isAllDigits(s string) bool {
 	return true
 }
 
+type actionSlotSchema struct {
+	RequiredIntSlots []string
+	DefaultIntSlots  map[string]int
+	EnumIntSlots     map[string]map[int][]string
+	NumericIntSlots  map[string]actionIntRange
+}
+
+type actionIntRange struct {
+	Min int
+	Max int
+}
+
+func actionSlotSchemaFor(action string) (actionSlotSchema, bool) {
+	switch strings.TrimSpace(action) {
+	case "edr_host_offline_save":
+		return actionSlotSchema{
+			RequiredIntSlots: []string{"status"},
+			DefaultIntSlots: map[string]int{
+				"time": 180,
+			},
+			EnumIntSlots: map[string]map[int][]string{
+				"status": {
+					1: {"开启", "打开", "enable", "on"},
+					2: {"关闭", "关掉", "禁用", "disable", "off"},
+				},
+			},
+			NumericIntSlots: map[string]actionIntRange{
+				"time": {Min: 1, Max: 3650},
+			},
+		}, true
+	default:
+		return actionSlotSchema{}, false
+	}
+}
+
+func actionIntSlotValue(call planner.ToolCall, slot string) int {
+	switch slot {
+	case "status":
+		return call.Status
+	case "time":
+		return call.Time
+	default:
+		return 0
+	}
+}
+
+func setActionIntSlot(call *planner.ToolCall, slot string, value int) bool {
+	if call == nil || value <= 0 {
+		return false
+	}
+	switch slot {
+	case "status":
+		if call.Status > 0 {
+			return false
+		}
+		call.Status = value
+		return true
+	case "time":
+		if call.Time > 0 {
+			return false
+		}
+		call.Time = value
+		return true
+	default:
+		return false
+	}
+}
+
+func missingActionRequiredSlots(call planner.ToolCall, action string) []string {
+	schema, ok := actionSlotSchemaFor(action)
+	if !ok || len(schema.RequiredIntSlots) == 0 {
+		return nil
+	}
+	missing := make([]string, 0, len(schema.RequiredIntSlots))
+	for _, slot := range schema.RequiredIntSlots {
+		if actionIntSlotValue(call, slot) <= 0 {
+			missing = append(missing, slot)
+		}
+	}
+	return missing
+}
+
+func applyActionSlotDefaults(call *planner.ToolCall) {
+	if call == nil {
+		return
+	}
+	schema, ok := actionSlotSchemaFor(call.Name)
+	if !ok || len(schema.DefaultIntSlots) == 0 {
+		return
+	}
+	for slot, value := range schema.DefaultIntSlots {
+		setActionIntSlot(call, slot, value)
+	}
+}
+
+func fillActionSlotsFromText(call *planner.ToolCall, userText string, schema actionSlotSchema) bool {
+	if call == nil {
+		return false
+	}
+	lower := strings.ToLower(strings.TrimSpace(userText))
+	if lower == "" {
+		return false
+	}
+
+	changed := false
+	for slot, values := range schema.EnumIntSlots {
+		for value, keywords := range values {
+			if !containsAny(lower, keywords) {
+				continue
+			}
+			changed = setActionIntSlot(call, slot, value) || changed
+			break
+		}
+	}
+	for slot, limits := range schema.NumericIntSlots {
+		if value, ok := extractFirstIntInRange(lower, limits.Min, limits.Max); ok {
+			changed = setActionIntSlot(call, slot, value) || changed
+		}
+	}
+
+	return changed
+}
+
+func containsAny(text string, keywords []string) bool {
+	for _, keyword := range keywords {
+		if strings.Contains(text, strings.ToLower(strings.TrimSpace(keyword))) {
+			return true
+		}
+	}
+	return false
+}
+
+func extractFirstIntInRange(text string, min int, max int) (int, bool) {
+	numberParts := strings.FieldsFunc(text, func(r rune) bool {
+		return r < '0' || r > '9'
+	})
+	for _, part := range numberParts {
+		if part == "" {
+			continue
+		}
+		value, err := strconv.Atoi(part)
+		if err != nil {
+			continue
+		}
+		if value >= min && value <= max {
+			return value, true
+		}
+	}
+	return 0, false
+}
+
+func (s *Service) tryFillPendingActionSlots(ctx context.Context, sessionKey string, pending protocol.PendingAction, userText string, locale string, reporter *progress.Reporter) (string, bool, error) {
+	schema, ok := actionSlotSchemaFor(pending.ActionType)
+	if !ok {
+		return "", false, nil
+	}
+
+	var call planner.ToolCall
+	if err := json.Unmarshal([]byte(pending.Payload), &call); err != nil {
+		return "", true, err
+	}
+	normalizeToolCallAliases(&call)
+
+	if !fillActionSlotsFromText(&call, userText, schema) {
+		return "", false, nil
+	}
+
+	if missing := missingActionRequiredSlots(call, pending.ActionType); len(missing) > 0 {
+		payload, _ := json.Marshal(call)
+		if err := s.store.SavePendingAction(ctx, sessionKey, pending.ActionType, string(payload), pending.Summary); err != nil {
+			return "", true, err
+		}
+		response := fmt.Sprintf("我补全了一部分参数，但还缺：%s。", strings.Join(missing, ", "))
+		stored, err := s.storeAssistantReply(ctx, sessionKey, response)
+		return stored, true, err
+	}
+
+	applyActionSlotDefaults(&call)
+	reporter.Step(ctx, "我收到参数了，正在执行待确认操作。")
+	response, execErr := s.executeConfirmedTool(ctx, sessionKey, call, locale, reporter)
+	if delErr := s.store.DeletePendingAction(ctx, sessionKey); delErr != nil && execErr == nil {
+		execErr = delErr
+	}
+	if execErr == nil {
+		reply, storeErr := s.storeAssistantReply(ctx, sessionKey, response)
+		return reply, true, storeErr
+	}
+	return "", true, execErr
+}
+
 func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey string, userText string, locale string, reporter *progress.Reporter) (string, bool, error) {
 	pending, err := s.store.GetPendingAction(ctx, sessionKey)
 	if err != nil || pending.ActionType == "" {
@@ -391,6 +581,9 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 				execErr = delErr
 			}
 			return response, true, execErr
+		}
+		if response, handled, fillErr := s.tryFillPendingActionSlots(ctx, sessionKey, pending, userText, locale, reporter); handled || fillErr != nil {
+			return response, handled, fillErr
 		}
 		// 尝试补全 plan_add / plan_edit 的参数（scan_type、plan_type、scope）
 		if pending.ActionType == "edr_plan_add" || pending.ActionType == "edr_plan_edit" {
@@ -1342,8 +1535,9 @@ func missingCriticalParams(call planner.ToolCall) []string {
 		add(strings.TrimSpace(call.Type) != "", "type")
 		add(call.Status > 0, "status")
 	case "edr_host_offline_save":
-		add(call.Status > 0, "status")
-		add(call.Time > 0, "time")
+		for _, slot := range missingActionRequiredSlots(call, call.Name) {
+			add(false, slot)
+		}
 	case "edr_detection_update_status":
 		add(strings.TrimSpace(call.DetectionID) != "", "detection_id")
 		add(call.Status > 0, "status")
@@ -1378,6 +1572,7 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 		if err := ctx.Err(); err != nil {
 			return nil, "", err
 		}
+		applyActionSlotDefaults(&call)
 		if err := validateCriticalCall(call); err != nil {
 			response := fmt.Sprintf("这个动作风险比较高，但参数还不完整：%s。请补充缺失参数后我再执行。", err.Error())
 			stored, storeErr := s.storeAssistantReply(ctx, sessionKey, response)
@@ -1932,6 +2127,7 @@ func (s *Service) executePendingAction(ctx context.Context, sessionKey string, p
 		return "", err
 	}
 	normalizeToolCallAliases(&call)
+	applyActionSlotDefaults(&call)
 	if err := validateCriticalCall(call); err != nil {
 		return "", err
 	}
