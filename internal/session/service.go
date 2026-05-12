@@ -1798,7 +1798,12 @@ func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call p
 		return s.formatArtifactRead(ctx, locale, item, call.StartLine, call.LineCount, chunk, reporter), nil
 	case "edr_iocs":
 		reporter.ToolStart(ctx, call.Name, "我在拉取 IOC 列表。")
-		result, err := s.edr.ListIOCs(ctx, edr.ListIOCsRequest{Page: positiveOr(call.Page, 1), Limit: positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize)})
+		result, err := s.edr.ListIOCs(ctx, edr.ListIOCsRequest{
+			Action: strings.TrimSpace(call.IOCAction),
+			Hash:   strings.TrimSpace(call.IOCHash),
+			Page:   positiveOr(call.Page, 1),
+			Limit:  positiveOr(call.PageSize, s.cfg.EDR.DefaultPageSize),
+		})
 		if err != nil {
 			return "", err
 		}
@@ -2869,9 +2874,9 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		}
 	case "iocs":
 		reporter.ToolStart(ctx, "edr_iocs", "我在拉取 IOC 列表。")
-		page, pageSize := parsePagedArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
+		action, hash, page, pageSize := parseIOCsArgs(fields[2:], s.cfg.EDR.DefaultPageSize)
 		var iocsResult edr.ListIOCsResponse
-		iocsResult, err = s.edr.ListIOCs(ctx, edr.ListIOCsRequest{Page: page, Limit: pageSize})
+		iocsResult, err = s.edr.ListIOCs(ctx, edr.ListIOCsRequest{Action: action, Hash: hash, Page: page, Limit: pageSize})
 		if err == nil {
 			response = s.formatIOCs(ctx, iocsResult, page, pageSize)
 		}
@@ -2880,7 +2885,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			response = s.msg(locale, "usage_ioc_add", nil)
 			break
 		}
-		iocAction := strings.TrimSpace(fields[2])
+		iocAction := normalizeIOCAction(strings.TrimSpace(fields[2]))
 		iocHash := strings.TrimSpace(fields[3])
 		if iocAction == "" || iocHash == "" {
 			response = s.msg(locale, "usage_ioc_add", nil)
@@ -2943,7 +2948,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			Critical: true,
 		}
 		if len(fields) > 4 {
-			call.IOCAction = strings.TrimSpace(fields[4])
+			call.IOCAction = normalizeIOCAction(strings.TrimSpace(fields[4]))
 		}
 		if len(fields) > 5 {
 			call.IOCDescription = strings.TrimSpace(fields[5])
@@ -4577,6 +4582,92 @@ func parsePagedArgs(args []string, defaultPageSize int) (int, int) {
 		}
 	}
 	return page, pageSize
+}
+
+func parseIOCsArgs(args []string, defaultPageSize int) (string, string, int, int) {
+	action := ""
+	hash := ""
+	remaining := make([]string, 0, len(args))
+
+	for _, raw := range args {
+		arg := strings.TrimSpace(raw)
+		if arg == "" {
+			continue
+		}
+
+		lower := strings.ToLower(arg)
+		switch {
+		case strings.HasPrefix(lower, "action="):
+			if action == "" {
+				action = strings.TrimSpace(arg[len("action="):])
+			}
+			continue
+		case strings.HasPrefix(lower, "ioc_action="):
+			if action == "" {
+				action = strings.TrimSpace(arg[len("ioc_action="):])
+			}
+			continue
+		case strings.HasPrefix(lower, "hash="):
+			if hash == "" {
+				hash = strings.TrimSpace(arg[len("hash="):])
+			}
+			continue
+		case strings.HasPrefix(lower, "ioc_hash="):
+			if hash == "" {
+				hash = strings.TrimSpace(arg[len("ioc_hash="):])
+			}
+			continue
+		}
+
+		remaining = append(remaining, arg)
+	}
+
+	if len(remaining) > 0 {
+		first := strings.TrimSpace(remaining[0])
+		if _, err := strconv.Atoi(first); err != nil {
+			if hash == "" && isLikelyIOCHash(first) {
+				hash = first
+			} else if action == "" {
+				action = first
+			} else if hash == "" {
+				hash = first
+			}
+			remaining = remaining[1:]
+		}
+	}
+
+	if len(remaining) > 0 {
+		second := strings.TrimSpace(remaining[0])
+		if _, err := strconv.Atoi(second); err != nil {
+			if hash == "" {
+				hash = second
+			}
+			remaining = remaining[1:]
+		}
+	}
+
+	page, pageSize := parsePagedArgs(remaining, defaultPageSize)
+	return normalizeIOCAction(strings.TrimSpace(action)), strings.TrimSpace(hash), page, pageSize
+}
+
+func normalizeIOCAction(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "white":
+		return "Allow"
+	case "black":
+		return "Detect and prevent"
+	default:
+		return action
+	}
+}
+
+func isLikelyIOCHash(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if !isHex(trimmed) {
+		return false
+	}
+	length := len(trimmed)
+	return length == 32 || length == 40 || length == 64
 }
 
 func parseDetectionsArgs(args []string, defaultPageSize int) (string, int, int) {

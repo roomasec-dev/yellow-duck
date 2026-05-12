@@ -1872,6 +1872,8 @@ func (c *OpenAPIClient) AddIOC(ctx context.Context, req AddIOCRequest) error {
 	}
 	if req.HostType != "" {
 		payload["host_type"] = req.HostType
+	} else {
+		payload["host_type"] = "ALL"
 	}
 
 	var envelope apiEnvelope[any]

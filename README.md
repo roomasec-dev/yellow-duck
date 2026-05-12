@@ -56,7 +56,7 @@
   - `isolate_file_guids_csv` 为必填，多个 GUID 用英文逗号分隔
 
 **EDR IOC管理**
-- `/edr iocs [hash] [page] [page_size]` IOC列表
+- `/edr iocs [ioc_action] [hash] [page] [page_size]` IOC列表
 - `/edr ioc-add <ioc_action> <ioc_hash> [ioc_description] [ioc_expiration_date] [ioc_file_name] [ioc_host_type]` 添加IOC
   - `ioc_action` 为必填，动作类型（如 `block` / `watch`）
   - `ioc_hash` 为必填，支持 MD5/SHA1/SHA256
