@@ -9,10 +9,10 @@
 
 输入说明：
 - kb_query：严重程度，必填，如"high"、"medium"、"low"。
+- file_name：文件名，可选。
 - operation：命令行，可选。
 - reason：描述，可选。
-- ioc_file_name：文件名，可选。
-- ioc_host_type：主机类型，可选。
+- host_type：主机类型，可选。
 
 输出建议：
 - 成功后汇报添加的 IOA 名称和添加结果。

@@ -11,8 +11,8 @@
 - ioc_id：IOC ID，必填，用于指定要更新的 IOC。
 - ioc_hash：IOC Hash，必填。
 - ioc_action：新的动作类型，可选。
-- ioc_description：新的描述，可选。
-- ioc_expiration_date：新的过期时间，可选。
+- description：新的描述，可选。
+- expiration_date：新的过期时间，可选。
 
 输出建议：
 - 成功后汇报 IOC ID 和更新的内容。

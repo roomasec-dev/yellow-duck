@@ -57,19 +57,19 @@
 
 **EDR IOC管理**
 - `/edr iocs [ioc_action] [hash] [page] [page_size]` IOC列表
-- `/edr ioc-add <ioc_action> <ioc_hash> [ioc_description] [ioc_expiration_date] [ioc_file_name] [ioc_host_type]` 添加IOC
+- `/edr ioc-add <ioc_action> <ioc_hash> [description] [expiration_date] [file_name] [host_type]` 添加IOC
   - `ioc_action` 为必填，动作类型（如 `block` / `watch`）
   - `ioc_hash` 为必填，支持 MD5/SHA1/SHA256
-  - `ioc_description`、`ioc_expiration_date`（如 `2026-12-31`）、`ioc_file_name`、`ioc_host_type` 为可选
-- `/edr ioc-update <ioc_id> <ioc_hash> [ioc_action] [ioc_description] [ioc_expiration_date]` 更新IOC
+  - `description`、`expiration_date`（如 `2026-12-31`）、`file_name`、`host_type` 为可选
+- `/edr ioc-update <ioc_id> <ioc_hash> [ioc_action] [description] [expiration_date]` 更新IOC
   - `ioc_id`、`ioc_hash` 为必填
-  - `ioc_action`、`ioc_description`、`ioc_expiration_date` 为可选
+  - `ioc_action`、`description`、`expiration_date` 为可选
 - `/edr ioc-delete <ioc_id>` 删除IOC
   - `ioc_id` 为必填
 
 **EDR IOA管理**
 - `/edr ioas [page] [page_size]` IOA列表
-- `/edr ioa-add <severity> [command_line] [description] [file_name] [host_type]` 添加IOA
+- `/edr ioa-add <severity> [file_name] [command_line] [description] [host_type]` 添加IOA
   - `severity` 为必填，严重程度（如 `high` / `medium` / `low`）
   - `command_line`、`description`、`file_name`、`host_type` 为可选
 - `/edr ioa-update <ioa_id> [description]` 更新IOA

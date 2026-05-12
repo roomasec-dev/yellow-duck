@@ -2974,6 +2974,8 @@ func (c *OpenAPIClient) AddIOA(ctx context.Context, req AddIOARequest) error {
 	}
 	if req.HostType != "" {
 		payload["host_type"] = req.HostType
+	} else {
+		payload["host_type"] = "ALL"
 	}
 	if req.IOAID != "" {
 		payload["ioa_id"] = req.IOAID

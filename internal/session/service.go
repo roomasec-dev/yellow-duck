@@ -384,6 +384,7 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 			if err := json.Unmarshal([]byte(pending.Payload), &call); err != nil {
 				return "", true, err
 			}
+			normalizeToolCallAliases(&call)
 			call.VerifyCode = code
 			response, execErr := s.executeConfirmedTool(ctx, sessionKey, call, locale, reporter)
 			if delErr := s.store.DeletePendingAction(ctx, sessionKey); delErr != nil && execErr == nil {
@@ -1139,10 +1140,10 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 			call.IOCAction,
 			call.IOCID,
 			call.IOCHash,
-			call.IOCDescription,
-			call.IOCExpirationDate,
-			call.IOCFileName,
-			call.IOCHostType,
+			call.Description,
+			call.ExpirationDate,
+			call.FileName,
+			call.HostType,
 			call.IsolateFileGUIDs,
 			fmt.Sprintf("add_excl=%t", call.IsolateFileAddExcl),
 			fmt.Sprintf("release_all=%t", call.IsolateFileReleaseAll),
@@ -1226,10 +1227,10 @@ func toolCallCacheKey(call planner.ToolCall) string {
 		call.IOCAction,
 		call.IOCID,
 		call.IOCHash,
-		call.IOCDescription,
-		call.IOCExpirationDate,
-		call.IOCFileName,
-		call.IOCHostType,
+		call.Description,
+		call.ExpirationDate,
+		call.FileName,
+		call.HostType,
 		call.IsolateFileGUIDs,
 		call.PlanName,
 		fmt.Sprintf("st=%d", call.ScanType),
@@ -1930,6 +1931,7 @@ func (s *Service) executePendingAction(ctx context.Context, sessionKey string, p
 	if err := json.Unmarshal([]byte(pending.Payload), &call); err != nil {
 		return "", err
 	}
+	normalizeToolCallAliases(&call)
 	if err := validateCriticalCall(call); err != nil {
 		return "", err
 	}
@@ -1940,7 +1942,38 @@ func (s *Service) executePendingAction(ctx context.Context, sessionKey string, p
 	return s.storeAssistantReply(ctx, sessionKey, result)
 }
 
+func normalizeToolCallAliases(call *planner.ToolCall) {
+	if call == nil {
+		return
+	}
+	if call.Description == "" {
+		call.Description = call.IOCDescription
+	}
+	if call.IOCDescription == "" {
+		call.IOCDescription = call.Description
+	}
+	if call.ExpirationDate == "" {
+		call.ExpirationDate = call.IOCExpirationDate
+	}
+	if call.IOCExpirationDate == "" {
+		call.IOCExpirationDate = call.ExpirationDate
+	}
+	if call.FileName == "" {
+		call.FileName = call.IOCFileName
+	}
+	if call.IOCFileName == "" {
+		call.IOCFileName = call.FileName
+	}
+	if call.HostType == "" {
+		call.HostType = call.IOCHostType
+	}
+	if call.IOCHostType == "" {
+		call.IOCHostType = call.HostType
+	}
+}
+
 func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, error) {
+	normalizeToolCallAliases(&call)
 	switch call.Name {
 	case "edr_host_isolate":
 		reporter.Step(ctx, "我在下发隔离动作，并等待任务回执。")
@@ -1971,13 +2004,13 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 		return s.msg(locale, "confirm_release_done", map[string]string{"task_id": result.TaskID, "host": result.HostName, "repeat": strconv.FormatBool(result.Repeat)}), nil
 	case "edr_ioc_add":
 		reporter.Step(ctx, "我在添加 IOC。")
-		if err := s.edr.AddIOC(ctx, edr.AddIOCRequest{Action: call.IOCAction, Hash: call.IOCHash, Description: call.IOCDescription, ExpirationDate: call.IOCExpirationDate, FileName: call.IOCFileName, HostType: call.IOCHostType}); err != nil {
+		if err := s.edr.AddIOC(ctx, edr.AddIOCRequest{Action: call.IOCAction, Hash: call.IOCHash, Description: call.Description, ExpirationDate: call.ExpirationDate, FileName: call.FileName, HostType: call.HostType}); err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("IOC %s 已添加完成。", call.IOCHash), nil
 	case "edr_ioc_update":
 		reporter.Step(ctx, "我在更新 IOC。")
-		if err := s.edr.UpdateIOC(ctx, edr.UpdateIOCRequest{ID: call.IOCID, Action: call.IOCAction, Hash: call.IOCHash, Description: call.IOCDescription, ExpirationDate: call.IOCExpirationDate, HostType: call.IOCHostType}); err != nil {
+		if err := s.edr.UpdateIOC(ctx, edr.UpdateIOCRequest{ID: call.IOCID, Action: call.IOCAction, Hash: call.IOCHash, Description: call.Description, ExpirationDate: call.ExpirationDate, HostType: call.HostType}); err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("IOC %s 已更新完成。", call.IOCID), nil
@@ -2149,8 +2182,8 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 		if err := s.edr.AddIOA(ctx, edr.AddIOARequest{
 			CommandLine: call.Operation,
 			Description: call.Reason,
-			FileName:    call.IOCFileName,
-			HostType:    call.IOCHostType,
+			FileName:    call.FileName,
+			HostType:    call.HostType,
 			Severity:    call.KBQuery,
 		}); err != nil {
 			return "", err
@@ -2176,7 +2209,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 		if err := s.edr.AddIOANetwork(ctx, edr.AddIOANetworkRequest{
 			ExclusionName: call.PlanName,
 			IP:            call.ClientIP,
-			HostType:      call.IOCHostType,
+			HostType:      call.HostType,
 		}); err != nil {
 			return "", err
 		}
@@ -2899,16 +2932,16 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			Critical:  true,
 		}
 		if len(fields) > 4 {
-			call.IOCDescription = strings.TrimSpace(fields[4])
+			call.Description = strings.TrimSpace(fields[4])
 		}
 		if len(fields) > 5 {
-			call.IOCExpirationDate = strings.TrimSpace(fields[5])
+			call.ExpirationDate = strings.TrimSpace(fields[5])
 		}
 		if len(fields) > 6 {
-			call.IOCFileName = strings.TrimSpace(fields[6])
+			call.FileName = strings.TrimSpace(fields[6])
 		}
 		if len(fields) > 7 {
-			call.IOCHostType = strings.TrimSpace(fields[7])
+			call.HostType = strings.TrimSpace(fields[7])
 		}
 
 		payload, _ := json.Marshal(call)
@@ -2921,12 +2954,12 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		)
 		if err == nil {
 			response = s.msg(locale, "confirm_ioc_add", map[string]string{
-				"ioc_action":          call.IOCAction,
-				"ioc_hash":            call.IOCHash,
-				"ioc_description":     call.IOCDescription,
-				"ioc_expiration_date": call.IOCExpirationDate,
-				"ioc_file_name":       call.IOCFileName,
-				"ioc_host_type":       call.IOCHostType,
+				"ioc_action":      call.IOCAction,
+				"ioc_hash":        call.IOCHash,
+				"description":     call.Description,
+				"expiration_date": call.ExpirationDate,
+				"file_name":       call.FileName,
+				"host_type":       call.HostType,
 			})
 		}
 	case "ioc-update":
@@ -2951,10 +2984,10 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			call.IOCAction = normalizeIOCAction(strings.TrimSpace(fields[4]))
 		}
 		if len(fields) > 5 {
-			call.IOCDescription = strings.TrimSpace(fields[5])
+			call.Description = strings.TrimSpace(fields[5])
 		}
 		if len(fields) > 6 {
-			call.IOCExpirationDate = strings.TrimSpace(fields[6])
+			call.ExpirationDate = strings.TrimSpace(fields[6])
 		}
 
 		payload, _ := json.Marshal(call)
@@ -2967,11 +3000,11 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		)
 		if err == nil {
 			response = s.msg(locale, "confirm_ioc_update", map[string]string{
-				"ioc_id":              call.IOCID,
-				"ioc_hash":            call.IOCHash,
-				"ioc_action":          call.IOCAction,
-				"ioc_description":     call.IOCDescription,
-				"ioc_expiration_date": call.IOCExpirationDate,
+				"ioc_id":          call.IOCID,
+				"ioc_hash":        call.IOCHash,
+				"ioc_action":      call.IOCAction,
+				"description":     call.Description,
+				"expiration_date": call.ExpirationDate,
 			})
 		}
 	case "ioc-delete":
@@ -3028,16 +3061,16 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			Critical: true,
 		}
 		if len(fields) > 3 {
-			call.Operation = strings.TrimSpace(fields[3])
+			call.FileName = strings.TrimSpace(fields[3])
 		}
 		if len(fields) > 4 {
-			call.Reason = strings.TrimSpace(fields[4])
+			call.Operation = strings.TrimSpace(fields[4])
 		}
 		if len(fields) > 5 {
-			call.IOCFileName = strings.TrimSpace(fields[5])
+			call.Reason = strings.TrimSpace(fields[5])
 		}
 		if len(fields) > 6 {
-			call.IOCHostType = strings.TrimSpace(fields[6])
+			call.HostType = strings.TrimSpace(fields[6])
 		}
 
 		payload, _ := json.Marshal(call)
@@ -3053,8 +3086,8 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 				"severity":     call.KBQuery,
 				"command_line": call.Operation,
 				"description":  call.Reason,
-				"file_name":    call.IOCFileName,
-				"host_type":    call.IOCHostType,
+				"file_name":    call.FileName,
+				"host_type":    call.HostType,
 			})
 		}
 	case "ioa-update":
@@ -3133,11 +3166,11 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			hostType = strings.TrimSpace(fields[4])
 		}
 		call := planner.ToolCall{
-			Name:        "edr_ioa_network_add",
-			PlanName:    exclusionName,
-			ClientIP:    ip,
-			IOCHostType: hostType,
-			Critical:    true,
+			Name:     "edr_ioa_network_add",
+			PlanName: exclusionName,
+			ClientIP: ip,
+			HostType: hostType,
+			Critical: true,
 		}
 		payload, _ := json.Marshal(call)
 		err = s.store.SavePendingAction(
