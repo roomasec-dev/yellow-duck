@@ -3090,7 +3090,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			sessionKey,
 			"edr_ioa_add_verify_pending",
 			string(payload),
-			fmt.Sprintf("edr_ioa_add severity=%s command_line=%s", call.KBQuery, call.CommandLine),
+			fmt.Sprintf("edr_ioa_add severity=%s file_name=%s command_line=%s reason=%s host_type=%s", call.KBQuery, call.FileName, call.CommandLine, call.Reason, call.HostType),
 		)
 		if err == nil {
 			response = s.msg(locale, "confirm_ioa_add", map[string]string{
@@ -3132,7 +3132,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			sessionKey,
 			"edr_ioa_update_verify_pending",
 			string(payload),
-			fmt.Sprintf("edr_ioa_update ioa_id=%s file_name=%s command_line=%s", call.IOCID, call.FileName, call.CommandLine),
+			fmt.Sprintf("edr_ioa_update ioa_id=%s file_name=%s command_line=%s reason=%s", call.IOCID, call.FileName, call.CommandLine, call.Reason),
 		)
 		if err == nil {
 			response = s.msg(locale, "confirm_ioa_update", map[string]string{
@@ -3198,7 +3198,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			sessionKey,
 			"edr_ioa_network_add_verify_pending",
 			string(payload),
-			fmt.Sprintf("edr_ioa_network_add exclusion_name=%s ip=%s", exclusionName, ip),
+			fmt.Sprintf("edr_ioa_network_add exclusion_name=%s ip=%s host_type=%s", exclusionName, ip, hostType),
 		)
 		if err == nil {
 			response = s.msg(locale, "confirm_ioa_networks_add", map[string]string{
@@ -3220,10 +3220,10 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		exclusionName := ""
 		ip := ""
 		if len(fields) > 3 {
-			exclusionName = strings.TrimSpace(fields[3])
+			ip = strings.TrimSpace(fields[3])
 		}
 		if len(fields) > 4 {
-			ip = strings.TrimSpace(fields[4])
+			exclusionName = strings.TrimSpace(fields[4])
 		}
 		call := planner.ToolCall{
 			Name:     "edr_ioa_network_update",
@@ -3238,7 +3238,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			sessionKey,
 			"edr_ioa_network_update_verify_pending",
 			string(payload),
-			fmt.Sprintf("edr_ioa_network_update id=%s", ioaID),
+			fmt.Sprintf("edr_ioa_network_update id=%s exclusion_name=%s ip=%s", ioaID, exclusionName, ip),
 		)
 		if err == nil {
 			response = s.msg(locale, "confirm_ioa_networks_update", map[string]string{

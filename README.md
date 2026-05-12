@@ -81,10 +81,10 @@
   - `exclusion_name` 为必填，排除名称
   - `ip` 为必填，IP 地址
   - `host_type` 为可选，主机类型
-- `/edr ioa-ip-update <ioa_id> [exclusion_name] [ip]` 更新IOA网络排除
+- `/edr ioa-ip-update <ioa_id> [ip] [exclusion_name]` 更新IOA网络排除
   - `ioa_id` 为必填，IOA 网络排除 ID
-  - `exclusion_name` 为可选，新排除名称
   - `ip` 为可选，新 IP 地址
+  - `exclusion_name` 为可选，新排除名称
 - `/edr ioa-ip-delete <ioa_id>` 删除IOA网络排除
   - `ioa_id` 为必填，IOA 网络排除 ID
 
