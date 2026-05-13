@@ -297,10 +297,12 @@ func isAllDigits(s string) bool {
 }
 
 type actionSlotSchema struct {
-	RequiredIntSlots []string
-	DefaultIntSlots  map[string]int
-	EnumIntSlots     map[string]map[int][]string
-	NumericIntSlots  map[string]actionIntRange
+	RequiredIntSlots   []string
+	DefaultIntSlots    map[string]int
+	EnumIntSlots       map[string]map[int][]string
+	NumericIntSlots    map[string]actionIntRange
+	SequentialIntSlots []string
+	SequentialIntRange actionIntRange
 }
 
 type actionIntRange struct {
@@ -326,6 +328,12 @@ func actionSlotSchemaFor(action string) (actionSlotSchema, bool) {
 				"time": {Min: 1, Max: 3650},
 			},
 		}, true
+	case "edr_plan_add", "edr_plan_edit":
+		return actionSlotSchema{
+			RequiredIntSlots:   []string{"scan_type", "plan_type", "scope"},
+			SequentialIntSlots: []string{"scan_type", "plan_type", "scope"},
+			SequentialIntRange: actionIntRange{Min: 1, Max: 8},
+		}, true
 	default:
 		return actionSlotSchema{}, false
 	}
@@ -337,6 +345,12 @@ func actionIntSlotValue(call planner.ToolCall, slot string) int {
 		return call.Status
 	case "time":
 		return call.Time
+	case "scan_type":
+		return call.ScanType
+	case "plan_type":
+		return call.PlanType
+	case "scope":
+		return call.Scope
 	default:
 		return 0
 	}
@@ -358,6 +372,24 @@ func setActionIntSlot(call *planner.ToolCall, slot string, value int) bool {
 			return false
 		}
 		call.Time = value
+		return true
+	case "scan_type":
+		if call.ScanType > 0 {
+			return false
+		}
+		call.ScanType = value
+		return true
+	case "plan_type":
+		if call.PlanType > 0 {
+			return false
+		}
+		call.PlanType = value
+		return true
+	case "scope":
+		if call.Scope > 0 {
+			return false
+		}
+		call.Scope = value
 		return true
 	default:
 		return false
@@ -413,6 +445,17 @@ func fillActionSlotsFromText(call *planner.ToolCall, userText string, schema act
 	for slot, limits := range schema.NumericIntSlots {
 		if value, ok := extractFirstIntInRange(lower, limits.Min, limits.Max); ok {
 			changed = setActionIntSlot(call, slot, value) || changed
+		}
+	}
+	if len(schema.SequentialIntSlots) > 0 && schema.SequentialIntRange.Min > 0 && schema.SequentialIntRange.Max >= schema.SequentialIntRange.Min {
+		if value, ok := extractFirstIntInRange(lower, schema.SequentialIntRange.Min, schema.SequentialIntRange.Max); ok {
+			for _, slot := range schema.SequentialIntSlots {
+				if actionIntSlotValue(*call, slot) > 0 {
+					continue
+				}
+				changed = setActionIntSlot(call, slot, value) || changed
+				break
+			}
 		}
 	}
 
@@ -584,35 +627,6 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 		}
 		if response, handled, fillErr := s.tryFillPendingActionSlots(ctx, sessionKey, pending, userText, locale, reporter); handled || fillErr != nil {
 			return response, handled, fillErr
-		}
-		// 尝试补全 plan_add / plan_edit 的参数（scan_type、plan_type、scope）
-		if pending.ActionType == "edr_plan_add" || pending.ActionType == "edr_plan_edit" {
-			if val, err := strconv.Atoi(strings.TrimSpace(userText)); err == nil && val >= 1 && val <= 8 {
-				var call planner.ToolCall
-				if err := json.Unmarshal([]byte(pending.Payload), &call); err != nil {
-					return "", true, err
-				}
-				// 依次填充第一个缺失的字段
-				if call.ScanType == 0 {
-					call.ScanType = val
-				} else if call.PlanType == 0 {
-					call.PlanType = val
-				} else if call.Scope == 0 {
-					call.Scope = val
-				} else {
-					// 所有字段都已填充，直接执行
-				}
-				reporter.Step(ctx, "我收到参数了，正在执行计划操作。")
-				response, execErr := s.executeConfirmedTool(ctx, sessionKey, call, locale, reporter)
-				if delErr := s.store.DeletePendingAction(ctx, sessionKey); delErr != nil && execErr == nil {
-					execErr = delErr
-				}
-				if execErr == nil {
-					reply, storeErr := s.storeAssistantReply(ctx, sessionKey, response)
-					return reply, true, storeErr
-				}
-				return "", true, execErr
-			}
 		}
 		return "", false, nil
 	}
