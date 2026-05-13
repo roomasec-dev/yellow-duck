@@ -163,7 +163,7 @@ func (s *Service) executeToolBatchPreview(ctx context.Context, sessionKey string
 			results = append(results, s.msg(locale, "tool_error", map[string]string{"tool": call.Name, "error": "scheduled task skipped unsupported tool"}))
 			continue
 		}
-		result, _, err := s.executeSingleTool(ctx, sessionKey, call, locale, nil)
+		result, _, err := s.executeSingleTool(ctx, sessionKey, call, locale, nil, false)
 		if err != nil {
 			results = append(results, s.msg(locale, "tool_error", map[string]string{"tool": call.Name, "error": err.Error()}))
 			continue

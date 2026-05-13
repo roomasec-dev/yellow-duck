@@ -122,6 +122,59 @@ func (c *toolDedupCache) ResetSession(sessionKey string) {
 	}
 }
 
+func (c *toolDedupCache) ResetSessionTools(sessionKey string, toolNames []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if strings.TrimSpace(sessionKey) == "" {
+		c.items = make(map[string]*dedupEntry)
+		return
+	}
+	if len(toolNames) == 0 {
+		prefix := sessionKey + "|"
+		for key := range c.items {
+			if strings.HasPrefix(key, prefix) {
+				delete(c.items, key)
+			}
+		}
+		return
+	}
+	toolSet := make(map[string]struct{}, len(toolNames))
+	for _, name := range toolNames {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			toolSet[name] = struct{}{}
+		}
+	}
+	prefix := sessionKey + "|"
+	for key := range c.items {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		toolName, ok := dedupCacheKeyToolName(key, sessionKey)
+		if !ok {
+			// Legacy key format: session|hash, clear conservatively.
+			delete(c.items, key)
+			continue
+		}
+		if _, exists := toolSet[toolName]; exists {
+			delete(c.items, key)
+		}
+	}
+}
+
+func dedupCacheKeyToolName(key string, sessionKey string) (string, bool) {
+	prefix := sessionKey + "|"
+	if !strings.HasPrefix(key, prefix) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(key, prefix)
+	idx := strings.Index(rest, "|")
+	if idx <= 0 {
+		return "", false
+	}
+	return rest[:idx], true
+}
+
 func NewService(cfg config.Config, store store.Store, modelClient model.Client, compactor *compression.Service, progressService *progress.Service, detailAgentService *detailagent.Service, routerService *router.Service, plannerService *planner.Service, memoryService *memory.Service, artifactService *artifact.Service, i18nService *i18n.Service, knowledgeService *knowledge.Service, promptService *prompt.Service, edrClient edr.Client, logger *logx.Logger) *Service {
 	return &Service{
 		cfg:           cfg,
@@ -1167,7 +1220,8 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 		}
 		s.logger.Info("execute tool round", "session_key", sessionKey, "tool_count", len(currentCalls))
 		controller.ObserveRound(currentCalls)
-		stepResults, earlyReply, err := s.executeToolBatch(ctx, sessionKey, locale, currentCalls, reporter, fastTrackConfirmedCritical)
+		forceFreshRead := shouldForceFreshReadFromUserText(userText)
+		stepResults, earlyReply, err := s.executeToolBatch(ctx, sessionKey, locale, currentCalls, reporter, fastTrackConfirmedCritical, forceFreshRead)
 		if err != nil {
 			return "", err
 		}
@@ -1458,7 +1512,7 @@ func toolCallCacheKey(call planner.ToolCall) string {
 }
 
 func scopedToolCallCacheKey(sessionKey string, call planner.ToolCall) string {
-	return sessionKey + "|" + toolCallCacheKey(call)
+	return sessionKey + "|" + call.Name + "|" + toolCallCacheKey(call)
 }
 
 func callNeedsGroundedEDRAnswer(name string) bool {
@@ -1580,7 +1634,7 @@ func canFastTrackCriticalConfirmation(call planner.ToolCall) bool {
 	return call.Name != "edr_task_send_instruction" && call.Name != "edr_host_isolate" && call.Name != "edr_host_release"
 }
 
-func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, locale string, calls []planner.ToolCall, reporter *progress.Reporter, fastTrackConfirmedCritical bool) ([]string, string, error) {
+func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, locale string, calls []planner.ToolCall, reporter *progress.Reporter, fastTrackConfirmedCritical bool, forceFreshRead bool) ([]string, string, error) {
 	var results []string
 	for _, call := range calls {
 		if err := ctx.Err(); err != nil {
@@ -1789,7 +1843,7 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 			stored, err := s.storeAssistantReply(ctx, sessionKey, response)
 			return nil, stored, err
 		}
-		result, isDedupHit, err := s.executeSingleTool(ctx, sessionKey, call, locale, reporter)
+		result, isDedupHit, err := s.executeSingleTool(ctx, sessionKey, call, locale, reporter, forceFreshRead)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return nil, "", err
@@ -1800,10 +1854,8 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 		}
 		s.logger.Info("tool call finished", "session_key", sessionKey, "tool", call.Name, "result_preview", shortResult(result))
 		reporter.ToolResult(ctx, call.Name, result)
-		// Skip adding result to context if this call was a dedup hit (already added in previous round)
 		if isDedupHit {
-			s.logger.Info("tool call skipped from context", "session_key", sessionKey, "tool", call.Name)
-			continue
+			s.logger.Info("tool call dedup hit kept in context", "session_key", sessionKey, "tool", call.Name)
 		}
 		if strings.TrimSpace(result) != "" {
 			results = append(results, result)
@@ -1812,9 +1864,16 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 	return results, "", nil
 }
 
-func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, bool, error) {
+func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter, forceFreshRead bool) (string, bool, error) {
 	isDedupHit := false
 	if !call.Critical && !isCriticalTool(call.Name) {
+		if forceFreshRead && isReadOnlyTool(call.Name) {
+			result, err := s.executeToolImpl(ctx, sessionKey, call, locale, reporter)
+			if err == nil && shouldInvalidateDedupAfterCall(call.Name) {
+				s.invalidateSessionDedup(sessionKey, call.Name)
+			}
+			return result, false, err
+		}
 		key := scopedToolCallCacheKey(sessionKey, call)
 		if result, err, hit := s.dedupCache.GetOrSubmit(key); hit {
 			s.logger.Info("tool call dedup hit", "session_key", sessionKey, "tool", call.Name, "key", key)
@@ -1824,11 +1883,208 @@ func (s *Service) executeSingleTool(ctx context.Context, sessionKey string, call
 			return result, true, err
 		}
 		result, err := s.executeToolImpl(ctx, sessionKey, call, locale, reporter)
+		if err == nil && shouldInvalidateDedupAfterCall(call.Name) {
+			s.invalidateSessionDedup(sessionKey, call.Name)
+		}
 		s.dedupCache.Done(key, result, err)
 		return result, false, err
 	}
 	result, err := s.executeToolImpl(ctx, sessionKey, call, locale, reporter)
+	if err == nil && shouldInvalidateDedupAfterCall(call.Name) {
+		s.invalidateSessionDedup(sessionKey, call.Name)
+	}
 	return result, isDedupHit, err
+}
+
+func shouldInvalidateDedupAfterCall(name string) bool {
+	if isCriticalTool(name) {
+		return true
+	}
+	switch name {
+	case "scheduled_task_create", "scheduled_task_update", "scheduled_task_delete", "knowledge_base_write", "knowledge_base_delete", "memory_upsert", "memory_delete":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Service) invalidateSessionDedup(sessionKey string, toolName string) {
+	affectedReadTools := affectedReadToolsForMutation(toolName)
+	s.dedupCache.ResetSessionTools(sessionKey, affectedReadTools)
+	s.dedupHitCallsMu.Lock()
+	prefix := sessionKey + "|"
+	for key := range s.dedupHitCalls {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		if len(affectedReadTools) == 0 {
+			delete(s.dedupHitCalls, key)
+			continue
+		}
+		cachedToolName, ok := dedupCacheKeyToolName(key, sessionKey)
+		if !ok {
+			// Legacy key format: clear conservatively.
+			delete(s.dedupHitCalls, key)
+			continue
+		}
+		for _, readTool := range affectedReadTools {
+			if cachedToolName == readTool {
+				delete(s.dedupHitCalls, key)
+				break
+			}
+		}
+	}
+	s.dedupHitCallsMu.Unlock()
+	s.logger.Info("session dedup invalidated after mutation", "session_key", sessionKey, "tool", toolName, "affected_read_tools", strings.Join(affectedReadTools, ","))
+}
+
+func affectedReadToolsForMutation(mutationTool string) []string {
+	switch mutationTool {
+	case "edr_host_isolate", "edr_host_release", "edr_host_blacklist_add", "edr_host_remove":
+		return []string{"edr_hosts"}
+	case "edr_ioc_add", "edr_ioc_update", "edr_ioc_delete":
+		return []string{"edr_iocs"}
+	case "edr_isolate_files_delete", "edr_isolate_files_release":
+		return []string{"edr_isolate_files"}
+	case "edr_task_send_instruction":
+		return []string{"edr_tasks", "edr_task_result"}
+	case "edr_plan_add", "edr_plan_edit", "edr_plan_cancel":
+		return []string{"edr_plans"}
+	case "edr_ioa_add", "edr_ioa_update", "edr_ioa_delete":
+		return []string{"edr_ioas", "edr_ioa_audit_log"}
+	case "edr_ioa_network_add", "edr_ioa_network_update", "edr_ioa_network_delete":
+		return []string{"edr_ioa_networks"}
+	case "edr_strategy_create", "edr_strategy_update", "edr_strategy_delete", "edr_strategy_status":
+		return []string{"edr_strategies", "edr_strategy_single", "edr_strategy_state"}
+	case "edr_host_offline_save":
+		return []string{"edr_host_offline"}
+	case "edr_detection_update_status":
+		return []string{"edr_detections", "edr_detection_view"}
+	case "edr_incident_batch_deal":
+		return []string{"edr_incidents", "edr_incident_summary"}
+	case "edr_instruction_policy_add", "edr_instruction_policy_update", "edr_instruction_policy_save_status", "edr_instruction_policy_delete", "edr_instruction_policy_sort":
+		return []string{"edr_instruction_policy_list"}
+	case "scheduled_task_create", "scheduled_task_update", "scheduled_task_delete":
+		return []string{"scheduled_task_list"}
+	case "knowledge_base_write", "knowledge_base_delete":
+		return []string{"knowledge_base_search"}
+	default:
+		return nil
+	}
+}
+
+func shouldForceFreshReadFromUserText(userText string) bool {
+	text := strings.ToLower(strings.TrimSpace(userText))
+	if text == "" {
+		return false
+	}
+	keywords := []string{
+		"重新查询", "重新请求查询", "重新查", "再查", "再查询", "再查一次", "重新拉取", "刷新", "refresh", "re-query", "retry query", "retry",
+	}
+	for _, keyword := range keywords {
+		if strings.Contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func isReadOnlyTool(name string) bool {
+	switch name {
+	case "current_time",
+		"edr_hosts", "edr_incidents", "edr_detections", "edr_log_alarms", "edr_logs", "edr_incident_view", "edr_detection_view",
+		"edr_iocs", "edr_isolate_files", "edr_tasks", "edr_task_result", "edr_plans",
+		"edr_virus_scan_record", "edr_virus_by_host", "edr_virus_by_hash", "edr_virus_hash_hosts",
+		"edr_ioas", "edr_ioa_audit_log", "edr_ioa_networks",
+		"edr_strategies", "edr_strategy_single", "edr_strategy_state", "edr_host_offline", "edr_instruction_policy_list",
+		"edr_incident_summary",
+		"artifact_outline", "artifact_search", "artifact_read",
+		"scheduled_task_list", "knowledge_base_search":
+		return true
+	default:
+		return false
+	}
+}
+
+func parseStrategyConfigContent(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return map[string]any{}
+	}
+	var config map[string]any
+	if err := json.Unmarshal([]byte(raw), &config); err != nil || config == nil {
+		return map[string]any{}
+	}
+	return config
+}
+
+func cloneAnyMap(src map[string]any) map[string]any {
+	if len(src) == 0 {
+		return map[string]any{}
+	}
+	dst := make(map[string]any, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
+}
+
+func applyStrategyConfigOverrides(base map[string]any, call planner.ToolCall) map[string]any {
+	merged := cloneAnyMap(base)
+	if call.ScanFileScope != "" {
+		merged["scan_file_scope"] = call.ScanFileScope
+	}
+	if call.StartupScanMode != "" {
+		merged["startup_scan_mode"] = call.StartupScanMode
+	}
+	if call.ArchiveSizeLimitEnabled != nil {
+		merged["archive_size_limit_enabled"] = *call.ArchiveSizeLimitEnabled
+	}
+	if call.ArchiveSizeLimit > 0 {
+		merged["archive_size_limit"] = call.ArchiveSizeLimit
+	}
+	if call.RealtimeMemCacheTechEnabled != nil {
+		merged["realtime_mem_cache_tech_enabled"] = *call.RealtimeMemCacheTechEnabled
+	}
+	if call.DynamicCpuMonitorEnabled != nil {
+		merged["dynamic_cpu_monitor_enabled"] = *call.DynamicCpuMonitorEnabled
+	}
+	if call.DynamicCpuHighPercent > 0 {
+		merged["dynamic_cpu_high_percent"] = call.DynamicCpuHighPercent
+	}
+	if call.StopRealtimeOnCpuHighEnabled != nil {
+		merged["stop_realtime_on_cpu_high_enabled"] = *call.StopRealtimeOnCpuHighEnabled
+	}
+	if call.StopRealtimeCpuHighPercent > 0 {
+		merged["stop_realtime_cpu_high_percent"] = call.StopRealtimeCpuHighPercent
+	}
+	if call.OwlOnRealtimeEnabled != nil {
+		merged["owl_on_realtime_enabled"] = *call.OwlOnRealtimeEnabled
+	}
+	if call.RealtimeScanArchiveEnabled != nil {
+		merged["realtime_scan_archive_enabled"] = *call.RealtimeScanArchiveEnabled
+	}
+	if call.RuntimeMaxFileSizeMb > 0 {
+		merged["runtime_max_file_size_mb"] = call.RuntimeMaxFileSizeMb
+	}
+	if call.CustomMaxFileSizeMb > 0 {
+		merged["custom_max_file_size_mb"] = call.CustomMaxFileSizeMb
+	}
+	return merged
+}
+
+func (s *Service) loadStrategyForUpdate(ctx context.Context, call planner.ToolCall) (edr.Strategy, error) {
+	if strings.TrimSpace(call.Type) == "" {
+		return edr.Strategy{}, fmt.Errorf("更新策略前缺少 type，无法读取当前配置")
+	}
+	strategy, err := s.edr.GetStrategySingle(ctx, call.Type)
+	if err != nil {
+		return edr.Strategy{}, err
+	}
+	if strings.TrimSpace(call.StrategyID) != "" && strings.TrimSpace(strategy.StrategyID) != "" && strings.TrimSpace(strategy.StrategyID) != strings.TrimSpace(call.StrategyID) {
+		return edr.Strategy{}, fmt.Errorf("当前策略上下文与待更新 strategy_id 不一致")
+	}
+	return strategy, nil
 }
 
 func (s *Service) executeToolImpl(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, error) {
@@ -2182,8 +2438,13 @@ func normalizeToolCallAliases(call *planner.ToolCall) {
 	}
 }
 
-func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (string, error) {
+func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (result string, err error) {
 	normalizeToolCallAliases(&call)
+	defer func() {
+		if err == nil && shouldInvalidateDedupAfterCall(call.Name) {
+			s.invalidateSessionDedup(sessionKey, call.Name)
+		}
+	}()
 	switch call.Name {
 	case "edr_host_isolate":
 		reporter.Step(ctx, "我在下发隔离动作，并等待任务回执。")
@@ -2463,51 +2724,15 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 		return fmt.Sprintf("策略创建成功，ID: %s", result.StrategyID), nil
 	case "edr_strategy_update":
 		reporter.Step(ctx, "我正在更新策略。")
-		configContent := make(map[string]any)
-		if call.ScanFileScope != "" {
-			configContent["scan_file_scope"] = call.ScanFileScope
+		currentStrategy, err := s.loadStrategyForUpdate(ctx, call)
+		if err != nil {
+			return "", fmt.Errorf("读取当前策略配置失败: %w", err)
 		}
-		if call.StartupScanMode != "" {
-			configContent["startup_scan_mode"] = call.StartupScanMode
-		}
-		if call.ArchiveSizeLimitEnabled != nil {
-			configContent["archive_size_limit_enabled"] = *call.ArchiveSizeLimitEnabled
-		}
-		if call.ArchiveSizeLimit > 0 {
-			configContent["archive_size_limit"] = call.ArchiveSizeLimit
-		}
-		if call.RealtimeMemCacheTechEnabled != nil {
-			configContent["realtime_mem_cache_tech_enabled"] = *call.RealtimeMemCacheTechEnabled
-		}
-		if call.DynamicCpuMonitorEnabled != nil {
-			configContent["dynamic_cpu_monitor_enabled"] = *call.DynamicCpuMonitorEnabled
-		}
-		if call.DynamicCpuHighPercent > 0 {
-			configContent["dynamic_cpu_high_percent"] = call.DynamicCpuHighPercent
-		}
-		if call.StopRealtimeOnCpuHighEnabled != nil {
-			configContent["stop_realtime_on_cpu_high_enabled"] = *call.StopRealtimeOnCpuHighEnabled
-		}
-		if call.StopRealtimeCpuHighPercent > 0 {
-			configContent["stop_realtime_cpu_high_percent"] = call.StopRealtimeCpuHighPercent
-		}
-		if call.OwlOnRealtimeEnabled != nil {
-			configContent["owl_on_realtime_enabled"] = *call.OwlOnRealtimeEnabled
-		}
-		if call.RealtimeScanArchiveEnabled != nil {
-			configContent["realtime_scan_archive_enabled"] = *call.RealtimeScanArchiveEnabled
-		}
-		if call.RuntimeMaxFileSizeMb > 0 {
-			configContent["runtime_max_file_size_mb"] = call.RuntimeMaxFileSizeMb
-		}
-		if call.CustomMaxFileSizeMb > 0 {
-			configContent["custom_max_file_size_mb"] = call.CustomMaxFileSizeMb
-		}
+		configContent := applyStrategyConfigOverrides(parseStrategyConfigContent(currentStrategy.ConfigContent), call)
 		configJSON, _ := json.Marshal(configContent)
-		// fmt.Printf("=== configJSON is: %s", configJSON)
 		if err := s.edr.UpdateStrategy(ctx, edr.UpdateStrategyRequest{
 			StrategyID:    call.StrategyID,
-			Name:          call.Name,
+			Name:          currentStrategy.Name,
 			Type:          call.Type,
 			ConfigContent: string(configJSON),
 		}); err != nil {
@@ -3080,7 +3305,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			sessionKey,
 			"edr_isolate_files_release_verify_pending",
 			string(payload),
-			fmt.Sprintf("edr_isolate_files_release isolate_file_guids=%s add_exclusion=%t release_all_hash=%t", guidCSV, addExclusion, releaseAllHash),
+			fmt.Sprintf("edr_isolate_files_release isolate_file_guids=%s, add_exclusion=%t, release_all_hash=%t", guidCSV, addExclusion, releaseAllHash),
 		)
 		if err == nil {
 			response = s.msg(locale, "confirm_isolate_files_release", map[string]string{
@@ -4436,11 +4661,6 @@ func formatStrategies(result edr.ListStrategiesResponse, page int, pageSize int)
 func formatStrategySingle(result edr.Strategy) string {
 	var lines []string
 	lines = append(lines, fmt.Sprintf("策略详情 - id=%s name=%s type=%s", result.StrategyID, result.Name, result.Type))
-	if result.Status == 1 {
-		lines = append(lines, "状态：启用")
-	} else if result.Status == 0 {
-		lines = append(lines, "状态：禁用")
-	}
 	if result.Content != "" {
 		lines = append(lines, fmt.Sprintf("内容：%s", result.Content))
 	}

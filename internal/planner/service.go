@@ -526,6 +526,7 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"8. 如果用户提供了稳定的长期偏好、资产映射、身份信息、主机别名、工作偏好，可以规划 memory_upsert。\n" +
 		"9. 如果用户要求更正或删除旧记忆，可以规划 memory_delete。\n" +
 		"10. 如果最近几轮里已经在查某个 incident、detection 或 artifact，而用户只说“再来一次”“继续”“retry”“again”，优先延续那条工具链。\n" +
+		"10.1 如果用户明确表达“重新查询/重新请求查询/再查一次/刷新”，必须重新调用对应只读查询工具至少 1 次；这类请求禁止直接复用上次结论给 direct_reply。\n" +
 		"11. 如果用户在查看、列表、搜索 IOC（威胁指标/hash/哈希），优先规划 edr_iocs；如需定位单条 IOC，继续用 edr_iocs 并携带 ioc_id 或 ioc_hash 过滤。\n" +
 		"12.1 对 edr_iocs，用户说第几页、每页多少条时要把 page 和 page_size 填进 tool_calls。在回复 IOC 列表结果时，优先引用每条记录的 id 字段（而不是 hash 字段），格式如“id=xxx”。\n" +
 		"12.2 如果用户想新增 IOC（加黑名单/加白名单），优先规划 edr_ioc_add，ioc_action 填 block 或 allow，ioc_hash 填 MD5/SHA1，host_type 填 ALL 或具体客户端 ID，file_name 填文件名（如有）。\n" +
@@ -547,7 +548,8 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"18. 如果用户要求发送指令到主机，优先规划 edr_task_send_instruction，需要同时填 client_id 和 instruction_name；如果提到文件路径（path=\\xxx 或\"文件路径是 xxx\"），必须提取到 path 字段中；涉及可疑文件、批量隔离、批量结束进程时 path 通常不能为空；如果提到隔离时间（如\"1小时\"、\"30分钟\"），必须提取到 time 字段并转换成秒为单位（如1小时=3600）；如果提到 pid 或进程 id，必须提取到 pid 字段中。\n" +
 		"19. 如果用户要开启/关闭离线终端管理、保存主机离线配置，优先规划 edr_host_offline_save，需要填 status（开启=1，关闭=2）和 time（离线超时天数，如18天则 time=18）。\n" +
 		"20. 如果用户在查看策略配置、查杀设置、扫描设置，优先规划 edr_strategy_single，type 填 virus_scan_settings；如果查资产登记策略，type 填 asset_registration。\n" +
-		"20.1 如果用户在修改查杀设置、修改扫描策略、修改扫描配置（查杀范围、启动模式、压缩包限制、CPU避让、实时防护文件大小等），优先规划 edr_strategy_update，需要填 strategy_id 与 type，并携带要修改的字段（scan_file_scope、startup_scan_mode、archive_size_limit_enabled、archive_size_limit、realtime_mem_cache_tech_enabled、dynamic_cpu_monitor_enabled、dynamic_cpu_high_percent、stop_realtime_on_cpu_high_enabled、stop_realtime_cpu_high_percent、owl_on_realtime_enabled、realtime_scan_archive_enabled、runtime_max_file_size_mb、custom_max_file_size_mb 等）。\n" +
+		"20.1 如果用户在修改查杀设置、修改扫描策略、修改扫描配置（查杀范围、启动模式、压缩包限制、CPU避让、实时防护文件大小等），优先规划 edr_strategy_update，需要填 strategy_id 与 type，并携带要修改的字段（scan_file_scope、startup_scan_mode、archive_size_limit_enabled、archive_size_limit、realtime_mem_cache_tech_enabled、dynamic_cpu_monitor_enabled、dynamic_cpu_high_percent、stop_realtime_on_cpu_high_enabled、stop_realtime_cpu_high_percent、owl_on_realtime_enabled、realtime_scan_archive_enabled、runtime_max_file_size_mb、custom_max_file_size_mb 等）。如果用户只说“扫描文件大小限制/文件大小限制”，默认映射 runtime_max_file_size_mb；未明确提到的其他配置项不要自行改动，保持当前策略原值。\n" +
+		"20.1.1 如果用户是在刚查看过当前查杀设置后继续说“启用/修改...”，先用 edr_strategy_single 获取当前策略，通过查询结果补全参数后再去修改。\n" +
 		"20.2 如果用户在查看策略列表，优先规划 edr_strategies，并提取 type 以及分页参数。\n" +
 		"20.3 如果用户要创建/删除策略或切换策略状态，分别优先规划 edr_strategy_create / edr_strategy_delete / edr_strategy_status，并提取 strategy_id、type、status 等关键字段。\n" +
 		"20.4 如果用户在查看或维护 IOA 规则，查看列表用 edr_ioas；查看活动记录用 edr_ioa_audit_log；查看网络排除列表用 edr_ioa_networks；新增/更新/删除分别用 edr_ioa_add / edr_ioa_update / edr_ioa_delete 与 edr_ioa_network_add / edr_ioa_network_update / edr_ioa_network_delete。\n" +
