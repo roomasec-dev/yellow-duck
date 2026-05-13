@@ -8,8 +8,8 @@
 - 执行前要确认网络排除的名称、IP 等关键参数明确无歧义。
 
 输入说明：
-- plan_name：排除名称，必填。
-- client_ip：IP 地址，可选。
+- exclusion_name：排除名称，必填。
+- client_ip：IP 地址，必填。
 - host_type：主机类型，可选。
 
 输出建议：

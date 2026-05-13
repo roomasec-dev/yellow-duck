@@ -8,7 +8,7 @@
 - 执行前要确认 IOA 的名称、严重程度等关键参数明确无歧义。
 
 输入说明：
-- kb_query：严重程度，必填，如"high"、"medium"、"low"。
+- severity：严重程度，必填，如"high"、"medium"、"low"。
 - file_name：文件名，可选。
 - command_line：命令行，可选。
 - reason：描述，可选。

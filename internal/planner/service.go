@@ -14,62 +14,59 @@ import (
 )
 
 type ToolCall struct {
-	Name                string `json:"name"`
-	Hostname            string `json:"hostname,omitempty"`
-	ClientID            string `json:"client_id,omitempty"`
-	ClientIP            string `json:"client_ip,omitempty"`
-	OSType              string `json:"os_type,omitempty"`
-	Operation           string `json:"operation,omitempty"`
-	CommandLine         string `json:"command_line,omitempty"`
-	StartTime           string `json:"start_time,omitempty"`
-	EndTime             string `json:"end_time,omitempty"`
-	Page                int    `json:"page,omitempty"`
-	PageSize            int    `json:"page_size,omitempty"`
-	IncidentID          string `json:"incident_id,omitempty"`
-	DetectionID         string `json:"detection_id,omitempty"`
-	ViewType            string `json:"view_type,omitempty"`
-	ProcessUUID         string `json:"process_uuid,omitempty"`
-	ArtifactID          string `json:"artifact_id,omitempty"`
-	Query               string `json:"query,omitempty"`
-	StartLine           int    `json:"start_line,omitempty"`
-	LineCount           int    `json:"line_count,omitempty"`
-	MemoryKey           string `json:"memory_key,omitempty"`
-	MemoryValue         string `json:"memory_value,omitempty"`
-	TaskID              string `json:"task_id,omitempty"`
-	TaskTitle           string `json:"task_title,omitempty"`
-	TaskPrompt          string `json:"task_prompt,omitempty"`
-	TaskAction          string `json:"task_action,omitempty"`
-	TaskStatus          string `json:"task_status,omitempty"`
-	TaskFeedback        string `json:"task_feedback,omitempty"`
-	TaskIntervalMinutes int    `json:"task_interval_minutes,omitempty"`
-	TaskChatID          string `json:"task_chat_id,omitempty"`
-	InstructionName     string `json:"instruction_name,omitempty"`
-	Path                string `json:"path,omitempty"`
-	KBTitle             string `json:"kb_title,omitempty"`
-	KBQuery             string `json:"kb_query,omitempty"`
-	KBContent           string `json:"kb_content,omitempty"`
-	KBMode              string `json:"kb_mode,omitempty"`
-	KBOldText           string `json:"kb_old_text,omitempty"`
-	KBNewText           string `json:"kb_new_text,omitempty"`
-	Reason              string `json:"reason,omitempty"`
-	Critical            bool   `json:"critical,omitempty"`
-	IOCAction           string `json:"ioc_action,omitempty"`
-	IOCID               string `json:"ioc_id,omitempty"`
-	IOCHash             string `json:"ioc_hash,omitempty"`
-	Description         string `json:"description,omitempty"`
-	// Deprecated: keep legacy alias for backward compatibility with older payloads.
-	IOCDescription string `json:"ioc_description,omitempty"`
-	ExpirationDate string `json:"expiration_date,omitempty"`
-	// Deprecated: keep legacy alias for backward compatibility with older payloads.
-	IOCExpirationDate string `json:"ioc_expiration_date,omitempty"`
-	FileName          string `json:"file_name,omitempty"`
-	HostType          string `json:"host_type,omitempty"`
-	// Deprecated: keep legacy aliases for backward compatibility with older payloads.
-	IOCFileName                  string `json:"ioc_file_name,omitempty"`
-	IOCHostType                  string `json:"ioc_host_type,omitempty"`
+	Name                         string `json:"name"`
+	Hostname                     string `json:"hostname,omitempty"`
+	ClientID                     string `json:"client_id,omitempty"`
+	ClientIP                     string `json:"client_ip,omitempty"`
+	OSType                       string `json:"os_type,omitempty"`
+	Operation                    string `json:"operation,omitempty"`
+	CommandLine                  string `json:"command_line,omitempty"`
+	StartTime                    string `json:"start_time,omitempty"`
+	EndTime                      string `json:"end_time,omitempty"`
+	Page                         int    `json:"page,omitempty"`
+	PageSize                     int    `json:"page_size,omitempty"`
+	IncidentID                   string `json:"incident_id,omitempty"`
+	DetectionID                  string `json:"detection_id,omitempty"`
+	ViewType                     string `json:"view_type,omitempty"`
+	ProcessUUID                  string `json:"process_uuid,omitempty"`
+	ArtifactID                   string `json:"artifact_id,omitempty"`
+	Query                        string `json:"query,omitempty"`
+	StartLine                    int    `json:"start_line,omitempty"`
+	LineCount                    int    `json:"line_count,omitempty"`
+	MemoryKey                    string `json:"memory_key,omitempty"`
+	MemoryValue                  string `json:"memory_value,omitempty"`
+	TaskID                       string `json:"task_id,omitempty"`
+	TaskTitle                    string `json:"task_title,omitempty"`
+	TaskPrompt                   string `json:"task_prompt,omitempty"`
+	TaskAction                   string `json:"task_action,omitempty"`
+	TaskStatus                   string `json:"task_status,omitempty"`
+	TaskFeedback                 string `json:"task_feedback,omitempty"`
+	TaskIntervalMinutes          int    `json:"task_interval_minutes,omitempty"`
+	TaskChatID                   string `json:"task_chat_id,omitempty"`
+	InstructionName              string `json:"instruction_name,omitempty"`
+	Path                         string `json:"path,omitempty"`
+	KBTitle                      string `json:"kb_title,omitempty"`
+	KBQuery                      string `json:"kb_query,omitempty"`
+	KBContent                    string `json:"kb_content,omitempty"`
+	KBMode                       string `json:"kb_mode,omitempty"`
+	KBOldText                    string `json:"kb_old_text,omitempty"`
+	KBNewText                    string `json:"kb_new_text,omitempty"`
+	Reason                       string `json:"reason,omitempty"`
+	Severity                     string `json:"severity,omitempty"`
+	Critical                     bool   `json:"critical,omitempty"`
+	IOCAction                    string `json:"ioc_action,omitempty"`
+	IOCID                        string `json:"ioc_id,omitempty"`
+	IOCHash                      string `json:"ioc_hash,omitempty"`
+	IOAID                        string `json:"ioa_id,omitempty"`
+	IOAIPID                      string `json:"ioa_ip_id,omitempty"`
+	Description                  string `json:"description,omitempty"`
+	ExpirationDate               string `json:"expiration_date,omitempty"`
+	FileName                     string `json:"file_name,omitempty"`
+	HostType                     string `json:"host_type,omitempty"`
 	IsolateFileGUIDs             string `json:"isolate_file_guids,omitempty"`
 	IsolateFileAddExcl           bool   `json:"isolate_file_add_exclusion,omitempty"`
 	IsolateFileReleaseAll        bool   `json:"isolate_file_release_all,omitempty"`
+	ExclusionName                string `json:"exclusion_name,omitempty"`
 	PlanName                     string `json:"plan_name,omitempty"`
 	ScanType                     int    `json:"scan_type,omitempty"`
 	PlanType                     int    `json:"plan_type,omitempty"`
@@ -213,37 +210,10 @@ func (s *Service) BuildPlan(ctx context.Context, modelRef string, userText strin
 		plan.ToolCalls[i].IOCHash = strings.TrimSpace(plan.ToolCalls[i].IOCHash)
 		plan.ToolCalls[i].IOCID = strings.TrimSpace(plan.ToolCalls[i].IOCID)
 		plan.ToolCalls[i].Description = strings.TrimSpace(plan.ToolCalls[i].Description)
-		plan.ToolCalls[i].IOCDescription = strings.TrimSpace(plan.ToolCalls[i].IOCDescription)
+		plan.ToolCalls[i].Severity = strings.TrimSpace(plan.ToolCalls[i].Severity)
 		plan.ToolCalls[i].ExpirationDate = strings.TrimSpace(plan.ToolCalls[i].ExpirationDate)
-		plan.ToolCalls[i].IOCExpirationDate = strings.TrimSpace(plan.ToolCalls[i].IOCExpirationDate)
 		plan.ToolCalls[i].FileName = strings.TrimSpace(plan.ToolCalls[i].FileName)
 		plan.ToolCalls[i].HostType = strings.TrimSpace(plan.ToolCalls[i].HostType)
-		plan.ToolCalls[i].IOCFileName = strings.TrimSpace(plan.ToolCalls[i].IOCFileName)
-		plan.ToolCalls[i].IOCHostType = strings.TrimSpace(plan.ToolCalls[i].IOCHostType)
-		if plan.ToolCalls[i].Description == "" {
-			plan.ToolCalls[i].Description = plan.ToolCalls[i].IOCDescription
-		}
-		if plan.ToolCalls[i].IOCDescription == "" {
-			plan.ToolCalls[i].IOCDescription = plan.ToolCalls[i].Description
-		}
-		if plan.ToolCalls[i].ExpirationDate == "" {
-			plan.ToolCalls[i].ExpirationDate = plan.ToolCalls[i].IOCExpirationDate
-		}
-		if plan.ToolCalls[i].IOCExpirationDate == "" {
-			plan.ToolCalls[i].IOCExpirationDate = plan.ToolCalls[i].ExpirationDate
-		}
-		if plan.ToolCalls[i].FileName == "" {
-			plan.ToolCalls[i].FileName = plan.ToolCalls[i].IOCFileName
-		}
-		if plan.ToolCalls[i].HostType == "" {
-			plan.ToolCalls[i].HostType = plan.ToolCalls[i].IOCHostType
-		}
-		if plan.ToolCalls[i].IOCFileName == "" {
-			plan.ToolCalls[i].IOCFileName = plan.ToolCalls[i].FileName
-		}
-		if plan.ToolCalls[i].IOCHostType == "" {
-			plan.ToolCalls[i].IOCHostType = plan.ToolCalls[i].HostType
-		}
 		plan.ToolCalls[i].IsolateFileGUIDs = strings.TrimSpace(plan.ToolCalls[i].IsolateFileGUIDs)
 		plan.ToolCalls[i].Path = strings.TrimSpace(plan.ToolCalls[i].Path)
 		plan.ToolCalls[i].ScanFileScope = strings.TrimSpace(plan.ToolCalls[i].ScanFileScope)
@@ -529,9 +499,9 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"10.1 如果用户明确表达“重新查询/重新请求查询/再查一次/刷新”，必须重新调用对应只读查询工具至少 1 次；这类请求禁止直接复用上次结论给 direct_reply。\n" +
 		"11. 如果用户在查看、列表、搜索 IOC（威胁指标/hash/哈希）、文件黑白名单，优先规划 edr_iocs；如需定位单条 IOC，继续用 edr_iocs 并携带 ioc_id 或 ioc_hash 过滤。\n" +
 		"12.1 对 edr_iocs，用户说第几页、每页多少条时要把 page 和 page_size 填进 tool_calls。在回复 IOC 列表结果时，优先引用每条记录的 id 字段（而不是 hash 字段），格式如“id=xxx”。\n" +
-		"12.2 如果用户想新增 IOC（加文件黑名单/加文件白名单），优先规划 edr_ioc_add，ioc_action 填 block 或 allow，ioc_hash 填 MD5/SHA1，host_type 填 ALL 或具体客户端 ID，file_name 填文件名（如有）。\n" +
-		"12.3 如果用户想修改已有 IOC，优先规划 edr_ioc_update，需要同时填 ioc_id（必填）和 hash（必填），以及要改的字段（ioc_action、host_type、description、expiration_date 等）。\n" +
-		"12.4 如果用户想删除 IOC，优先规划 edr_ioc_delete，需要填 ioc_id。\n" +
+		"12.2 如果用户想新增 IOC（加文件黑名单/加文件白名单），优先规划 edr_ioc_add。\n" +
+		"12.3 如果用户想修改 IOC，优先规划 edr_ioc_update。\n" +
+		"12.4 如果用户想删除 IOC，优先规划 edr_ioc_delete。\n" +
 		"13. 如果用户在查看隔离文件列表，优先规划 edr_isolate_files。\n" +
 		"14. 如果用户在放行隔离文件（解除隔离/恢复文件），优先规划 edr_isolate_files_release，需要填 isolate_file_guids（多个用英文逗号分隔）；如果同时要把 hash 加排除名单，isolate_file_add_exclusion=true。\n" +
 		"14.1 如果用户在删除隔离文件记录（彻底删除），优先规划 edr_isolate_files_delete，需要填 isolate_file_guids。注意：删除是彻底移除记录，放行是解除隔离让文件恢复正常使用，两者完全不同。\n" +
@@ -553,11 +523,11 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"20.2 如果用户在查看策略列表，优先规划 edr_strategies，并提取 type 以及分页参数。\n" +
 		"20.3 如果用户要创建/删除策略或切换策略状态，分别优先规划 edr_strategy_create / edr_strategy_delete / edr_strategy_status，并提取 strategy_id、type、status 等关键字段。\n" +
 		"20.4 如果用户在查病毒查杀记录或按主机/哈希扩线，分别优先规划 edr_virus_scan_record / edr_virus_by_host / edr_virus_by_hash / edr_virus_hash_hosts。\n" +
-		"21. 如果用户在查看或维护 IOA 规则，查看列表用 edr_ioas；查看活动记录用 edr_ioa_audit_log；查看网络排除列表或ip白名单用 edr_ioa_networks；新增/更新/删除分别用 edr_ioa_add / edr_ioa_update / edr_ioa_delete 与 edr_ioa_network_add / edr_ioa_network_update / edr_ioa_network_delete。\n" +
+		"21. 如果用户在查看或维护 IOA 规则，查看列表用 edr_ioas；查看活动记录用 edr_ioa_audit_log；查看网络排除列表或ip白名单用 edr_ioa_networks；新增/更新/删除分别用 edr_ioa_add / edr_ioa_update / edr_ioa_delete 与 edr_ioa_network_add / edr_ioa_network_update / edr_ioa_network_delete。修改或删除 ip 白名单时，用户说的 id 指 ioa_ip_id，不是 ioa_id。\n" +
 		"22. 如果用户在查看自动响应策略列表，优先规划 edr_instruction_policy_list；如用户明确要新增、更新、删除、排序、启停，则规划对应 edr_instruction_policy_add / update / delete / sort / save_status。\n" +
 		"23. 无论是否调用工具，都额外给一个面向用户的简短 plan_preview，说明你准备怎么查或为什么准备收口，限制在 18 到 40 个字，不能泄露内部术语。\n" +
 		"24. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
-		"只输出 JSON，不要 markdown。结构：{\"task_mode\":\"overview\",\"phase\":\"overview\",\"intent_summary\":\"\",\"done_when\":\"\",\"need_clarification\":false,\"clarifying_question\":\"\",\"plan_preview\":\"\",\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"command_line\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"instruction_name\":\"\",\"path\":\"\",\"time\":0,\"pid\":0,\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"description\":\"\",\"expiration_date\":\"\",\"file_name\":\"\",\"host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false,\"plan_name\":\"\",\"scan_type\":0,\"plan_type\":0,\"scope\":0,\"rid\":\"\",\"ids\":\"\",\"allow\":false,\"scene\":\"\",\"comment\":\"\",\"status\":0,\"type\":\"\",\"strategy_id\":\"\",\"verify_code\":\"\",\"hunting_preset_id\":0,\"custom_kql\":\"\",\"quick_time\":{\"time_num\":0,\"time_span\":\"\",\"time_type\":\"\"}}]}"
+		"只输出 JSON，不要 markdown。结构：{\"task_mode\":\"overview\",\"phase\":\"overview\",\"intent_summary\":\"\",\"done_when\":\"\",\"need_clarification\":false,\"clarifying_question\":\"\",\"plan_preview\":\"\",\"direct_reply\":\"\",\"tool_calls\":[{\"name\":\"\",\"hostname\":\"\",\"client_id\":\"\",\"client_ip\":\"\",\"os_type\":\"\",\"operation\":\"\",\"command_line\":\"\",\"start_time\":\"\",\"end_time\":\"\",\"page\":0,\"page_size\":0,\"incident_id\":\"\",\"detection_id\":\"\",\"view_type\":\"\",\"process_uuid\":\"\",\"artifact_id\":\"\",\"query\":\"\",\"start_line\":0,\"line_count\":0,\"memory_key\":\"\",\"memory_value\":\"\",\"task_id\":\"\",\"instruction_name\":\"\",\"path\":\"\",\"time\":0,\"pid\":0,\"task_title\":\"\",\"task_prompt\":\"\",\"task_action\":\"\",\"task_status\":\"\",\"task_feedback\":\"\",\"task_interval_minutes\":0,\"kb_title\":\"\",\"kb_query\":\"\",\"kb_content\":\"\",\"kb_mode\":\"\",\"kb_old_text\":\"\",\"kb_new_text\":\"\",\"reason\":\"\",\"severity\":\"\",\"critical\":false,\"ioc_action\":\"\",\"ioc_hash\":\"\",\"ioc_id\":\"\",\"description\":\"\",\"expiration_date\":\"\",\"file_name\":\"\",\"host_type\":\"\",\"isolate_file_guids\":\"\",\"isolate_file_add_exclusion\":false,\"isolate_file_release_all\":false,\"exclusion_name\":\"\",\"plan_name\":\"\",\"scan_type\":0,\"plan_type\":0,\"scope\":0,\"rid\":\"\",\"ids\":\"\",\"allow\":false,\"scene\":\"\",\"comment\":\"\",\"status\":0,\"type\":\"\",\"strategy_id\":\"\",\"verify_code\":\"\",\"hunting_preset_id\":0,\"custom_kql\":\"\",\"quick_time\":{\"time_num\":0,\"time_span\":\"\",\"time_type\":\"\"}}]}"
 	if memoryText != "" {
 		base += "\n\n当前已有记忆：\n" + memoryText
 	}

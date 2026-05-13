@@ -58,7 +58,7 @@
 **EDR IOC管理**
 - `/edr iocs [ioc_action] [hash] [page] [page_size]` IOC列表
 - `/edr ioc-add <ioc_action> <ioc_hash> [description] [expiration_date] [file_name] [host_type]` 添加IOC
-  - `ioc_action` 为必填，动作类型（如 `block` / `watch`）
+  - `ioc_action` 为必填，动作类型（如 `black` / `white`）
   - `ioc_hash` 为必填，支持 MD5/SHA1/SHA256
   - `description`、`expiration_date`（如 `2026-12-31`）、`file_name`、`host_type` 为可选
 - `/edr ioc-update <ioc_id> <ioc_hash> [ioc_action] [description] [expiration_date]` 更新IOC

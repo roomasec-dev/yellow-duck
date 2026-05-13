@@ -8,12 +8,12 @@
 - 执行前要确认 IOC 的哈希值、动作类型等关键参数明确无歧义。
 
 输入说明：
-- ioc_action：动作类型，必填，如"block"、"watch"等。
-- ioc_hash：哈希值，必填，支持 MD5/SHA1/SHA256。
+- ioc_action：动作类型，必填，如"Allow"、"Detect and prevent"等。
+- ioc_hash：哈希值，必填，支持 SHA1。
 - description：描述，可选，说明为什么要添加这个 IOC。
 - expiration_date：过期时间，可选，格式如"2024-12-31"。
 - file_name：文件名，可选。
-- host_type：主机类型，可选。
+- host_type：主机类型，可选，默认值 ALL。
 
 输出建议：
 - 成功后汇报 IOC 的哈希值和添加结果。

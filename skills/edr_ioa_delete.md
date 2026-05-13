@@ -8,7 +8,7 @@
 - 执行前要确认 IOA ID 明确无歧义。
 
 输入说明：
-- ioc_id：IOA ID，必填，用于指定要删除的 IOA。
+- ioa_id：IOA ID，必填，用于指定要删除的 IOA。
 
 输出建议：
 - 成功后汇报已删除的 IOA ID。

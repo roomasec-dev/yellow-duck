@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -553,7 +554,6 @@ func (s *Service) tryFillPendingActionSlots(ctx context.Context, sessionKey stri
 	if err := json.Unmarshal([]byte(pending.Payload), &call); err != nil {
 		return "", true, err
 	}
-	normalizeToolCallAliases(&call)
 
 	if !fillActionSlotsFromText(&call, userText, schema) {
 		return "", false, nil
@@ -670,7 +670,6 @@ func (s *Service) handlePendingConfirmation(ctx context.Context, sessionKey stri
 			if err := json.Unmarshal([]byte(pending.Payload), &call); err != nil {
 				return "", true, err
 			}
-			normalizeToolCallAliases(&call)
 			call.VerifyCode = code
 			response, execErr := s.executeConfirmedTool(ctx, sessionKey, call, locale, reporter)
 			if delErr := s.store.DeletePendingAction(ctx, sessionKey); delErr != nil && execErr == nil {
@@ -1221,7 +1220,7 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 		s.logger.Info("execute tool round", "session_key", sessionKey, "tool_count", len(currentCalls))
 		controller.ObserveRound(currentCalls)
 		forceFreshRead := shouldForceFreshReadFromUserText(userText)
-		stepResults, earlyReply, err := s.executeToolBatch(ctx, sessionKey, locale, currentCalls, reporter, fastTrackConfirmedCritical, forceFreshRead)
+		stepResults, earlyReply, err := s.executeToolBatch(ctx, sessionKey, userText, locale, currentCalls, reporter, fastTrackConfirmedCritical, forceFreshRead)
 		if err != nil {
 			return "", err
 		}
@@ -1399,7 +1398,8 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 			call.Reason,
 			fmt.Sprintf("critical=%t", call.Critical),
 			call.IOCAction,
-			call.IOCID,
+			call.IOAID,
+			call.IOAIPID,
 			call.IOCHash,
 			call.Description,
 			call.ExpirationDate,
@@ -1408,6 +1408,7 @@ func toolCallsSignature(calls []planner.ToolCall) string {
 			call.IsolateFileGUIDs,
 			fmt.Sprintf("add_excl=%t", call.IsolateFileAddExcl),
 			fmt.Sprintf("release_all=%t", call.IsolateFileReleaseAll),
+			call.ExclusionName,
 			call.PlanName,
 			fmt.Sprintf("st=%d", call.ScanType),
 			fmt.Sprintf("pt=%d", call.PlanType),
@@ -1487,12 +1488,15 @@ func toolCallCacheKey(call planner.ToolCall) string {
 		call.Reason,
 		call.IOCAction,
 		call.IOCID,
+		call.IOAID,
+		call.IOAIPID,
 		call.IOCHash,
 		call.Description,
 		call.ExpirationDate,
 		call.FileName,
 		call.HostType,
 		call.IsolateFileGUIDs,
+		call.ExclusionName,
 		call.PlanName,
 		fmt.Sprintf("st=%d", call.ScanType),
 		fmt.Sprintf("pt=%d", call.PlanType),
@@ -1571,8 +1575,17 @@ func missingCriticalParams(call planner.ToolCall) []string {
 	case "edr_ioc_update":
 		add(strings.TrimSpace(call.IOCID) != "", "ioc_id")
 		add(strings.TrimSpace(call.IOCHash) != "", "ioc_hash")
-	case "edr_ioc_delete", "edr_ioa_update", "edr_ioa_delete", "edr_ioa_network_update", "edr_ioa_network_delete":
+	case "edr_ioc_delete":
 		add(strings.TrimSpace(call.IOCID) != "", "ioc_id")
+	case "edr_ioa_update", "edr_ioa_delete":
+		add(strings.TrimSpace(call.IOAID) != "", "ioa_id")
+	case "edr_ioa_network_add":
+		add(strings.TrimSpace(call.ExclusionName) != "", "exclusion_name")
+		add(strings.TrimSpace(call.ClientIP) != "", "client_ip")
+	case "edr_ioa_network_update":
+		add(strings.TrimSpace(call.IOAIPID) != "", "ioa_ip_id")
+	case "edr_ioa_network_delete":
+		add(strings.TrimSpace(call.IOAIPID) != "", "ioa_ip_id")
 	case "edr_isolate_files_delete", "edr_isolate_files_release":
 		add(strings.TrimSpace(call.IsolateFileGUIDs) != "", "isolate_file_guids")
 	case "edr_plan_add":
@@ -1634,13 +1647,14 @@ func canFastTrackCriticalConfirmation(call planner.ToolCall) bool {
 	return call.Name != "edr_task_send_instruction" && call.Name != "edr_host_isolate" && call.Name != "edr_host_release"
 }
 
-func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, locale string, calls []planner.ToolCall, reporter *progress.Reporter, fastTrackConfirmedCritical bool, forceFreshRead bool) ([]string, string, error) {
+func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, userText string, locale string, calls []planner.ToolCall, reporter *progress.Reporter, fastTrackConfirmedCritical bool, forceFreshRead bool) ([]string, string, error) {
 	var results []string
 	for _, call := range calls {
 		if err := ctx.Err(); err != nil {
 			return nil, "", err
 		}
 		applyActionSlotDefaults(&call)
+		fillCriticalParamsFromUserText(&call, userText)
 		if err := validateCriticalCall(call); err != nil {
 			response := fmt.Sprintf("这个动作风险比较高，但参数还不完整：%s。请补充缺失参数后我再执行。", err.Error())
 			stored, storeErr := s.storeAssistantReply(ctx, sessionKey, response)
@@ -1675,6 +1689,9 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 			if call.ClientID != "" {
 				summary += ", client_id=" + call.ClientID
 			}
+			if call.ClientIP != "" {
+				summary += ", client_ip=" + call.ClientIP
+			}
 			if call.InstructionName != "" {
 				summary += ", instruction_name=" + call.InstructionName
 			}
@@ -1704,6 +1721,15 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, local
 			}
 			if call.IOCID != "" {
 				summary += ", ioc_id=" + call.IOCID
+			}
+			if call.IOAID != "" {
+				summary += ", ioa_id=" + call.IOAID
+			}
+			if call.IOAIPID != "" {
+				summary += ", ioa_ip_id=" + call.IOAIPID
+			}
+			if call.ExclusionName != "" {
+				summary += ", exclusion_name=" + call.ExclusionName
 			}
 			if call.IsolateFileGUIDs != "" {
 				summary += ", isolate_file_guids=" + call.IsolateFileGUIDs
@@ -2396,7 +2422,6 @@ func (s *Service) executePendingAction(ctx context.Context, sessionKey string, p
 	if err := json.Unmarshal([]byte(pending.Payload), &call); err != nil {
 		return "", err
 	}
-	normalizeToolCallAliases(&call)
 	applyActionSlotDefaults(&call)
 	if err := validateCriticalCall(call); err != nil {
 		return "", err
@@ -2408,38 +2433,92 @@ func (s *Service) executePendingAction(ctx context.Context, sessionKey string, p
 	return s.storeAssistantReply(ctx, sessionKey, result)
 }
 
-func normalizeToolCallAliases(call *planner.ToolCall) {
+var ipv4Pattern = regexp.MustCompile(`\b(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}\b`)
+
+func fillCriticalParamsFromUserText(call *planner.ToolCall, userText string) {
 	if call == nil {
 		return
 	}
-	if call.Description == "" {
-		call.Description = call.IOCDescription
+	text := strings.TrimSpace(userText)
+	if text == "" {
+		return
 	}
-	if call.IOCDescription == "" {
-		call.IOCDescription = call.Description
-	}
-	if call.ExpirationDate == "" {
-		call.ExpirationDate = call.IOCExpirationDate
-	}
-	if call.IOCExpirationDate == "" {
-		call.IOCExpirationDate = call.ExpirationDate
-	}
-	if call.FileName == "" {
-		call.FileName = call.IOCFileName
-	}
-	if call.IOCFileName == "" {
-		call.IOCFileName = call.FileName
-	}
-	if call.HostType == "" {
-		call.HostType = call.IOCHostType
-	}
-	if call.IOCHostType == "" {
-		call.IOCHostType = call.HostType
+
+	switch call.Name {
+	case "edr_ioa_network_add":
+		if strings.TrimSpace(call.ClientIP) == "" {
+			if ip := extractFirstIPv4(text); ip != "" {
+				call.ClientIP = ip
+			}
+		}
+		if strings.TrimSpace(call.ExclusionName) == "" {
+			if name := extractIOANetworkName(text); name != "" {
+				call.ExclusionName = name
+			}
+		}
+	case "edr_ioa_network_update":
+		if strings.TrimSpace(call.ClientIP) == "" {
+			if ip := extractFirstIPv4(text); ip != "" {
+				call.ClientIP = ip
+			}
+		}
+		if strings.TrimSpace(call.IOAIPID) == "" {
+			if id := extractIOANetworkID(text); id != "" {
+				call.IOAIPID = id
+			}
+		}
+		if strings.TrimSpace(call.ExclusionName) == "" {
+			if name := extractIOANetworkName(text); name != "" {
+				call.ExclusionName = name
+			}
+		}
 	}
 }
 
+func extractFirstIPv4(text string) string {
+	match := ipv4Pattern.FindString(strings.TrimSpace(text))
+	return strings.TrimSpace(match)
+}
+
+func extractIOANetworkName(text string) string {
+	patterns := []string{
+		`(?:名称|名字|name|exclusion_name|plan_name)\s*(?:是|为|位|=|:|：)\s*([^\s,，。；;]+)`,
+		`(?:新增|添加|创建)\s*(?:ip\s*)?(?:白名单|网络排除)\s*([^\s,，。；;]+)`,
+	}
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		match := re.FindStringSubmatch(text)
+		if len(match) < 2 {
+			continue
+		}
+		name := strings.TrimSpace(match[1])
+		if name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+func extractIOANetworkID(text string) string {
+	patterns := []string{
+		`(?:修改|更新|删除).*(?:ip\s*白名单|ip白名单|网络排除).*(?:ioa_ip_id|id)\s*(?:是|为|位|=|:|：)\s*([^\s,，。；;]+)`,
+		`(?:ioa_ip_id|id)\s*(?:是|为|位|=|:|：)\s*([^\s,，。；;]+)`,
+	}
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		match := re.FindStringSubmatch(text)
+		if len(match) < 2 {
+			continue
+		}
+		id := strings.TrimSpace(match[1])
+		if id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
 func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, call planner.ToolCall, locale string, reporter *progress.Reporter) (result string, err error) {
-	normalizeToolCallAliases(&call)
 	defer func() {
 		if err == nil && shouldInvalidateDedupAfterCall(call.Name) {
 			s.invalidateSessionDedup(sessionKey, call.Name)
@@ -2650,45 +2729,37 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 		return "自动响应策略排序已保存", nil
 	case "edr_ioa_add":
 		reporter.Step(ctx, "我正在添加 IOA。")
-		commandLine := strings.TrimSpace(call.CommandLine)
-		if commandLine == "" {
-			commandLine = strings.TrimSpace(call.Operation)
-		}
 		if err := s.edr.AddIOA(ctx, edr.AddIOARequest{
-			CommandLine: commandLine,
+			CommandLine: call.CommandLine,
 			Description: call.Reason,
 			FileName:    call.FileName,
 			HostType:    call.HostType,
-			Severity:    call.KBQuery,
+			Severity:    call.Severity,
 		}); err != nil {
 			return "", err
 		}
 		return "IOA 添加成功", nil
 	case "edr_ioa_update":
 		reporter.Step(ctx, "我正在更新 IOA。")
-		commandLine := strings.TrimSpace(call.CommandLine)
-		if commandLine == "" {
-			commandLine = strings.TrimSpace(call.Operation)
-		}
 		if err := s.edr.UpdateIOA(ctx, edr.UpdateIOARequest{
-			ID:          call.IOCID,
-			CommandLine: commandLine,
+			ID:          call.IOAID,
+			CommandLine: call.CommandLine,
 			Description: call.Reason,
 			FileName:    call.FileName,
 		}); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("IOA %s 更新成功", call.IOCID), nil
+		return fmt.Sprintf("IOA %s 更新成功", call.IOAID), nil
 	case "edr_ioa_delete":
 		reporter.Step(ctx, "我正在删除 IOA。")
-		if err := s.edr.DeleteIOA(ctx, call.IOCID); err != nil {
+		if err := s.edr.DeleteIOA(ctx, call.IOAID); err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("IOA %s 已删除", call.IOCID), nil
 	case "edr_ioa_network_add":
 		reporter.Step(ctx, "我正在添加 IOA 网络排除。")
 		if err := s.edr.AddIOANetwork(ctx, edr.AddIOANetworkRequest{
-			ExclusionName: call.PlanName,
+			ExclusionName: call.ExclusionName,
 			IP:            call.ClientIP,
 			HostType:      call.HostType,
 		}); err != nil {
@@ -2698,19 +2769,19 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 	case "edr_ioa_network_update":
 		reporter.Step(ctx, "我正在更新 IOA 网络排除。")
 		if err := s.edr.UpdateIOANetwork(ctx, edr.UpdateIOANetworkRequest{
-			ID:            call.IOCID,
-			ExclusionName: call.PlanName,
+			ID:            call.IOAIPID,
+			ExclusionName: call.ExclusionName,
 			IP:            call.ClientIP,
 		}); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("IOA 网络排除 %s 更新成功", call.IOCID), nil
+		return fmt.Sprintf("IOA 网络排除 %s 更新成功", call.IOAIPID), nil
 	case "edr_ioa_network_delete":
 		reporter.Step(ctx, "我正在删除 IOA 网络排除。")
-		if err := s.edr.DeleteIOANetwork(ctx, call.IOCID); err != nil {
+		if err := s.edr.DeleteIOANetwork(ctx, call.IOAIPID); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("IOA 网络排除 %s 已删除", call.IOCID), nil
+		return fmt.Sprintf("IOA 网络排除 %s 已删除", call.IOAIPID), nil
 	case "edr_strategy_create":
 		reporter.Step(ctx, "我正在创建策略。")
 		result, err := s.edr.CreateStrategy(ctx, edr.CreateStrategyRequest{
@@ -3502,7 +3573,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		}
 		call := planner.ToolCall{
 			Name:     "edr_ioa_add",
-			KBQuery:  severity,
+			Severity: severity,
 			Critical: true,
 		}
 		if len(fields) > 3 {
@@ -3510,7 +3581,6 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		}
 		if len(fields) > 4 {
 			call.CommandLine = strings.TrimSpace(fields[4])
-			call.Operation = call.CommandLine
 		}
 		if len(fields) > 5 {
 			call.Reason = strings.TrimSpace(fields[5])
@@ -3525,11 +3595,11 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			sessionKey,
 			"edr_ioa_add_verify_pending",
 			string(payload),
-			fmt.Sprintf("edr_ioa_add severity=%s file_name=%s command_line=%s reason=%s host_type=%s", call.KBQuery, call.FileName, call.CommandLine, call.Reason, call.HostType),
+			fmt.Sprintf("edr_ioa_add severity=%s file_name=%s command_line=%s reason=%s host_type=%s", call.Severity, call.FileName, call.CommandLine, call.Reason, call.HostType),
 		)
 		if err == nil {
 			response = s.msg(locale, "confirm_ioa_add", map[string]string{
-				"severity":     call.KBQuery,
+				"severity":     call.Severity,
 				"command_line": call.CommandLine,
 				"description":  call.Reason,
 				"file_name":    call.FileName,
@@ -3556,7 +3626,6 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		}
 		if len(fields) > 4 {
 			call.CommandLine = strings.TrimSpace(fields[4])
-			call.Operation = call.CommandLine
 		}
 		if len(fields) > 5 {
 			call.Reason = strings.TrimSpace(fields[5])
@@ -3621,11 +3690,12 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			hostType = strings.TrimSpace(fields[4])
 		}
 		call := planner.ToolCall{
-			Name:     "edr_ioa_network_add",
-			PlanName: exclusionName,
-			ClientIP: ip,
-			HostType: hostType,
-			Critical: true,
+			Name:          "edr_ioa_network_add",
+			ExclusionName: exclusionName,
+			PlanName:      exclusionName,
+			ClientIP:      ip,
+			HostType:      hostType,
+			Critical:      true,
 		}
 		payload, _ := json.Marshal(call)
 		err = s.store.SavePendingAction(
@@ -3661,11 +3731,12 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			exclusionName = strings.TrimSpace(fields[4])
 		}
 		call := planner.ToolCall{
-			Name:     "edr_ioa_network_update",
-			IOCID:    ioaID,
-			PlanName: exclusionName,
-			ClientIP: ip,
-			Critical: true,
+			Name:          "edr_ioa_network_update",
+			IOAIPID:       ioaID,
+			ExclusionName: exclusionName,
+			PlanName:      exclusionName,
+			ClientIP:      ip,
+			Critical:      true,
 		}
 		payload, _ := json.Marshal(call)
 		err = s.store.SavePendingAction(
@@ -3694,7 +3765,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		}
 		call := planner.ToolCall{
 			Name:     "edr_ioa_network_delete",
-			IOCID:    ioaID,
+			IOAIPID:  ioaID,
 			Critical: true,
 		}
 		payload, _ := json.Marshal(call)
