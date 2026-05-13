@@ -11,7 +11,7 @@
 - scan_type：扫描/操作类型，必填，1-快速扫描 2-全盘扫描 3-自定义路径扫描 4-漏洞修复 5-安装软件 6-卸载软件 7-更新软件 8-发送文件
 - plan_type：执行方式，必填，1-立即执行 2-定时执行 3-周期执行
 - scope：范围，必填，1-特定主机 2-主机组 3-全网主机
-- type：业务类型，必填，kill_plan/leak_repair/distribute_software/distribute_file
+- type：业务类型，必填，kill_plan/leak_repair/distribute_software/distribute_file。如果用户虽然未明确指定，但描述中包含查杀，则默认为 kill_plan
 - plan_name：计划名称
 - client_id：当 scope=1(特定主机) 时必填，指定单台主机
 - contents：内容对象 (scan_path/software/file等)，格式为 JSON 字符串
