@@ -22,7 +22,6 @@ enabled = false
 mode = "longconn"
 client_id = ""
 client_secret = ""
-agent_id = 
 robot_webhook_url = "https://oapi.dingtalk.com/robot/send?access_token=XXXXXX"
 encrypt_key = ""
 verification_token = ""
