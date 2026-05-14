@@ -4,7 +4,7 @@
 
 ## 1. 下载代码
 
-创建并进入 yellow_duck2333 文件夹
+创建并进入 yellow_duck2333 文件夹（这一步是给AI工具用的，担心AI自动拉代码会影响当前工作目录）
 
 从 GitHub 克隆代码到当前目录：
 
@@ -41,7 +41,7 @@ app_key = "填入你的EDR认证app_key"
 providers.deepseek.api_key = "填入你的DEEPSEEK_API_KEY"
 ```
 
-### 渠道配置（飞书或钉钉，选择其一）
+### 渠道配置（飞书/钉钉/企业微信/Slack，选择其一）
 
 #### 飞书配置
 
@@ -53,9 +53,9 @@ providers.deepseek.api_key = "填入你的DEEPSEEK_API_KEY"
 
 ```toml
 [channel.feishu]
+enabled = true
 app_id = "填入你的飞书App ID"
 app_secret = "填入你的飞书App Secret"
-enabled = true
 ```
 
 #### 钉钉配置
@@ -67,10 +67,61 @@ enabled = true
 
 ```toml
 [channel.dingtalk]
-client_id = "填入你的钉钉应用Client ID"
-app_secret = "填入你的钉钉应用Client Secret"
 enabled = true
+client_id = "填入你的钉钉应用Client ID"
+client_secret = "填入你的钉钉应用Client Secret"
 ```
+
+#### 企业微信配置
+
+1. 在企业微信管理后台创建自建应用并启用机器人相关能力
+2. 获取企业 ID 与应用凭证（CorpID / CorpSecret）
+3. 创建智能机器人，获取 BotId / BotSecret
+4. 选择长连接模式
+
+```toml
+[channel.weixin]
+enabled = true
+corpid = "填入你的企业微信 CorpID"
+corpsecret = "填入你的企业微信 CorpSecret"
+bot_id = "填入机器人 ID"
+bot_secret = "填入机器人 Secret"
+```
+
+#### Slack 配置
+
+1. 在 Slack 创建 App：https://api.slack.com/apps → "Create New App" → "From scratch"
+
+2. **配置 OAuth 权限和申请 Bot Token**
+   - 左侧菜单 → "OAuth & Permissions"
+   - 在 "Bot Token Scopes" 添加权限：`chat:write`、`im:history`
+   - 点击 "Install to Workspace" 获得 Bot User OAuth Token（`xoxb-...`）
+   - 复制 token 供配置使用
+
+3. **启用 Socket Mode 并获取 App Token**
+   - 左侧菜单 → "Socket Mode" → 打开开关
+   - 系统生成 App-level Token（`xapp-...`）
+   - 复制 token 供配置使用
+
+4. **配置 Event Subscriptions**
+   - 左侧菜单 → "Event Subscriptions" → 打开开关
+   - 在 "Subscribe to bot events" 添加事件：`message.im`、`app_mention`
+   - 保存更改
+
+5. **重新安装应用**
+   - 权限变更后需要重新授权：回到 "OAuth & Permissions" 点击 "Reinstall to Workspace"
+
+6. **填写配置文件**
+
+```toml
+[channel.slack]
+enabled = true
+mode = "longconn"
+app_token = "填入xapp-..."
+bot_token = "填入xoxb-..."
+```
+
+> **提示**：首次配置时最容易遗漏 Event Subscriptions 的设置。如果启动后机器人不回复消息，优先检查 Slack 后台的 Event Subscriptions 是否已启用并订阅了 `message.im` 事件
 
 > **注意**：enabled 设置为 true 表示启用该渠道，其他渠道的 enabled 设置为 false
 
@@ -95,8 +146,10 @@ curl http://localhost:8080/healthz
 
 如果启动失败并提示缺失必要配置，请检查并完善以下项目：
 
-- 飞书 `app_id` 为空
-- 飞书 `app_secret` 为空
+- 飞书 `app_id` 为空 或 `app_secret` 为空
+- 钉钉 `client_id` 或 `client_secret` 为空
+- 企业微信 `bot_id` 或 `bot_secret` 为空
+- Slack `app_token`（xapp） 或 `bot_token`（xoxb）为空
 - EDR 地址未填写
 - EDR `app_key` 或 `app_secret` 为空
 

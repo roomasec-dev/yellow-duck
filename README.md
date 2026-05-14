@@ -2,7 +2,7 @@
 
 一个以 Go 实现的 AI 控制面脚手架，目标是做成类似 OpenClaw 的主 Chat 机器人：
 
-- 从 IM 接收消息，当前先接飞书应用机器人
+- 从 IM 接收消息，当前支持飞书、钉钉、企业微信、Slack 这几款应用机器人
 - 用一个主 Chat 维护上下文和工具路由
 - 通过 EDR Open API 控制终端动作
 - 使用 TOML 配置模型、会话、压缩、EDR 和渠道
@@ -127,16 +127,77 @@
 
 ## 飞书接入
 
+**连接模式**
 - 现在默认使用 `longconn` 长连接模式，不需要公网回调地址
 - `channel.feishu.mode` 支持 `longconn`、`webhook`、`both`
 - 如果用长连接，只需要 `app_id` 和 `app_secret`
 - `verification_token` / `encrypt_key` 主要用于 webhook 模式
 
+**权限配置**
+- 在应用权限管理中启用「获取用户基本信息」、「读取应用内和应用外的消息」等必要权限
+- 发布应用后，需要将机器人添加到目标群组或私聊才能接收消息
+
 ## 钉钉接入
+
+**连接模式**
 - 现在默认使用 `longconn` 长连接模式，不需要公网回调地址
 - `channel.dingtalk.mode` 支持 `longconn`、`webhook`、`both`
 - 如果用长连接，只需要 `client_id` 和 `client_secret`
 - `verification_token` / `encrypt_key` 主要用于 webhook 模式
+
+**权限配置**
+- 在应用权限中配置「发送单聊消息」、「读取单聊消息」等权限
+- 发布应用后，需要在钉钉工作台添加应用
+
+## 企业微信接入
+
+**连接模式**
+- `channel.weixin.mode` 支持 `longconn`
+- 至少需要 `bot_id`、`bot_secret`，如果还需要接受微信主动发送的消息（如定时任务汇报），还需要 `corpid`、`corpsecret`
+
+**权限配置**
+- 企业微信群和单聊都建议先把应用权限与可见范围配置完整，再做连通测试
+- 在应用权限设置中授予消息接收权限和消息发送权限
+- 将应用添加到可见范围内的相应群组
+
+## Slack 接入
+
+**连接模式**
+- `channel.slack.mode` 支持 `longconn`（Socket Mode）
+- 需要 `app_token`（`xapp-`）与 `bot_token`（`xoxb-`）
+
+**获取凭证步骤**
+
+1. **创建 Slack App**：访问 https://api.slack.com/apps，点击 "Create New App"，选择 "From scratch"，输入 App 名称和选择工作区
+
+2. **申请 Bot User OAuth Token**
+   - 在左侧菜单点击 "OAuth & Permissions"
+   - 在 "Scopes" 下的 "Bot Token Scopes" 添加以下权限：
+     - `chat:write` - 发送消息
+     - `im:history` - 读取 DM 消息历史
+   - 向上滚动到 "OAuth Tokens for Your Workspace"，点击 "Install to Workspace"（首次）或重新授权
+   - 复制生成的 **Bot User OAuth Token**（以 `xoxb-` 开头）
+
+3. **启用 Socket Mode 并申请 App-level Token**
+   - 在左侧菜单点击 "Socket Mode"，打开开关启用 Socket Mode
+   - 系统会生成 **App-level Token**（以 `xapp-` 开头）
+   - 复制该 token 供配置使用
+
+4. **配置 Event Subscriptions**
+   - 在左侧菜单点击 "Event Subscriptions"，打开开关启用事件订阅
+   - 在 "Subscribe to bot events" 部分添加以下事件类型：
+     - `message.im` - 接收私聊消息
+     - `app_mention` - 接收被 @mention 的消息
+   - 保存更改
+
+5. **重新安装应用**
+   - 由于新增了权限范围和事件类型，需要重新安装应用
+   - 在 "OAuth & Permissions" 页面重新点击 "Reinstall to Workspace"
+   - 授予新的权限范围
+
+6. **验证配置**
+   - 在启动应用后，查看日志确认出现 "slack socket mode hello received" 消息
+   - 向机器人发送私聊消息验证是否能接收到
 
 ## 安装与运行
 
@@ -183,21 +244,13 @@
   - `EDR_PLATFORM_APP_SECRET`
 - 如果要启用平台 API，把 `configs/config.local.toml` 里的 `edr.platform.enabled` 改成 `true`
 
-4. 去飞书开放平台申请 Bot 并开权限
+4. 按所选渠道申请 Bot 并开权限（至少启用一个渠道）
 
-- 进入飞书开放平台，创建企业自建应用
-- 给应用开通机器人能力（Bot）
-- 在应用凭证页拿到：
-  - `app_id`
-  - `app_secret`
-- 在权限管理里至少开通 IM 相关权限，重点是：
-  - 接收用户消息
-  - 发送/回复消息
-  - 在群聊或会话中使用机器人
-- 如果你走 `webhook` 或 `both` 模式，还要在事件订阅里配置回调地址，并拿到：
-  - `verification_token`
-  - `encrypt_key`
-- 权限改完后，记得发布应用到企业内可用范围，并把机器人加到目标群聊或单聊场景里，否则它收不到消息
+- 飞书：申请 `app_id` / `app_secret`，根据模式选择长连接或回调地址
+- 钉钉：申请 `client_id` / `client_secret`，根据模式选择 Stream 或 webhook
+- 企业微信：申请 `corpid` / `corpsecret` / 应用凭证，并按模式配置回调参数
+- Slack：申请 `bot_token`（`xoxb-`），长连接模式额外申请 `app_token`（`xapp-`）并开启 Socket Mode
+- 权限改完后，记得重新安装/发布应用，并把机器人加入目标会话，否则收不到消息
 
 5. 按实际环境填写配置
 
@@ -284,11 +337,11 @@ chmod +x ./dist/rm-ai-agent-darwin-amd64
 
 - 访问 `GET /healthz`，返回 `ok` 说明服务已启动
 - 看本地日志 `data/rm-ai-agent.log`，确认没有模型、飞书、EDR 鉴权报错
-- 在飞书里给机器人发一条普通消息，例如“现在几点”或“查一下最近事件”
+- 在你启用的渠道里给机器人发一条普通消息，例如“现在几点”或“查一下最近事件”
 - 如果机器人没回复，优先检查：
-  - 飞书应用是否已发布到企业内
-  - 机器人是否已被拉进群
-  - `app_id/app_secret` 是否正确
+  - 对应渠道应用是否已安装/发布
+  - 机器人是否已加入目标会话（私聊或群聊）
+  - 渠道凭证是否正确（如飞书 `app_id/app_secret`、钉钉 `client_id/client_secret`、企业微信 `corpid/corpsecret`、Slack `xoxb/xapp`）
   - EDR 凭证是否正确
   - 模型 API Key 是否正确
 
@@ -408,5 +461,5 @@ prompts/
 - `Gateway 控制面优先`：先把 webhook、会话、存储、EDR 工具边界搭起来
 - `单主 Chat 优先`：先让一个主 Chat 控 EDR，再迭代子 agent
 - `上下文治理分层`：最近对话 + 持久摘要，而不是只截断历史
-- `渠道与会话解耦`：飞书只做 adapter，主会话不依赖飞书字段
+- `渠道与会话解耦`：渠道只做 adapter，主会话不依赖渠道字段
 - `无 CGO SQLite`：便于部署，减少目标机依赖
