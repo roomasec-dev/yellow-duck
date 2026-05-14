@@ -830,7 +830,12 @@ func (s *Service) handlePlannedTools(ctx context.Context, sessionKey string, tex
 	plan, err := s.planner.BuildPlan(ctx, s.cfg.Routing.Model, text, "", summary, recentTurns, memories, latestArtifact, skillsPrompt)
 	if err != nil {
 		s.logger.Warn("planner failed", "error", err)
-		return "", false, nil
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return "", false, err
+		}
+		response := s.msg(locale, "planner_unavailable", nil)
+		stored, storeErr := s.storeAssistantReply(ctx, sessionKey, response)
+		return stored, true, storeErr
 	}
 	if reporter != nil && strings.TrimSpace(plan.PlanPreview) != "" {
 		reporter.Stage(ctx, plan.Phase, "调查计划："+plan.PlanPreview)
