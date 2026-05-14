@@ -947,7 +947,8 @@ func (s *Service) createScheduledTask(ctx context.Context, sessionKey string, ca
 	if err != nil {
 		return "创建定时任务失败：" + err.Error()
 	}
-	return fmt.Sprintf("已创建定时任务 %s，每 %d 分钟执行一次。任务内容：%s。下次执行时间：%s。如果任务执行结果重复，不会重复汇报。", stored.TaskID, stored.IntervalSeconds/60, stored.Prompt, stored.NextRunAt.Local().Format("2006-01-02 15:04:05"))
+	displayPrompt := strings.TrimRight(strings.TrimSpace(stored.Prompt), "。.!！？?")
+	return fmt.Sprintf("已创建定时任务 %s，每 %d 分钟执行一次。任务内容：%s。本次执行时间：%s，下次执行时间：%s。如果任务执行结果重复，不会重复汇报。", stored.TaskID, stored.IntervalSeconds/60, displayPrompt, stored.NextRunAt.Local().Format("2006-01-02 15:04:05"), stored.NextRunAt.Local().Add(time.Duration(stored.IntervalSeconds)*time.Second).Format("2006-01-02 15:04:05"))
 }
 
 func (s *Service) listScheduledTasks(ctx context.Context, sessionKey string) string {
@@ -986,7 +987,8 @@ func (s *Service) updateScheduledTask(ctx context.Context, sessionKey string, ca
 	if item.TaskID == "" {
 		return "没有找到这个定时任务。"
 	}
-	return fmt.Sprintf("已更新定时任务 %s，当前 status=%s，每 %d 分钟执行一次，内容=%s。", item.TaskID, item.Status, maxInt(item.IntervalSeconds/60, 1), item.Prompt)
+	displayPrompt := strings.TrimRight(strings.TrimSpace(item.Prompt), "。.!！？?")
+	return fmt.Sprintf("已更新定时任务 %s，当前 status=%s，每 %d 分钟执行一次，内容=%s。", item.TaskID, item.Status, maxInt(item.IntervalSeconds/60, 1), displayPrompt)
 }
 
 func (s *Service) deleteScheduledTask(ctx context.Context, sessionKey string, call planner.ToolCall) string {
@@ -1200,6 +1202,7 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 	currentCalls := plan.ToolCalls
 	finalDirectReply := ""
 	hasGroundedEDRTool := false
+	preferExactToolReply := false
 	controller := newTaskController(userText, plan)
 	rounds := 0
 
@@ -1238,7 +1241,9 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 		for _, call := range currentCalls {
 			if callNeedsGroundedEDRAnswer(call.Name) {
 				hasGroundedEDRTool = true
-				break
+			}
+			if shouldPreferExactToolReply(call.Name) {
+				preferExactToolReply = true
 			}
 		}
 
@@ -1294,7 +1299,9 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 	}
 	reporter.Stage(ctx, "answer", "我拿到真实工具结果了，正在整理成更自然的回复。")
 	response := finalDirectReply
-	if strings.TrimSpace(response) == "" {
+	if preferExactToolReply && len(allToolResults) > 0 {
+		response = strings.Join(allToolResults, "\n\n")
+	} else if strings.TrimSpace(response) == "" {
 		if hasGroundedEDRTool {
 			var err error
 			response, err = s.answerGroundedByEDR(ctx, sessionKey, userText, strings.Join(allToolResults, "\n\n"))
@@ -1313,6 +1320,15 @@ func (s *Service) executeToolPlan(ctx context.Context, sessionKey string, userTe
 		s.logger.Warn("compact session failed", "session_key", sessionKey, "error", err)
 	}
 	return response, nil
+}
+
+func shouldPreferExactToolReply(name string) bool {
+	switch name {
+	case "scheduled_task_create", "scheduled_task_update", "scheduled_task_delete", "scheduled_task_feedback":
+		return true
+	default:
+		return false
+	}
 }
 
 func maxRoundsForTaskMode(taskMode string) int {

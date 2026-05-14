@@ -111,6 +111,9 @@ func (r *Reporter) Stage(ctx context.Context, stage string, detail string) {
 }
 
 func (r *Reporter) ToolStart(ctx context.Context, tool string, detail string) {
+	if r == nil || r.service == nil || r.sink == nil || !r.service.cfg.Enabled {
+		return
+	}
 	stage := toolStage(tool)
 	if !r.shouldEmitHeartbeat(stage) {
 		return
@@ -169,6 +172,9 @@ func (r *Reporter) shouldEmit(force bool) bool {
 }
 
 func (r *Reporter) shouldEmitHeartbeat(stage string) bool {
+	if r == nil {
+		return false
+	}
 	if stage == "answer" {
 		return r.shouldEmit(true)
 	}

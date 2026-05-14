@@ -654,7 +654,7 @@ func (s *SQLiteStore) CreateScheduledTask(ctx context.Context, task protocol.Sch
 	task.CreatedAt = now
 	task.UpdatedAt = now
 	if task.NextRunAt.IsZero() {
-		task.NextRunAt = now.Add(time.Duration(task.IntervalSeconds) * time.Second)
+		task.NextRunAt = now
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO scheduled_tasks(task_id, scope_key, session_key, channel, tenant_key, chat_id, thread_id, creator_id, title, prompt, interval_seconds, status, last_summary, next_run_at, last_run_at, created_at, updated_at)
 		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
