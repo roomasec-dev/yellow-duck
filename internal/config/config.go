@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -428,6 +429,28 @@ func (c Config) Validate() error {
 		}
 		if (strings.EqualFold(c.Channel.Slack.Mode, "longconn") || strings.EqualFold(c.Channel.Slack.Mode, "both")) && c.Channel.Slack.AppToken == "" {
 			return fmt.Errorf("channel.slack app_token is required when mode is longconn or both")
+		}
+	}
+	if c.EDR.Platform.Enabled {
+		platformAppKey := strings.TrimSpace(c.EDR.Platform.AppKey)
+		if platformAppKey == "" && strings.TrimSpace(c.EDR.Platform.AppKeyEnv) != "" {
+			platformAppKey = strings.TrimSpace(os.Getenv(strings.TrimSpace(c.EDR.Platform.AppKeyEnv)))
+		}
+
+		platformAppSecret := strings.TrimSpace(c.EDR.Platform.AppSecret)
+		if platformAppSecret == "" && strings.TrimSpace(c.EDR.Platform.AppSecretEnv) != "" {
+			platformAppSecret = strings.TrimSpace(os.Getenv(strings.TrimSpace(c.EDR.Platform.AppSecretEnv)))
+		}
+
+		missing := make([]string, 0, 2)
+		if platformAppKey == "" {
+			missing = append(missing, "app_key/app_key_env")
+		}
+		if platformAppSecret == "" {
+			missing = append(missing, "app_secret/app_secret_env")
+		}
+		if len(missing) > 0 {
+			return fmt.Errorf("edr.platform credentials are required when edr.platform.enabled=true: missing %s", strings.Join(missing, ", "))
 		}
 	}
 	return nil

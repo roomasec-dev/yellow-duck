@@ -135,8 +135,8 @@ default_page_size = 10
 [edr.platform]
 enabled = true
 base_url = "https://qax-openapi.zboundary.com/sase/open_api/rm/v1"
-app_key = "EDR_PLATFORM_APP_KEY"
-app_secret = "EDR_PLATFORM_APP_SECRET"
+app_key = ""
+app_secret = ""
 
 [edr.headers]
 # X-API-Key = "replace-me"
