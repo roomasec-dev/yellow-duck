@@ -1728,6 +1728,24 @@ func (s *Service) executeToolBatch(ctx context.Context, sessionKey string, userT
 			if call.IOAIPID != "" {
 				summary += ", ioa_ip_id=" + call.IOAIPID
 			}
+			if call.FileName != "" {
+				summary += ", file_name=" + call.FileName
+			}
+			if call.CommandLine != "" {
+				summary += ", command_line=" + call.CommandLine
+			}
+			if call.Severity != "" {
+				summary += ", severity=" + call.Severity
+			}
+			if call.HostType != "" {
+				summary += ", host_type=" + call.HostType
+			}
+			if call.Description != "" {
+				summary += ", description=" + call.Description
+			}
+			if call.ExpirationDate != "" {
+				summary += ", expiration_date=" + call.ExpirationDate
+			}
 			if call.ExclusionName != "" {
 				summary += ", exclusion_name=" + call.ExclusionName
 			}
@@ -2439,12 +2457,30 @@ func fillCriticalParamsFromUserText(call *planner.ToolCall, userText string) {
 	if call == nil {
 		return
 	}
+	if (call.Name == "edr_ioa_update" || call.Name == "edr_ioa_delete") && strings.TrimSpace(call.IOAID) == "" {
+		if alias := strings.TrimSpace(call.IOCID); alias != "" {
+			call.IOAID = alias
+		}
+	}
+	if (call.Name == "edr_ioa_network_update" || call.Name == "edr_ioa_network_delete") && strings.TrimSpace(call.IOAIPID) == "" {
+		if alias := strings.TrimSpace(call.IOAID); alias != "" {
+			call.IOAIPID = alias
+		} else if alias := strings.TrimSpace(call.IOCID); alias != "" {
+			call.IOAIPID = alias
+		}
+	}
 	text := strings.TrimSpace(userText)
 	if text == "" {
 		return
 	}
 
 	switch call.Name {
+	case "edr_ioa_update", "edr_ioa_delete":
+		if strings.TrimSpace(call.IOAID) == "" {
+			if id := extractIOAID(text); id != "" {
+				call.IOAID = id
+			}
+		}
 	case "edr_ioa_network_add":
 		if strings.TrimSpace(call.ClientIP) == "" {
 			if ip := extractFirstIPv4(text); ip != "" {
@@ -2470,6 +2506,12 @@ func fillCriticalParamsFromUserText(call *planner.ToolCall, userText string) {
 		if strings.TrimSpace(call.ExclusionName) == "" {
 			if name := extractIOANetworkName(text); name != "" {
 				call.ExclusionName = name
+			}
+		}
+	case "edr_ioa_network_delete":
+		if strings.TrimSpace(call.IOAIPID) == "" {
+			if id := extractIOANetworkID(text); id != "" {
+				call.IOAIPID = id
 			}
 		}
 	}
@@ -2503,6 +2545,25 @@ func extractIOANetworkID(text string) string {
 	patterns := []string{
 		`(?:修改|更新|删除).*(?:ip\s*白名单|ip白名单|网络排除).*(?:ioa_ip_id|id)\s*(?:是|为|位|=|:|：)\s*([^\s,，。；;]+)`,
 		`(?:ioa_ip_id|id)\s*(?:是|为|位|=|:|：)\s*([^\s,，。；;]+)`,
+	}
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		match := re.FindStringSubmatch(text)
+		if len(match) < 2 {
+			continue
+		}
+		id := strings.TrimSpace(match[1])
+		if id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+func extractIOAID(text string) string {
+	patterns := []string{
+		`(?:ioa_id|id)\s*(?:是|为|位|=|:|：)\s*([^\s,，。；;]+)`,
+		`(?:修改|更新|删除).*(?:ioa|规则).*(?:ioa_id|id)\s*(?:是|为|位|=|:|：)\s*([^\s,，。；;]+)`,
 	}
 	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)
@@ -2755,7 +2816,7 @@ func (s *Service) executeConfirmedTool(ctx context.Context, sessionKey string, c
 		if err := s.edr.DeleteIOA(ctx, call.IOAID); err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("IOA %s 已删除", call.IOCID), nil
+		return fmt.Sprintf("IOA %s 已删除", call.IOAID), nil
 	case "edr_ioa_network_add":
 		reporter.Step(ctx, "我正在添加 IOA 网络排除。")
 		if err := s.edr.AddIOANetwork(ctx, edr.AddIOANetworkRequest{
@@ -3618,7 +3679,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		}
 		call := planner.ToolCall{
 			Name:     "edr_ioa_update",
-			IOCID:    ioaID,
+			IOAID:    ioaID,
 			Critical: true,
 		}
 		if len(fields) > 3 {
@@ -3636,11 +3697,11 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			sessionKey,
 			"edr_ioa_update_verify_pending",
 			string(payload),
-			fmt.Sprintf("edr_ioa_update ioa_id=%s file_name=%s command_line=%s reason=%s", call.IOCID, call.FileName, call.CommandLine, call.Reason),
+			fmt.Sprintf("edr_ioa_update ioa_id=%s file_name=%s command_line=%s reason=%s", call.IOAID, call.FileName, call.CommandLine, call.Reason),
 		)
 		if err == nil {
 			response = s.msg(locale, "confirm_ioa_update", map[string]string{
-				"ioa_id":       call.IOCID,
+				"ioa_id":       call.IOAID,
 				"file_name":    call.FileName,
 				"command_line": call.CommandLine,
 				"description":  call.Reason,
@@ -3658,7 +3719,7 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		}
 		call := planner.ToolCall{
 			Name:     "edr_ioa_delete",
-			IOCID:    ioaID,
+			IOAID:    ioaID,
 			Critical: true,
 		}
 		payload, _ := json.Marshal(call)
@@ -3667,11 +3728,11 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 			sessionKey,
 			"edr_ioa_delete_verify_pending",
 			string(payload),
-			fmt.Sprintf("edr_ioa_delete ioa_id=%s", call.IOCID),
+			fmt.Sprintf("edr_ioa_delete ioa_id=%s", call.IOAID),
 		)
 		if err == nil {
 			response = s.msg(locale, "confirm_ioa_delete", map[string]string{
-				"ioa_id": call.IOCID,
+				"ioa_id": call.IOAID,
 			})
 		}
 	case "ioa-ip-add":

@@ -523,7 +523,8 @@ func plannerPrompt(skillsPrompt string, memoryText string, latestArtifact protoc
 		"20.2 如果用户在查看策略列表，优先规划 edr_strategies，并提取 type 以及分页参数。\n" +
 		"20.3 如果用户要创建/删除策略或切换策略状态，分别优先规划 edr_strategy_create / edr_strategy_delete / edr_strategy_status，并提取 strategy_id、type、status 等关键字段。\n" +
 		"20.4 如果用户在查病毒查杀记录或按主机/哈希扩线，分别优先规划 edr_virus_scan_record / edr_virus_by_host / edr_virus_by_hash / edr_virus_hash_hosts。\n" +
-		"21. 如果用户在查看或维护 IOA 规则，查看列表用 edr_ioas；查看活动记录用 edr_ioa_audit_log；查看网络排除列表或ip白名单用 edr_ioa_networks；新增/更新/删除分别用 edr_ioa_add / edr_ioa_update / edr_ioa_delete 与 edr_ioa_network_add / edr_ioa_network_update / edr_ioa_network_delete。修改或删除 ip 白名单时，用户说的 id 指 ioa_ip_id，不是 ioa_id。\n" +
+		"21. 如果用户在查看或维护 IOA 规则，或行为白名单，（非网络排除/ip白名单），查看列表用 edr_ioas；查看活动记录用 edr_ioa_audit_log；新增/更新/删除分别用 edr_ioa_add / edr_ioa_update / edr_ioa_delete。对 edr_ioa_update / edr_ioa_delete，用户说的 id 指 ioa_id。\n" +
+		"21.1 如果用户在查看或维护网络排除列表或ip白名单，查看列表用 edr_ioa_networks；新增/更新/删除分别用 edr_ioa_network_add / edr_ioa_network_update / edr_ioa_network_delete。对 edr_ioa_network_update / edr_ioa_network_delete，用户说的 id 指 ioa_ip_id。\n" +
 		"22. 如果用户在查看自动响应策略列表，优先规划 edr_instruction_policy_list；如用户明确要新增、更新、删除、排序、启停，则规划对应 edr_instruction_policy_add / update / delete / sort / save_status。\n" +
 		"23. 无论是否调用工具，都额外给一个面向用户的简短 plan_preview，说明你准备怎么查或为什么准备收口，限制在 18 到 40 个字，不能泄露内部术语。\n" +
 		"24. 如果不需要工具，就返回 direct_reply，tool_calls 为空。\n" +
