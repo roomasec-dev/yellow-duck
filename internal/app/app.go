@@ -10,6 +10,7 @@ import (
 	"rm_ai_agent/internal/artifact"
 	"rm_ai_agent/internal/channel/dingtalk"
 	"rm_ai_agent/internal/channel/feishu"
+	"rm_ai_agent/internal/channel/slack"
 	"rm_ai_agent/internal/channel/weixin"
 	"rm_ai_agent/internal/compression"
 	"rm_ai_agent/internal/config"
@@ -22,8 +23,8 @@ import (
 	"rm_ai_agent/internal/model"
 	"rm_ai_agent/internal/planner"
 	"rm_ai_agent/internal/progress"
-	"rm_ai_agent/internal/protocol"
 	"rm_ai_agent/internal/prompt"
+	"rm_ai_agent/internal/protocol"
 	"rm_ai_agent/internal/router"
 	"rm_ai_agent/internal/scheduler"
 	"rm_ai_agent/internal/session"
@@ -37,6 +38,7 @@ type App struct {
 	feishu     *feishu.Handler
 	dingtalk   *dingtalk.Handler
 	weixin     *weixin.Handler
+	slack      *slack.Handler
 	scheduler  *scheduler.Service
 }
 
@@ -69,6 +71,7 @@ func New(cfg config.Config) (*App, error) {
 	feishuClient := feishu.NewClient(cfg.Channel.Feishu, logger)
 	weixinClient := weixin.NewClient(cfg.Channel.Weixin, logger)
 	dingtalkClient := dingtalk.NewClient(cfg.Channel.Dingtalk, logger)
+	slackClient := slack.NewClient(cfg.Channel.Slack, logger)
 
 	// Build notifiers map for scheduler
 	schedulerNotifiers := make(map[protocol.Channel]scheduler.Notifier)
@@ -81,6 +84,9 @@ func New(cfg config.Config) (*App, error) {
 	if cfg.Channel.Dingtalk.Enabled {
 		schedulerNotifiers[protocol.ChannelDingtalk] = dingtalkClient
 	}
+	if cfg.Channel.Slack.Enabled {
+		schedulerNotifiers[protocol.ChannelSlack] = slackClient
+	}
 	schedulerService := scheduler.NewService(cfg.Scheduler, dataStore, sessionService, schedulerNotifiers, logger)
 
 	feishuHandler, err := feishu.NewHandler(cfg.Channel.Feishu, dataStore, sessionService, feishuClient, logger)
@@ -90,11 +96,8 @@ func New(cfg config.Config) (*App, error) {
 	}
 
 	dingtalkHandler := dingtalk.NewHandler(cfg.Channel.Dingtalk, dataStore, sessionService, dingtalkClient, logger)
-	if dingtalkHandler != nil {
-		logger.Info("dingtalk handler created", "enabled", cfg.Channel.Dingtalk.Enabled)
-	}
-
 	weixinHandler := weixin.NewHandler(cfg.Channel.Weixin, dataStore, sessionService, weixinClient, logger)
+	slackHandler := slack.NewHandler(cfg.Channel.Slack, dataStore, sessionService, slackClient, logger)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +137,17 @@ func New(cfg config.Config) (*App, error) {
 			"webhook_path", cfg.Channel.Weixin.WebhookPath,
 		)
 	}
+	if cfg.Channel.Slack.Enabled && (strings.EqualFold(cfg.Channel.Slack.Mode, "webhook") || strings.EqualFold(cfg.Channel.Slack.Mode, "both")) {
+		mux.Handle(cfg.Channel.Slack.WebhookPath, slackHandler)
+	}
+	if cfg.Channel.Slack.Enabled {
+		logger.Info(
+			"slack channel configured",
+			"mode", cfg.Channel.Slack.Mode,
+			"bot_token", mask(cfg.Channel.Slack.BotToken),
+			"webhook_path", cfg.Channel.Slack.WebhookPath,
+		)
+	}
 	if strings.TrimSpace(cfg.Server.LogFile) != "" {
 		logger.Info("local log file enabled", "path", cfg.Server.LogFile)
 	}
@@ -151,6 +165,7 @@ func New(cfg config.Config) (*App, error) {
 		feishu:     feishuHandler,
 		dingtalk:   dingtalkHandler,
 		weixin:     weixinHandler,
+		slack:      slackHandler,
 		scheduler:  schedulerService,
 	}, nil
 }
@@ -194,6 +209,13 @@ func (a *App) Run(ctx context.Context) error {
 			go func() {
 				if err := a.weixin.StartLongConnection(ctx); err != nil {
 					a.logger.Error("weixin long connection stopped", "error", err)
+				}
+			}()
+		}
+		if a.slack != nil && a.config.Channel.Slack.Enabled && (strings.EqualFold(a.config.Channel.Slack.Mode, "longconn") || strings.EqualFold(a.config.Channel.Slack.Mode, "both")) {
+			go func() {
+				if err := a.slack.StartLongConnection(ctx); err != nil {
+					a.logger.Error("slack long connection stopped", "error", err)
 				}
 			}()
 		}

@@ -43,6 +43,16 @@ base_url = "https://qyapi.weixin.qq.com"
 reply_mode = "reply"
 webhook_path = "/webhook/weixin/event"
 
+[channel.slack]
+enabled = false
+mode = "longconn"
+app_token = "" # xapp- 开头
+bot_token = "" # xoxb- 开头
+signing_secret = ""
+base_url = "https://slack.com"
+reply_mode = "reply"
+webhook_path = "/webhook/slack/event"
+
 [models]
 default_provider = "deepseek"
 default_model = "deepseek-reasoner"

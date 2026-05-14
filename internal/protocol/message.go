@@ -8,6 +8,7 @@ const (
 	ChannelFeishu   Channel = "feishu"
 	ChannelDingtalk Channel = "dingtalk"
 	ChannelWeixin   Channel = "weixin"
+	ChannelSlack    Channel = "slack"
 )
 
 type InboundMessage struct {

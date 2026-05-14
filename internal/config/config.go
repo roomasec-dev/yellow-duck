@@ -37,6 +37,7 @@ type ChannelConfig struct {
 	Feishu   FeishuConfig   `toml:"feishu"`
 	Dingtalk DingtalkConfig `toml:"dingtalk"`
 	Weixin   WeixinConfig   `toml:"weixin"`
+	Slack    SlackConfig    `toml:"slack"`
 }
 
 type FeishuConfig struct {
@@ -65,17 +66,28 @@ type DingtalkConfig struct {
 }
 
 type WeixinConfig struct {
-	Enabled           bool   `toml:"enabled"`
-	Mode              string `toml:"mode"`
-	CorpID            string `toml:"corpid"`
-	CorpSecret        string `toml:"corpsecret"`
-	BotID             string `toml:"bot_id"`
-	BotSecret         string `toml:"bot_secret"`
-	Token             string `toml:"token"`
-	EncryptKey        string `toml:"encrypt_key"`
-	BaseURL           string `toml:"base_url"`
-	WebhookPath       string `toml:"webhook_path"`
-	ReplyMode         string `toml:"reply_mode"`
+	Enabled     bool   `toml:"enabled"`
+	Mode        string `toml:"mode"`
+	CorpID      string `toml:"corpid"`
+	CorpSecret  string `toml:"corpsecret"`
+	BotID       string `toml:"bot_id"`
+	BotSecret   string `toml:"bot_secret"`
+	Token       string `toml:"token"`
+	EncryptKey  string `toml:"encrypt_key"`
+	BaseURL     string `toml:"base_url"`
+	WebhookPath string `toml:"webhook_path"`
+	ReplyMode   string `toml:"reply_mode"`
+}
+
+type SlackConfig struct {
+	Enabled       bool   `toml:"enabled"`
+	Mode          string `toml:"mode"`
+	AppToken      string `toml:"app_token"`
+	BotToken      string `toml:"bot_token"`
+	SigningSecret string `toml:"signing_secret"`
+	BaseURL       string `toml:"base_url"`
+	WebhookPath   string `toml:"webhook_path"`
+	ReplyMode     string `toml:"reply_mode"`
 }
 
 type ModelsConfig struct {
@@ -261,6 +273,18 @@ func applyDefaults(cfg *Config) {
 	if cfg.Channel.Weixin.WebhookPath == "" {
 		cfg.Channel.Weixin.WebhookPath = "/webhook/weixin/event"
 	}
+	if cfg.Channel.Slack.BaseURL == "" {
+		cfg.Channel.Slack.BaseURL = "https://slack.com"
+	}
+	if cfg.Channel.Slack.Mode == "" {
+		cfg.Channel.Slack.Mode = "webhook"
+	}
+	if cfg.Channel.Slack.ReplyMode == "" {
+		cfg.Channel.Slack.ReplyMode = "reply"
+	}
+	if cfg.Channel.Slack.WebhookPath == "" {
+		cfg.Channel.Slack.WebhookPath = "/webhook/slack/event"
+	}
 	for name, provider := range cfg.Models.Providers {
 		if provider.Type == "" {
 			provider.Type = "openai_compatible"
@@ -391,6 +415,19 @@ func (c Config) Validate() error {
 	if c.Channel.Weixin.Enabled {
 		if c.Channel.Weixin.BotID == "" || c.Channel.Weixin.BotSecret == "" {
 			return fmt.Errorf("channel.weixin bot_id and bot_secret are required when enabled")
+		}
+	}
+	if c.Channel.Slack.Enabled {
+		if c.Channel.Slack.BotToken == "" {
+			return fmt.Errorf("channel.slack bot_token is required when enabled")
+		}
+		switch strings.ToLower(c.Channel.Slack.Mode) {
+		case "webhook", "longconn", "both":
+		default:
+			return fmt.Errorf("channel.slack.mode must be one of webhook, longconn, both")
+		}
+		if (strings.EqualFold(c.Channel.Slack.Mode, "longconn") || strings.EqualFold(c.Channel.Slack.Mode, "both")) && c.Channel.Slack.AppToken == "" {
+			return fmt.Errorf("channel.slack app_token is required when mode is longconn or both")
 		}
 	}
 	return nil
