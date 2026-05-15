@@ -3042,13 +3042,26 @@ func (s *Service) handleEDRCommand(ctx context.Context, sessionKey string, text 
 		return sanitizeReply(s.msg(locale, "commands_help", nil)), true, nil
 	}
 
-	// 发送即时回复
-	reporter.SendImmediateReply(ctx, "收到 EDR 操作请求，正在处理中...")
+	if fields[1] != "help" {
+		// 发送即时回复
+		reporter.SendImmediateReply(ctx, "收到 EDR 操作请求，正在处理中...")
+	}
 
 	var response string
 	var err error
 
 	switch fields[1] {
+	case "help":
+		helpLocale := locale
+		if len(fields) >= 3 {
+			switch strings.ToLower(strings.TrimSpace(fields[2])) {
+			case "cn", "zh", "zh-cn":
+				helpLocale = "zh-CN"
+			case "en", "en-us":
+				helpLocale = "en-US"
+			}
+		}
+		response = sanitizeReply(s.msg(helpLocale, "commands_help", nil))
 	case "hosts":
 		reporter.ToolStart(ctx, "edr_hosts", "我在通过 EDR 查这台主机的当前状态和基础信息。")
 		keyword := ""
